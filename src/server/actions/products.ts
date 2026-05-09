@@ -12,9 +12,11 @@ export type ProductFormState = { error?: string; fieldErrors?: Record<string, st
 function parseForm(formData: FormData) {
   return {
     sku: formData.get('sku'),
+    barcodeMode: formData.get('barcodeMode') ?? 'generate',
     barcode: formData.get('barcode') ?? '',
     name: formData.get('name'),
     description: formData.get('description') ?? '',
+    size: formData.get('size') ?? '',
     type: formData.get('type') ?? 'FINISHED_GOOD',
     unit: formData.get('unit') ?? 'PCS',
     categoryId: formData.get('categoryId') ?? '',

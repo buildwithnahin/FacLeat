@@ -204,13 +204,13 @@ export const reportsService = {
     await authorize(session, 'reports:read');
 
     const branchFilter = f.branchId ? Prisma.sql`AND "branchId" = ${f.branchId}` : Prisma.empty;
-    const grouped = await prisma.$queryRaw<
-      { productId: string; balance: string }[]
-    >`SELECT "productId",
-             SUM(CASE WHEN direction = 'IN' THEN quantity ELSE -quantity END)::text AS balance
-        FROM "InventoryLedger"
-       WHERE 1=1 ${branchFilter}
-       GROUP BY "productId"`;
+    const grouped = await prisma.$queryRaw<{ productId: string; balance: string }[]>(
+      Prisma.sql`SELECT "productId",
+               SUM(CASE WHEN direction = 'IN' THEN quantity ELSE -quantity END)::text AS balance
+          FROM "InventoryLedger"
+         WHERE 1=1 ${branchFilter}
+         GROUP BY "productId"`,
+    );
 
     const productIds = grouped.map((g) => g.productId);
     if (productIds.length === 0) return { rows: [], totals: { qty: ZERO, value: ZERO } };

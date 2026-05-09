@@ -1,5 +1,6 @@
 import 'server-only';
 import bcrypt from 'bcryptjs';
+import { revalidateTag } from 'next/cache';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
@@ -36,7 +37,7 @@ export const userService = {
 
     const passwordHash = await bcrypt.hash(input.password, 10);
 
-    return prisma.$transaction(async (tx) => {
+    const user = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
           name: input.name,
@@ -72,6 +73,8 @@ export const userService = {
 
       return user;
     });
+    revalidateTag('rbac');
+    return user;
   },
 
   async update(session: AppSession | null, input: UserUpdateInput) {
@@ -87,7 +90,7 @@ export const userService = {
       if (dup) throw new ValidationError('Email already in use');
     }
 
-    return prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx) => {
       await tx.userRole.deleteMany({ where: { userId: input.id } });
 
       const data: {
@@ -140,6 +143,8 @@ export const userService = {
 
       return updated;
     });
+    revalidateTag('rbac');
+    return updated;
   },
 
   async setStatus(session: AppSession | null, id: string, status: 'ACTIVE' | 'DISABLED') {
@@ -147,7 +152,7 @@ export const userService = {
     const existing = await prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError('User not found');
 
-    return prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({ where: { id }, data: { status } });
       await recordAudit(
         {
@@ -164,5 +169,7 @@ export const userService = {
       );
       return updated;
     });
+    revalidateTag('rbac');
+    return updated;
   },
 };

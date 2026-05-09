@@ -1,4 +1,5 @@
 import 'server-only';
+import { revalidateTag, unstable_cache } from 'next/cache';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
@@ -14,25 +15,35 @@ function buildPath(parentPath: string | null, code: string) {
   return parentPath ? `${parentPath}/${code}` : code;
 }
 
-export const coaService = {
-  async list(session: AppSession | null, filters?: { type?: string; branchId?: string; activeOnly?: boolean }) {
-    await authorize(session, 'coa:read');
-    return prisma.chartAccount.findMany({
+const cachedCoaList = unstable_cache(
+  async (filters?: { type?: string; branchId?: string; activeOnly?: boolean }) =>
+    prisma.chartAccount.findMany({
       where: {
         type: filters?.type as never,
         branchId: filters?.branchId ?? undefined,
         isActive: filters?.activeOnly ? true : undefined,
       },
       orderBy: [{ path: 'asc' }],
-    });
+    }),
+  ['coa-list'],
+  { revalidate: 300, tags: ['coa'] },
+);
+
+const cachedCoaTree = unstable_cache(
+  () => prisma.chartAccount.findMany({ orderBy: [{ path: 'asc' }] }),
+  ['coa-tree'],
+  { revalidate: 300, tags: ['coa'] },
+);
+
+export const coaService = {
+  async list(session: AppSession | null, filters?: { type?: string; branchId?: string; activeOnly?: boolean }) {
+    await authorize(session, 'coa:read');
+    return cachedCoaList(filters);
   },
 
   async tree(session: AppSession | null) {
     await authorize(session, 'coa:read');
-    const rows = await prisma.chartAccount.findMany({
-      orderBy: [{ path: 'asc' }],
-    });
-    return rows;
+    return cachedCoaTree();
   },
 
   async getById(session: AppSession | null, id: string) {
@@ -62,7 +73,7 @@ export const coaService = {
     const path = buildPath(parent?.path ?? null, input.code);
     const depth = parent ? parent.depth + 1 : 0;
 
-    return prisma.$transaction(async (tx) => {
+    const account = await prisma.$transaction(async (tx) => {
       // If parent was a posting leaf, demote it (headers can't post).
       if (parent?.isPosting) {
         await tx.chartAccount.update({
@@ -87,6 +98,8 @@ export const coaService = {
           openingBalance: new Prisma.Decimal(input.openingBalance),
           description: input.description || null,
           isActive: input.isActive,
+          detailType: input.detailType || null,
+          openingBalanceDate: input.openingBalanceDate ?? null,
           createdById: actor.userId,
           updatedById: actor.userId,
         },
@@ -106,6 +119,38 @@ export const coaService = {
       );
       return account;
     });
+    revalidateTag('coa');
+    return account;
+  },
+
+  async toggleActive(session: AppSession | null, id: string, isActive: boolean) {
+    const actor = await authorize(session, 'coa:write');
+    const existing = await prisma.chartAccount.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundError('Account not found');
+    if (existing.isSystem) throw new ValidationError('System accounts cannot be deactivated');
+
+    const account = await prisma.$transaction(async (tx) => {
+      const account = await tx.chartAccount.update({
+        where: { id },
+        data: { isActive, updatedById: actor.userId },
+      });
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'coa',
+          action: 'update',
+          entityType: 'ChartAccount',
+          entityId: id,
+          before: { isActive: existing.isActive },
+          after: { isActive },
+        },
+        tx,
+      );
+      return account;
+    });
+    revalidateTag('coa');
+    return account;
   },
 
   async update(session: AppSession | null, input: ChartAccountUpdateInput) {
@@ -143,7 +188,7 @@ export const coaService = {
     const newDepth = newParent ? newParent.depth + 1 : input.parentId ? existing.depth : 0;
     const pathChanged = newPath !== existing.path;
 
-    return prisma.$transaction(async (tx) => {
+    const account = await prisma.$transaction(async (tx) => {
       const account = await tx.chartAccount.update({
         where: { id: input.id },
         data: {
@@ -161,6 +206,8 @@ export const coaService = {
           openingBalance: new Prisma.Decimal(input.openingBalance),
           description: input.description || null,
           isActive: input.isActive,
+          detailType: input.detailType || null,
+          openingBalanceDate: input.openingBalanceDate ?? null,
           updatedById: actor.userId,
         },
       });
@@ -193,5 +240,51 @@ export const coaService = {
       );
       return account;
     });
+    revalidateTag('coa');
+    return account;
+  },
+
+  async delete(session: AppSession | null, id: string) {
+    const actor = await authorize(session, 'coa:write');
+    const existing = await prisma.chartAccount.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            children: true,
+            journalLines: true,
+            systemMappings: true,
+          },
+        },
+      },
+    });
+    if (!existing) throw new NotFoundError('Account not found');
+    if (existing.isSystem) throw new ValidationError('System accounts cannot be deleted');
+    if (existing._count.children > 0) throw new ValidationError('Delete child accounts first');
+    if (existing._count.journalLines > 0) {
+      throw new ValidationError('Accounts with transaction history cannot be deleted');
+    }
+    if (existing._count.systemMappings > 0) {
+      throw new ValidationError('Accounts mapped as system accounts cannot be deleted');
+    }
+
+    const deleted = await prisma.$transaction(async (tx) => {
+      const deleted = await tx.chartAccount.delete({ where: { id } });
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'coa',
+          action: 'delete',
+          entityType: 'ChartAccount',
+          entityId: id,
+          before: { code: existing.code, name: existing.name, type: existing.type, path: existing.path },
+        },
+        tx,
+      );
+      return deleted;
+    });
+    revalidateTag('coa');
+    return deleted;
   },
 };

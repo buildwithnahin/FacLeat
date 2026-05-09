@@ -1,4 +1,5 @@
 import 'server-only';
+import { revalidateTag, unstable_cache } from 'next/cache';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
@@ -11,13 +12,22 @@ const ROLE_INCLUDE = {
   _count: { select: { users: true } },
 } as const;
 
+const cachedRoleList = unstable_cache(
+  () => prisma.role.findMany({ orderBy: { name: 'asc' }, include: ROLE_INCLUDE }),
+  ['roles-list'],
+  { revalidate: 300, tags: ['rbac'] },
+);
+
+const cachedPermissionList = unstable_cache(
+  () => prisma.permission.findMany({ orderBy: [{ module: 'asc' }, { action: 'asc' }] }),
+  ['permissions-list'],
+  { revalidate: 300, tags: ['rbac'] },
+);
+
 export const roleService = {
   async list(session: AppSession | null) {
     await authorize(session, 'roles:read');
-    return prisma.role.findMany({
-      orderBy: { name: 'asc' },
-      include: ROLE_INCLUDE,
-    });
+    return cachedRoleList();
   },
 
   async getById(session: AppSession | null, id: string) {
@@ -29,7 +39,7 @@ export const roleService = {
 
   async listPermissions(session: AppSession | null) {
     await authorize(session, 'roles:read');
-    return prisma.permission.findMany({ orderBy: [{ module: 'asc' }, { action: 'asc' }] });
+    return cachedPermissionList();
   },
 
   async create(session: AppSession | null, input: RoleCreateInput) {
@@ -43,7 +53,7 @@ export const roleService = {
       select: { id: true },
     });
 
-    return prisma.$transaction(async (tx) => {
+    const role = await prisma.$transaction(async (tx) => {
       const role = await tx.role.create({
         data: {
           name: input.name,
@@ -66,6 +76,8 @@ export const roleService = {
       );
       return role;
     });
+    revalidateTag('rbac');
+    return role;
   },
 
   async update(session: AppSession | null, input: RoleUpdateInput) {
@@ -88,7 +100,7 @@ export const roleService = {
       select: { id: true },
     });
 
-    return prisma.$transaction(async (tx) => {
+    const role = await prisma.$transaction(async (tx) => {
       await tx.rolePermission.deleteMany({ where: { roleId: input.id } });
       const role = await tx.role.update({
         where: { id: input.id },
@@ -117,6 +129,8 @@ export const roleService = {
       );
       return role;
     });
+    revalidateTag('rbac');
+    return role;
   },
 
   async remove(session: AppSession | null, id: string) {
@@ -129,7 +143,7 @@ export const roleService = {
     if (existing.isSystem) throw new ValidationError('Cannot delete a system role');
     if (existing._count.users > 0) throw new ValidationError('Role is still assigned to users');
 
-    return prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       await tx.role.delete({ where: { id } });
       await recordAudit(
         {
@@ -144,5 +158,6 @@ export const roleService = {
         tx,
       );
     });
+    revalidateTag('rbac');
   },
 };

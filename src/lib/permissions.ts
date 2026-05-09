@@ -39,7 +39,7 @@ export const PERMISSIONS = {
     'cancel',
     'discount-override',
   ],
-  ecommerce: ['read', 'fulfill', 'refund'],
+  ecommerce: ['read', 'sync', 'fulfill', 'refund', 'reconcile'],
   trade: ['read', 'write', 'lc-issue', 'lc-amend', 'lc-drawdown', 'shipment', 'payment'],
 
   // Phase 6

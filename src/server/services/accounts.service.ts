@@ -567,19 +567,13 @@ export const accountsService = {
 
     // Changes in working capital (end vs start)
     const startDate = new Date(filters.from.getTime() - 1);
-    const [
-      inventoryEnd, inventoryStart,
-      arEnd, arStart,
-      apEnd, apStart,
-    ] = await Promise.all([
+    const [inventoryEnd, inventoryStart] = await Promise.all([
       balanceByType(['ASSET'], filters.to), // rough proxy — ideally filter by COA code
       balanceByType(['ASSET'], startDate),
-      ZERO, ZERO, // AR/AP proxies — populate when COA codes are known
-      ZERO, ZERO,
     ]);
 
-    // Inventory change from InventoryLedger
-    const invLedger = await prisma.inventoryLedger.groupBy({
+    // Inventory change from InventoryLedger (qty movement, not used in monetary calc below)
+    await prisma.inventoryLedger.groupBy({
       by: ['direction'],
       where: {
         ...(filters.branchId ? { branchId: filters.branchId } : {}),
@@ -587,8 +581,6 @@ export const accountsService = {
       },
       _sum: { quantity: true },
     });
-    const invIn = invLedger.find((r) => r.direction === 'IN')?._sum.quantity ?? ZERO;
-    const invOut = invLedger.find((r) => r.direction === 'OUT')?._sum.quantity ?? ZERO;
     // Use TB-based inventory delta for monetary change
     const inventoryChange = inventoryEnd.minus(inventoryStart).negated();
 
@@ -719,14 +711,19 @@ export const accountsService = {
     };
 
     // Inventory breakdown from InventoryLedger aggregated by product type
-    const invRows = await prisma.$queryRaw<{ type: string; value: number }[]>`
-      SELECT p.type, COALESCE(SUM(CASE WHEN il.direction = 'IN' THEN il.quantity ELSE -il.quantity END * il."costPerUnit"), 0) as value
-      FROM "InventoryLedger" il
-      JOIN "Product" p ON p.id = il."productId"
-      WHERE il."createdAt" <= ${filters.asOf}
-      ${filters.branchId ? Prisma.sql`AND il."branchId" = ${filters.branchId}` : Prisma.sql``}
-      GROUP BY p.type
-    `;
+    const branchFilter = filters.branchId
+      ? Prisma.sql`AND il."branchId" = ${filters.branchId}`
+      : Prisma.empty;
+    const invRows = await prisma.$queryRaw<{ type: string; value: number }[]>(
+      Prisma.sql`
+        SELECT p.type, COALESCE(SUM(CASE WHEN il.direction = 'IN' THEN il.quantity ELSE -il.quantity END * il."costPerUnit"), 0) as value
+        FROM "InventoryLedger" il
+        JOIN "Product" p ON p.id = il."productId"
+        WHERE il."createdAt" <= ${filters.asOf}
+        ${branchFilter}
+        GROUP BY p.type
+      `,
+    );
 
     const invByType = new Map(invRows.map((r) => [r.type, new Prisma.Decimal(r.value)]));
     const inventories = {
@@ -744,5 +741,1256 @@ export const accountsService = {
       .map((r) => ({ code: r.code, name: r.name, amount: r.debit.minus(r.credit) }));
 
     return { ppe, inventories, advances };
+  },
+
+  async dailyCashFlow(
+    session: AppSession | null,
+    filters: { branchId?: string; from: Date; to: Date },
+  ) {
+    await authorize(session, 'accounts:read');
+
+    const rangeStart = new Date(filters.from);
+    rangeStart.setUTCHours(0, 0, 0, 0);
+    const rangeEnd = new Date(filters.to);
+    rangeEnd.setUTCHours(0, 0, 0, 0);
+
+    // Fetch operational cash transactions in range
+    const [posRows, wsPayRows, corpPayRows, supPayRows, cashEntryRows, sentTransferRows, receivedTransferRows] = await Promise.all([
+      prisma.posSale.findMany({
+        where: {
+          branchId: filters.branchId,
+          saleDate: { gte: filters.from, lte: filters.to },
+          status: { not: 'VOIDED' },
+        },
+        select: { saleDate: true, paidTotal: true },
+      }),
+      prisma.wholesalePayment.findMany({
+        where: {
+          paidAt: { gte: filters.from, lte: filters.to },
+          invoice: { branchId: filters.branchId },
+        },
+        select: { paidAt: true, amount: true },
+      }),
+      prisma.corporateInvoicePayment.findMany({
+        where: {
+          paidAt: { gte: filters.from, lte: filters.to },
+          invoice: { branchId: filters.branchId },
+        },
+        select: { paidAt: true, amount: true },
+      }),
+      prisma.supplierPayment.findMany({
+        where: {
+          branchId: filters.branchId,
+          paymentDate: { gte: filters.from, lte: filters.to },
+        },
+        select: { paymentDate: true, amount: true },
+      }),
+      prisma.cashEntry.findMany({
+        where: {
+          branchId: filters.branchId,
+          date: { gte: filters.from, lte: filters.to },
+        },
+        select: { date: true, type: true, totalAmount: true },
+      }),
+      filters.branchId
+        ? prisma.cashTransfer.findMany({
+            where: {
+              fromBranchId: filters.branchId,
+              transferDate: { gte: filters.from, lte: filters.to },
+            },
+            select: { transferDate: true, amount: true },
+          })
+        : Promise.resolve([]),
+      filters.branchId
+        ? prisma.cashTransfer.findMany({
+            where: {
+              toBranchId: filters.branchId,
+              transferDate: { gte: filters.from, lte: filters.to },
+            },
+            select: { transferDate: true, amount: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    // Opening balance: net from all history before range start
+    const [posOpenAgg, wsOpenAgg, corpOpenAgg, supOpenAgg, cashInOpenAgg, cashOutOpenAgg, sentTransferOpenAgg, receivedTransferOpenAgg, openingEntriesBeforeRange] = await Promise.all([
+      prisma.posSale.aggregate({
+        where: {
+          branchId: filters.branchId,
+          saleDate: { lt: filters.from },
+          status: { not: 'VOIDED' },
+        },
+        _sum: { paidTotal: true },
+      }),
+      prisma.wholesalePayment.aggregate({
+        where: { paidAt: { lt: filters.from }, invoice: { branchId: filters.branchId } },
+        _sum: { amount: true },
+      }),
+      prisma.corporateInvoicePayment.aggregate({
+        where: { paidAt: { lt: filters.from }, invoice: { branchId: filters.branchId } },
+        _sum: { amount: true },
+      }),
+      prisma.supplierPayment.aggregate({
+        where: { branchId: filters.branchId, paymentDate: { lt: filters.from } },
+        _sum: { amount: true },
+      }),
+      prisma.cashEntry.aggregate({
+        where: { type: 'CASH_IN', branchId: filters.branchId, date: { lt: filters.from } },
+        _sum: { totalAmount: true },
+      }),
+      prisma.cashEntry.aggregate({
+        where: { type: 'CASH_OUT', branchId: filters.branchId, date: { lt: filters.from } },
+        _sum: { totalAmount: true },
+      }),
+      filters.branchId
+        ? prisma.cashTransfer.aggregate({
+            where: { fromBranchId: filters.branchId, transferDate: { lt: filters.from } },
+            _sum: { amount: true },
+          })
+        : Promise.resolve({ _sum: { amount: ZERO } }),
+      filters.branchId
+        ? prisma.cashTransfer.aggregate({
+            where: { toBranchId: filters.branchId, transferDate: { lt: filters.from } },
+            _sum: { amount: true },
+          })
+        : Promise.resolve({ _sum: { amount: ZERO } }),
+      prisma.openingBalanceEntry.findMany({
+        where: {
+          branchId: filters.branchId,
+          date: { lte: filters.from },
+        },
+        select: { normalSide: true, amount: true },
+      }),
+    ]);
+
+    const openingEntryNet = openingEntriesBeforeRange.reduce(
+      (sum, row) => sum.plus(row.normalSide === 'DEBIT' ? row.amount : row.amount.negated()),
+      ZERO,
+    );
+
+    const openingBalance = (posOpenAgg._sum.paidTotal ?? ZERO)
+      .plus(wsOpenAgg._sum.amount ?? ZERO)
+      .plus(corpOpenAgg._sum.amount ?? ZERO)
+      .plus(cashInOpenAgg._sum.totalAmount ?? ZERO)
+      .plus(receivedTransferOpenAgg._sum.amount ?? ZERO)
+      .plus(openingEntryNet)
+      .minus(supOpenAgg._sum.amount ?? ZERO)
+      .minus(cashOutOpenAgg._sum.totalAmount ?? ZERO)
+      .minus(sentTransferOpenAgg._sum.amount ?? ZERO);
+
+    // Group by date
+    type DayBucket = { totalIn: Prisma.Decimal; totalOut: Prisma.Decimal; countIn: number; countOut: number };
+    const byDate = new Map<string, DayBucket>();
+
+    const addIn = (date: Date, amount: Prisma.Decimal) => {
+      const key = date.toISOString().slice(0, 10);
+      const d = byDate.get(key) ?? { totalIn: ZERO, totalOut: ZERO, countIn: 0, countOut: 0 };
+      d.totalIn = d.totalIn.plus(amount);
+      d.countIn++;
+      byDate.set(key, d);
+    };
+
+    const addOut = (date: Date, amount: Prisma.Decimal) => {
+      const key = date.toISOString().slice(0, 10);
+      const d = byDate.get(key) ?? { totalIn: ZERO, totalOut: ZERO, countIn: 0, countOut: 0 };
+      d.totalOut = d.totalOut.plus(amount);
+      d.countOut++;
+      byDate.set(key, d);
+    };
+
+    for (const r of posRows) addIn(r.saleDate, r.paidTotal);
+    for (const r of wsPayRows) addIn(r.paidAt, r.amount);
+    for (const r of corpPayRows) addIn(r.paidAt, r.amount);
+    for (const r of supPayRows) addOut(r.paymentDate, r.amount);
+    for (const r of cashEntryRows) {
+      if (r.type === 'CASH_IN') addIn(r.date, r.totalAmount);
+      else addOut(r.date, r.totalAmount);
+    }
+    for (const r of receivedTransferRows) addIn(r.transferDate, r.amount);
+    for (const r of sentTransferRows) addOut(r.transferDate, r.amount);
+
+    // Build rows with running balance (oldest-first, then reversed for display)
+    let running = openingBalance;
+    const rows: Array<{
+      date: string;
+      openingBalance: Prisma.Decimal;
+      totalIn: Prisma.Decimal;
+      totalOut: Prisma.Decimal;
+      netBalance: Prisma.Decimal;
+      closingBalance: Prisma.Decimal;
+      countIn: number;
+      countOut: number;
+    }> = [];
+
+    for (let day = new Date(rangeStart); day <= rangeEnd; day.setUTCDate(day.getUTCDate() + 1)) {
+      const date = day.toISOString().slice(0, 10);
+      const d = byDate.get(date) ?? { totalIn: ZERO, totalOut: ZERO, countIn: 0, countOut: 0 };
+        const opening = running;
+        const net = d.totalIn.minus(d.totalOut);
+        const closing = opening.plus(net);
+        running = closing;
+        rows.push({
+          date,
+          openingBalance: opening,
+          totalIn: d.totalIn,
+          totalOut: d.totalOut,
+          netBalance: net,
+          closingBalance: closing,
+          countIn: d.countIn,
+          countOut: d.countOut,
+        });
+    }
+
+    rows.reverse();
+
+    const totalIn = rows.reduce((s, r) => s.plus(r.totalIn), ZERO);
+    const totalOut = rows.reduce((s, r) => s.plus(r.totalOut), ZERO);
+    const closingBalance = openingBalance.plus(totalIn).minus(totalOut);
+
+    return {
+      summary: { openingBalance, totalIn, totalOut, closingBalance },
+      rows,
+    };
+  },
+
+  async dailyCashFlowDetails(
+    session: AppSession | null,
+    filters: { branchId?: string; date: Date },
+  ) {
+    await authorize(session, 'accounts:read');
+
+    const from = new Date(filters.date);
+    from.setUTCHours(0, 0, 0, 0);
+    const to = new Date(filters.date);
+    to.setUTCHours(23, 59, 59, 999);
+
+    const [posRows, wsPayRows, corpPayRows, supPayRows, cashEntryRows, sentTransferRows, receivedTransferRows] = await Promise.all([
+      prisma.posSale.findMany({
+        where: {
+          branchId: filters.branchId,
+          saleDate: { gte: from, lte: to },
+          status: { not: 'VOIDED' },
+        },
+        select: {
+          id: true,
+          number: true,
+          saleDate: true,
+          paidTotal: true,
+          customer: { select: { name: true } },
+          notes: true,
+        },
+        orderBy: { saleDate: 'asc' },
+      }),
+      prisma.wholesalePayment.findMany({
+        where: {
+          paidAt: { gte: from, lte: to },
+          invoice: { branchId: filters.branchId },
+        },
+        select: {
+          id: true,
+          paidAt: true,
+          amount: true,
+          method: true,
+          reference: true,
+          invoice: {
+            select: {
+              number: true,
+              customer: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { paidAt: 'asc' },
+      }),
+      prisma.corporateInvoicePayment.findMany({
+        where: {
+          paidAt: { gte: from, lte: to },
+          invoice: { branchId: filters.branchId },
+        },
+        select: {
+          id: true,
+          paidAt: true,
+          amount: true,
+          method: true,
+          reference: true,
+          invoice: {
+            select: {
+              number: true,
+              customer: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { paidAt: 'asc' },
+      }),
+      prisma.supplierPayment.findMany({
+        where: {
+          branchId: filters.branchId,
+          paymentDate: { gte: from, lte: to },
+        },
+        select: {
+          id: true,
+          number: true,
+          paymentDate: true,
+          amount: true,
+          method: true,
+          reference: true,
+          notes: true,
+          supplier: { select: { name: true } },
+        },
+        orderBy: { paymentDate: 'asc' },
+      }),
+      prisma.cashEntry.findMany({
+        where: {
+          branchId: filters.branchId,
+          date: { gte: from, lte: to },
+        },
+        select: {
+          id: true,
+          number: true,
+          date: true,
+          type: true,
+          totalAmount: true,
+          receiveMode: true,
+          category: true,
+          reference: true,
+          remarks: true,
+          contact: { select: { name: true } },
+          contactName: true,
+        },
+        orderBy: { date: 'asc' },
+      }),
+      filters.branchId
+        ? prisma.cashTransfer.findMany({
+            where: {
+              fromBranchId: filters.branchId,
+              transferDate: { gte: from, lte: to },
+            },
+            select: {
+              id: true,
+              number: true,
+              transferDate: true,
+              amount: true,
+              transferVia: true,
+              reference: true,
+              remarks: true,
+              toBranch: { select: { name: true } },
+            },
+            orderBy: { transferDate: 'asc' },
+          })
+        : Promise.resolve([]),
+      filters.branchId
+        ? prisma.cashTransfer.findMany({
+            where: {
+              toBranchId: filters.branchId,
+              transferDate: { gte: from, lte: to },
+            },
+            select: {
+              id: true,
+              number: true,
+              transferDate: true,
+              amount: true,
+              transferVia: true,
+              reference: true,
+              remarks: true,
+              fromBranch: { select: { name: true } },
+            },
+            orderBy: { transferDate: 'asc' },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const items = [
+      ...posRows.map((r) => ({
+        id: r.id,
+        dateTime: r.saleDate,
+        direction: 'IN' as const,
+        module: 'POS sale',
+        number: r.number,
+        partyName: r.customer?.name ?? 'Walk-in customer',
+        reference: null,
+        method: 'Cash',
+        notes: r.notes ?? null,
+        amount: r.paidTotal,
+      })),
+      ...wsPayRows.map((r) => ({
+        id: r.id,
+        dateTime: r.paidAt,
+        direction: 'IN' as const,
+        module: 'Wholesale payment',
+        number: r.invoice.number,
+        partyName: r.invoice.customer?.name ?? 'Wholesale customer',
+        reference: r.reference ?? null,
+        method: r.method,
+        notes: null,
+        amount: r.amount,
+      })),
+      ...corpPayRows.map((r) => ({
+        id: r.id,
+        dateTime: r.paidAt,
+        direction: 'IN' as const,
+        module: 'Corporate payment',
+        number: r.invoice.number,
+        partyName: r.invoice.customer.name,
+        reference: r.reference ?? null,
+        method: r.method,
+        notes: null,
+        amount: r.amount,
+      })),
+      ...supPayRows.map((r) => ({
+        id: r.id,
+        dateTime: r.paymentDate,
+        direction: 'OUT' as const,
+        module: 'Supplier payment',
+        number: r.number,
+        partyName: r.supplier.name,
+        reference: r.reference ?? null,
+        method: r.method,
+        notes: r.notes ?? null,
+        amount: r.amount,
+      })),
+      ...cashEntryRows.map((r) => ({
+        id: r.id,
+        dateTime: r.date,
+        direction: r.type === 'CASH_IN' ? ('IN' as const) : ('OUT' as const),
+        module: r.type === 'CASH_IN' ? 'Manual cash in' : 'Manual cash out',
+        number: r.number,
+        partyName: r.contact?.name ?? r.contactName ?? null,
+        reference: r.reference ?? null,
+        method: r.receiveMode,
+        notes: r.remarks ?? r.category,
+        amount: r.totalAmount,
+      })),
+      ...receivedTransferRows.map((r) => ({
+        id: r.id,
+        dateTime: r.transferDate,
+        direction: 'IN' as const,
+        module: 'Cash transfer',
+        number: r.number,
+        partyName: r.fromBranch.name,
+        reference: r.reference ?? null,
+        method: r.transferVia ?? null,
+        notes: r.remarks ?? null,
+        amount: r.amount,
+      })),
+      ...sentTransferRows.map((r) => ({
+        id: r.id,
+        dateTime: r.transferDate,
+        direction: 'OUT' as const,
+        module: 'Cash transfer',
+        number: r.number,
+        partyName: r.toBranch.name,
+        reference: r.reference ?? null,
+        method: r.transferVia ?? null,
+        notes: r.remarks ?? null,
+        amount: r.amount,
+      })),
+    ].sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime());
+
+    const summary = items.reduce(
+      (acc, item) => {
+        if (item.direction === 'IN') {
+          acc.totalIn = acc.totalIn.plus(item.amount);
+          acc.countIn += 1;
+        } else {
+          acc.totalOut = acc.totalOut.plus(item.amount);
+          acc.countOut += 1;
+        }
+        return acc;
+      },
+      { totalIn: ZERO, totalOut: ZERO, countIn: 0, countOut: 0 },
+    );
+
+    return {
+      date: from.toISOString().slice(0, 10),
+      summary: {
+        totalIn: summary.totalIn,
+        totalOut: summary.totalOut,
+        netBalance: summary.totalIn.minus(summary.totalOut),
+        countIn: summary.countIn,
+        countOut: summary.countOut,
+      },
+      items,
+    };
+  },
+
+  async listVouchers(
+    session: AppSession | null,
+    filters: {
+      branchId?: string;
+      from?: Date;
+      to?: Date;
+      type: 'CASH_IN' | 'CASH_OUT' | 'CASH_TRANSFER' | 'BULK';
+    },
+  ) {
+    await authorize(session, 'accounts:read');
+
+    type VRow = {
+      id: string;
+      number: string;
+      date: string;
+      memo: string;
+      reference: string;
+      branchName: string;
+      totalDebit: string;
+      totalCredit: string;
+      cashIn: string;
+      cashOut: string;
+      lineCount: number;
+      sourceModule: string;
+    };
+
+    const isCash = (acc: { type: string; code: string }) =>
+      acc.type === 'ASSET' && acc.code.startsWith('1');
+
+    // Shared helper to fetch manual journal entries (no sourceModule) with cash lines
+    const fetchManualJe = () =>
+      prisma.journalEntry.findMany({
+        where: {
+          status: 'POSTED',
+          sourceModule: null,
+          ...(filters.branchId ? { branchId: filters.branchId } : {}),
+          ...(filters.from || filters.to ? { date: { gte: filters.from, lte: filters.to } } : {}),
+          lines: { some: { account: { type: 'ASSET', code: { startsWith: '1' } } } },
+        },
+        select: {
+          id: true,
+          number: true,
+          date: true,
+          memo: true,
+          reference: true,
+          totalDebit: true,
+          totalCredit: true,
+          sourceModule: true,
+          branch: { select: { name: true } },
+          lines: {
+            select: { debit: true, credit: true, account: { select: { type: true, code: true } } },
+          },
+        },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        take: 100,
+      });
+
+    // ── CASH_IN: POS sales + wholesale/corporate payments + manual journal entries ──
+    if (filters.type === 'CASH_IN') {
+      const [posRows, wsRows, corpRows, jeRows] = await Promise.all([
+        prisma.posSale.findMany({
+          where: {
+            branchId: filters.branchId,
+            saleDate: { gte: filters.from, lte: filters.to },
+            status: { not: 'VOIDED' },
+          },
+          select: {
+            id: true,
+            number: true,
+            saleDate: true,
+            paidTotal: true,
+            branch: { select: { name: true } },
+          },
+          orderBy: { saleDate: 'desc' },
+          take: 200,
+        }),
+        prisma.wholesalePayment.findMany({
+          where: {
+            paidAt: { gte: filters.from, lte: filters.to },
+            invoice: { branchId: filters.branchId },
+          },
+          select: {
+            id: true,
+            amount: true,
+            paidAt: true,
+            reference: true,
+            invoice: { select: { number: true, branch: { select: { name: true } } } },
+          },
+          orderBy: { paidAt: 'desc' },
+          take: 100,
+        }),
+        prisma.corporateInvoicePayment.findMany({
+          where: {
+            paidAt: { gte: filters.from, lte: filters.to },
+            invoice: { branchId: filters.branchId },
+          },
+          select: {
+            id: true,
+            amount: true,
+            paidAt: true,
+            reference: true,
+            invoice: { select: { number: true, branch: { select: { name: true } } } },
+          },
+          orderBy: { paidAt: 'desc' },
+          take: 100,
+        }),
+        fetchManualJe(),
+      ]);
+
+      const jeIn: VRow[] = jeRows
+        .filter((e) => {
+          const net = e.lines
+            .filter((l) => isCash(l.account))
+            .reduce((s, l) => s.plus(l.debit).minus(l.credit), ZERO);
+          return net.greaterThan(0);
+        })
+        .map((e) => {
+          const cashIn = e.lines
+            .filter((l) => isCash(l.account))
+            .reduce((s, l) => s.plus(l.debit), ZERO);
+          return {
+            id: e.id,
+            number: e.number,
+            date: e.date.toISOString().slice(0, 10),
+            memo: e.memo ?? '',
+            reference: e.reference ?? '',
+            branchName: e.branch.name,
+            totalDebit: e.totalDebit.toString(),
+            totalCredit: e.totalCredit.toString(),
+            cashIn: cashIn.toString(),
+            cashOut: '0',
+            lineCount: e.lines.length,
+            sourceModule: '',
+          };
+        });
+
+      return [
+        ...posRows.map((r): VRow => ({
+          id: r.id,
+          number: r.number,
+          date: r.saleDate.toISOString().slice(0, 10),
+          memo: 'POS Sale',
+          reference: r.number,
+          branchName: r.branch.name,
+          totalDebit: r.paidTotal.toString(),
+          totalCredit: '0',
+          cashIn: r.paidTotal.toString(),
+          cashOut: '0',
+          lineCount: 1,
+          sourceModule: 'pos',
+        })),
+        ...wsRows.map((r): VRow => ({
+          id: r.id,
+          number: r.invoice.number,
+          date: r.paidAt.toISOString().slice(0, 10),
+          memo: `Wholesale payment — ${r.invoice.number}`,
+          reference: r.reference ?? r.invoice.number,
+          branchName: r.invoice.branch.name,
+          totalDebit: r.amount.toString(),
+          totalCredit: '0',
+          cashIn: r.amount.toString(),
+          cashOut: '0',
+          lineCount: 1,
+          sourceModule: 'wholesale',
+        })),
+        ...corpRows.map((r): VRow => ({
+          id: r.id,
+          number: r.invoice.number,
+          date: r.paidAt.toISOString().slice(0, 10),
+          memo: `Corporate payment — ${r.invoice.number}`,
+          reference: r.reference ?? r.invoice.number,
+          branchName: r.invoice.branch.name,
+          totalDebit: r.amount.toString(),
+          totalCredit: '0',
+          cashIn: r.amount.toString(),
+          cashOut: '0',
+          lineCount: 1,
+          sourceModule: 'corporate',
+        })),
+        ...jeIn,
+      ].sort((a, b) => b.date.localeCompare(a.date));
+    }
+
+    // ── CASH_OUT: supplier payments + manual journal entries ──
+    if (filters.type === 'CASH_OUT') {
+      const [supRows, jeRows] = await Promise.all([
+        prisma.supplierPayment.findMany({
+          where: {
+            branchId: filters.branchId,
+            paymentDate: { gte: filters.from, lte: filters.to },
+          },
+          select: {
+            id: true,
+            number: true,
+            amount: true,
+            paymentDate: true,
+            reference: true,
+            supplier: { select: { name: true } },
+            branch: { select: { name: true } },
+          },
+          orderBy: { paymentDate: 'desc' },
+          take: 200,
+        }),
+        fetchManualJe(),
+      ]);
+
+      const jeOut: VRow[] = jeRows
+        .filter((e) => {
+          const net = e.lines
+            .filter((l) => isCash(l.account))
+            .reduce((s, l) => s.plus(l.debit).minus(l.credit), ZERO);
+          return net.lessThan(0);
+        })
+        .map((e) => {
+          const cashOut = e.lines
+            .filter((l) => isCash(l.account))
+            .reduce((s, l) => s.plus(l.credit), ZERO);
+          return {
+            id: e.id,
+            number: e.number,
+            date: e.date.toISOString().slice(0, 10),
+            memo: e.memo ?? '',
+            reference: e.reference ?? '',
+            branchName: e.branch.name,
+            totalDebit: e.totalDebit.toString(),
+            totalCredit: e.totalCredit.toString(),
+            cashIn: '0',
+            cashOut: cashOut.toString(),
+            lineCount: e.lines.length,
+            sourceModule: '',
+          };
+        });
+
+      return [
+        ...supRows.map((r): VRow => ({
+          id: r.id,
+          number: r.number,
+          date: r.paymentDate.toISOString().slice(0, 10),
+          memo: `Supplier payment — ${r.supplier.name}`,
+          reference: r.reference ?? '',
+          branchName: r.branch.name,
+          totalDebit: '0',
+          totalCredit: r.amount.toString(),
+          cashIn: '0',
+          cashOut: r.amount.toString(),
+          lineCount: 1,
+          sourceModule: 'supplier',
+        })),
+        ...jeOut,
+      ].sort((a, b) => b.date.localeCompare(a.date));
+    }
+
+    if (filters.type === 'CASH_TRANSFER') {
+      const rows = await prisma.cashTransfer.findMany({
+        where: {
+          ...(filters.branchId
+            ? { OR: [{ fromBranchId: filters.branchId }, { toBranchId: filters.branchId }] }
+            : {}),
+          transferDate: { gte: filters.from, lte: filters.to },
+        },
+        include: {
+          fromBranch: { select: { name: true } },
+          toBranch: { select: { name: true } },
+        },
+        orderBy: [{ transferDate: 'desc' }, { createdAt: 'desc' }],
+        take: 200,
+      });
+
+      return rows.map((r): VRow => {
+        const isReceived = filters.branchId ? r.toBranchId === filters.branchId : false;
+        const isSent = filters.branchId ? r.fromBranchId === filters.branchId : false;
+        return {
+          id: r.id,
+          number: r.number,
+          date: r.transferDate.toISOString().slice(0, 10),
+          memo: `Cash transfer from ${r.fromBranch.name} to ${r.toBranch.name}`,
+          reference: r.reference ?? '',
+          branchName: isReceived ? r.toBranch.name : r.fromBranch.name,
+          totalDebit: isReceived || !filters.branchId ? r.amount.toString() : '0',
+          totalCredit: isSent || !filters.branchId ? r.amount.toString() : '0',
+          cashIn: isReceived || !filters.branchId ? r.amount.toString() : '0',
+          cashOut: isSent || !filters.branchId ? r.amount.toString() : '0',
+          lineCount: 1,
+          sourceModule: 'cash-transfer',
+        };
+      });
+    }
+
+    // ── BULK: journal entries only ──
+    const entries = await prisma.journalEntry.findMany({
+      where: {
+        status: 'POSTED',
+        ...(filters.branchId ? { branchId: filters.branchId } : {}),
+        ...(filters.from || filters.to ? { date: { gte: filters.from, lte: filters.to } } : {}),
+      },
+      select: {
+        id: true,
+        number: true,
+        date: true,
+        memo: true,
+        reference: true,
+        totalDebit: true,
+        totalCredit: true,
+        sourceModule: true,
+        branch: { select: { name: true } },
+        lines: {
+          select: { debit: true, credit: true, account: { select: { type: true, code: true } } },
+        },
+      },
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      take: 200,
+    });
+
+    const filtered = entries.filter((e) => {
+      if (filters.type === 'BULK') return e.lines.length > 2;
+      const cashLines = e.lines.filter((l) => isCash(l.account));
+      const cashDebit = cashLines.reduce((s, l) => s.plus(l.debit), ZERO);
+      const cashCredit = cashLines.reduce((s, l) => s.plus(l.credit), ZERO);
+      return cashDebit.greaterThan(0) && cashCredit.greaterThan(0);
+    });
+
+    return filtered.map((e): VRow => {
+      const cashLines = e.lines.filter((l) => isCash(l.account));
+      const cashDebit = cashLines.reduce((s, l) => s.plus(l.debit), ZERO);
+      const cashCredit = cashLines.reduce((s, l) => s.plus(l.credit), ZERO);
+      return {
+        id: e.id,
+        number: e.number,
+        date: e.date.toISOString().slice(0, 10),
+        memo: e.memo ?? '',
+        reference: e.reference ?? '',
+        branchName: e.branch.name,
+        totalDebit: e.totalDebit.toString(),
+        totalCredit: e.totalCredit.toString(),
+        cashIn: cashDebit.toString(),
+        cashOut: cashCredit.toString(),
+        lineCount: e.lines.length,
+        sourceModule: e.sourceModule ?? '',
+      };
+    });
+  },
+
+  async createCashTransfer(
+    session: AppSession | null,
+    input: {
+      fromBranchId: string;
+      toBranchId: string;
+      amount: string;
+      transferDate: Date;
+      transferVia?: string;
+      reference?: string;
+      remarks: string;
+      imageUrl?: string;
+    },
+  ) {
+    const actor = await authorize(session, 'accounts:post');
+
+    if (input.fromBranchId === input.toBranchId) {
+      throw new ValidationError('Source and destination branch must be different');
+    }
+    const amount = D(input.amount);
+    if (amount.lte(0)) throw new ValidationError('Amount must be greater than zero');
+
+    return prisma.$transaction(async (tx) => {
+      const year = input.transferDate.getFullYear();
+      const count = await tx.cashTransfer.count({
+        where: { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } },
+      });
+      const number = nextDocumentNumber('CT', year, count, 6);
+
+      const transfer = await tx.cashTransfer.create({
+        data: {
+          number,
+          fromBranchId: input.fromBranchId,
+          toBranchId: input.toBranchId,
+          amount,
+          transferDate: input.transferDate,
+          transferVia: input.transferVia ?? null,
+          reference: input.reference ?? null,
+          remarks: input.remarks,
+          imageUrl: input.imageUrl ?? null,
+          status: 'PENDING',
+          createdById: actor.userId,
+        },
+        include: {
+          fromBranch: { select: { code: true, name: true } },
+          toBranch: { select: { code: true, name: true } },
+        },
+      });
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: input.fromBranchId,
+          module: 'accounts',
+          action: 'create-cash-transfer',
+          entityType: 'CashTransfer',
+          entityId: transfer.id,
+          after: {
+            number: transfer.number,
+            amount: amount.toString(),
+            toBranch: transfer.toBranch.code,
+          },
+        },
+        tx,
+      );
+
+      return transfer;
+    });
+  },
+
+  async listCashTransfers(
+    session: AppSession | null,
+    filters: {
+      branchId: string;
+      direction: 'SENT' | 'RECEIVED';
+      from?: Date;
+      to?: Date;
+    },
+  ) {
+    await authorize(session, 'accounts:read');
+
+    const where =
+      filters.direction === 'SENT'
+        ? {
+            fromBranchId: filters.branchId,
+            transferDate: { gte: filters.from, lte: filters.to },
+          }
+        : {
+            toBranchId: filters.branchId,
+            transferDate: { gte: filters.from, lte: filters.to },
+          };
+
+    const rows = await prisma.cashTransfer.findMany({
+      where,
+      include: {
+        fromBranch: { select: { code: true, name: true } },
+        toBranch: { select: { code: true, name: true } },
+      },
+      orderBy: { transferDate: 'desc' },
+      take: 200,
+    });
+
+    return rows.map((r) => ({
+      id: r.id,
+      number: r.number,
+      transferDate: r.transferDate.toISOString(),
+      fromBranch: r.fromBranch.name,
+      toBranch: r.toBranch.name,
+      amount: r.amount.toString(),
+      transferVia: r.transferVia ?? '',
+      reference: r.reference ?? '',
+      remarks: r.remarks,
+      imageUrl: r.imageUrl ?? '',
+      status: r.status,
+    }));
+  },
+
+  // ── Cash Entries (manual cash in / cash out) ──────────────────────────────
+
+  async createCashEntry(
+    session: AppSession | null,
+    input: {
+      type: 'CASH_IN' | 'CASH_OUT';
+      branchId: string;
+      date: Date;
+      amount: string;
+      taxPercent?: string;
+      contactId?: string;
+      contactName?: string;
+      contactType?: string;
+      receiveMode: string;
+      category: string;
+      reference?: string;
+      projectName?: string;
+      remarks?: string;
+      imageUrl?: string;
+    },
+  ) {
+    const actor = await authorize(session, 'accounts:post');
+
+    const amount = D(input.amount);
+    if (amount.lte(0)) throw new ValidationError('Amount must be greater than zero');
+
+    const taxPercent = input.taxPercent ? D(input.taxPercent) : null;
+    const taxAmount = taxPercent ? amount.times(taxPercent).div(100) : null;
+    const totalAmount = taxAmount ? amount.plus(taxAmount) : amount;
+
+    return prisma.$transaction(async (tx) => {
+      const year = input.date.getFullYear();
+      const count = await tx.cashEntry.count({
+        where: { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } },
+      });
+      const number = nextDocumentNumber('TR', year, count, 4);
+
+      const entry = await tx.cashEntry.create({
+        data: {
+          number,
+          type: input.type,
+          branchId: input.branchId,
+          date: input.date,
+          amount,
+          taxPercent: taxPercent ?? null,
+          taxAmount: taxAmount ?? null,
+          totalAmount,
+          contactId: input.contactId ?? null,
+          contactName: input.contactName ?? null,
+          contactType: input.contactType ?? null,
+          receiveMode: input.receiveMode,
+          category: input.category,
+          reference: input.reference ?? null,
+          projectName: input.projectName ?? null,
+          remarks: input.remarks ?? null,
+          imageUrl: input.imageUrl ?? null,
+          createdById: actor.userId,
+        },
+        include: {
+          branch: { select: { name: true, currency: true } },
+          contact: { select: { name: true, type: true } },
+        },
+      });
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: input.branchId,
+          module: 'accounts',
+          action: `create-cash-${input.type === 'CASH_IN' ? 'in' : 'out'}`,
+          entityType: 'CashEntry',
+          entityId: entry.id,
+          after: { number: entry.number, amount: amount.toString(), type: entry.type },
+        },
+        tx,
+      );
+
+      return entry;
+    });
+  },
+
+  async listCashEntries(
+    session: AppSession | null,
+    filters: {
+      type: 'CASH_IN' | 'CASH_OUT';
+      branchId?: string;
+      from?: Date;
+      to?: Date;
+      take?: number;
+    },
+  ) {
+    await authorize(session, 'accounts:read');
+    return prisma.cashEntry.findMany({
+      where: {
+        type: filters.type,
+        branchId: filters.branchId,
+        date: { gte: filters.from, lte: filters.to },
+      },
+      include: {
+        branch: { select: { name: true, currency: true } },
+        contact: { select: { name: true, type: true } },
+      },
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      take: filters.take ?? 50,
+    });
+  },
+
+  async cashEntrySummary(
+    session: AppSession | null,
+    filters: {
+      type: 'CASH_IN' | 'CASH_OUT';
+      branchId?: string;
+      from?: Date;
+      to?: Date;
+    },
+  ) {
+    await authorize(session, 'accounts:read');
+
+    const [
+      inRange,
+      posInRange,
+      wholesaleInRange,
+      corporateInRange,
+      supplierOutRange,
+      cashInRange,
+      cashOutRange,
+      sentTransferInRange,
+      receivedTransferInRange,
+      posBeforeRange,
+      wholesaleBeforeRange,
+      corporateBeforeRange,
+      supplierBeforeRange,
+      cashInBeforeRange,
+      cashOutBeforeRange,
+      sentTransferBeforeRange,
+      receivedTransferBeforeRange,
+    ] = await Promise.all([
+      prisma.cashEntry.aggregate({
+        where: {
+          type: filters.type,
+          branchId: filters.branchId,
+          date: { gte: filters.from, lte: filters.to },
+        },
+        _sum: { totalAmount: true },
+        _count: true,
+      }),
+      prisma.posSale.aggregate({
+        where: {
+          branchId: filters.branchId,
+          saleDate: { gte: filters.from, lte: filters.to },
+          status: { not: 'VOIDED' },
+        },
+        _sum: { paidTotal: true },
+      }),
+      prisma.wholesalePayment.aggregate({
+        where: {
+          paidAt: { gte: filters.from, lte: filters.to },
+          invoice: { branchId: filters.branchId },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.corporateInvoicePayment.aggregate({
+        where: {
+          paidAt: { gte: filters.from, lte: filters.to },
+          invoice: { branchId: filters.branchId },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.supplierPayment.aggregate({
+        where: {
+          branchId: filters.branchId,
+          paymentDate: { gte: filters.from, lte: filters.to },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.cashEntry.aggregate({
+        where: {
+          type: 'CASH_IN',
+          branchId: filters.branchId,
+          date: { gte: filters.from, lte: filters.to },
+        },
+        _sum: { totalAmount: true },
+      }),
+      prisma.cashEntry.aggregate({
+        where: {
+          type: 'CASH_OUT',
+          branchId: filters.branchId,
+          date: { gte: filters.from, lte: filters.to },
+        },
+        _sum: { totalAmount: true },
+      }),
+      filters.branchId
+        ? prisma.cashTransfer.aggregate({
+            where: {
+              fromBranchId: filters.branchId,
+              transferDate: { gte: filters.from, lte: filters.to },
+            },
+            _sum: { amount: true },
+          })
+        : Promise.resolve({ _sum: { amount: ZERO } }),
+      filters.branchId
+        ? prisma.cashTransfer.aggregate({
+            where: {
+              toBranchId: filters.branchId,
+              transferDate: { gte: filters.from, lte: filters.to },
+            },
+            _sum: { amount: true },
+          })
+        : Promise.resolve({ _sum: { amount: ZERO } }),
+      prisma.posSale.aggregate({
+        where: {
+          branchId: filters.branchId,
+          saleDate: { lt: filters.from },
+          status: { not: 'VOIDED' },
+        },
+        _sum: { paidTotal: true },
+      }),
+      prisma.wholesalePayment.aggregate({
+        where: {
+          paidAt: { lt: filters.from },
+          invoice: { branchId: filters.branchId },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.corporateInvoicePayment.aggregate({
+        where: {
+          paidAt: { lt: filters.from },
+          invoice: { branchId: filters.branchId },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.supplierPayment.aggregate({
+        where: {
+          branchId: filters.branchId,
+          paymentDate: { lt: filters.from },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.cashEntry.aggregate({
+        where: {
+          type: 'CASH_IN',
+          branchId: filters.branchId,
+          date: { lt: filters.from },
+        },
+        _sum: { totalAmount: true },
+      }),
+      prisma.cashEntry.aggregate({
+        where: {
+          type: 'CASH_OUT',
+          branchId: filters.branchId,
+          date: { lt: filters.from },
+        },
+        _sum: { totalAmount: true },
+      }),
+      filters.branchId
+        ? prisma.cashTransfer.aggregate({
+            where: { fromBranchId: filters.branchId, transferDate: { lt: filters.from } },
+            _sum: { amount: true },
+          })
+        : Promise.resolve({ _sum: { amount: ZERO } }),
+      filters.branchId
+        ? prisma.cashTransfer.aggregate({
+            where: { toBranchId: filters.branchId, transferDate: { lt: filters.from } },
+            _sum: { amount: true },
+          })
+        : Promise.resolve({ _sum: { amount: ZERO } }),
+    ]);
+
+    const [openingEntriesBeforeRange] = await Promise.all([
+      prisma.openingBalanceEntry.findMany({
+        where: {
+          branchId: filters.branchId,
+          date: { lte: filters.from },
+        },
+        select: { normalSide: true, amount: true },
+      }),
+    ]);
+
+    const openingEntryNet = openingEntriesBeforeRange.reduce(
+      (sum, row) => sum.plus(row.normalSide === 'DEBIT' ? row.amount : row.amount.negated()),
+      ZERO,
+    );
+
+    const openingBalance = (posBeforeRange._sum.paidTotal ?? ZERO)
+      .plus(wholesaleBeforeRange._sum.amount ?? ZERO)
+      .plus(corporateBeforeRange._sum.amount ?? ZERO)
+      .plus(cashInBeforeRange._sum.totalAmount ?? ZERO)
+      .plus(receivedTransferBeforeRange._sum.amount ?? ZERO)
+      .plus(openingEntryNet)
+      .minus(supplierBeforeRange._sum.amount ?? ZERO)
+      .minus(cashOutBeforeRange._sum.totalAmount ?? ZERO)
+      .minus(sentTransferBeforeRange._sum.amount ?? ZERO);
+    const totalIn = (posInRange._sum.paidTotal ?? ZERO)
+      .plus(wholesaleInRange._sum.amount ?? ZERO)
+      .plus(corporateInRange._sum.amount ?? ZERO)
+      .plus(cashInRange._sum.totalAmount ?? ZERO)
+      .plus(receivedTransferInRange._sum.amount ?? ZERO);
+    const totalOut = (supplierOutRange._sum.amount ?? ZERO)
+      .plus(cashOutRange._sum.totalAmount ?? ZERO)
+      .plus(sentTransferInRange._sum.amount ?? ZERO);
+    const netBalance = openingBalance.plus(totalIn).minus(totalOut);
+
+    return { openingBalance, totalIn, totalOut, netBalance, count: inRange._count };
+  },
+
+  async listContactsForBranch(session: AppSession | null, branchId: string) {
+    await authorize(session, 'accounts:read');
+    return prisma.customer.findMany({
+      where: { branchId, status: 'ACTIVE' },
+      select: { id: true, name: true, type: true, code: true },
+      orderBy: { name: 'asc' },
+      take: 300,
+    });
+  },
+
+  async nextCashEntryNumber(session: AppSession | null) {
+    await authorize(session, 'accounts:read');
+    const year = new Date().getFullYear();
+    const count = await prisma.cashEntry.count({
+      where: { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } },
+    });
+    return nextDocumentNumber('TR', year, count, 4);
   },
 };

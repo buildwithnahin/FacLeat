@@ -48,6 +48,8 @@ export default async function EditAccountPage({ params }: { params: Promise<{ id
           currency: account.currency,
           branchId: account.branchId,
           openingBalance: account.openingBalance.toString(),
+          detailType: account.detailType,
+          openingBalanceDate: account.openingBalanceDate?.toISOString().slice(0, 10) ?? null,
           description: account.description,
           isActive: account.isActive,
         }}

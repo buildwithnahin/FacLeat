@@ -27,6 +27,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
           barcode: product.barcode,
           name: product.name,
           description: product.description,
+          size: product.size,
           type: product.type,
           unit: product.unit,
           categoryId: product.categoryId,

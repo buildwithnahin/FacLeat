@@ -19,6 +19,7 @@ const selectClass =
 interface Row {
   key: string;
   productId: string;
+  size: string;
   description: string;
   unit: (typeof UNITS)[number];
   quantity: string;
@@ -30,6 +31,7 @@ function newRow(): Row {
   return {
     key: `r-${Math.random().toString(36).slice(2, 8)}`,
     productId: '',
+    size: '',
     description: '',
     unit: 'PCS',
     quantity: '',
@@ -43,6 +45,8 @@ export interface ProductOption {
   sku: string;
   name: string;
   unit: string;
+  size: string | null;
+  categoryName: string | null;
 }
 
 export interface InvoiceFormProps {
@@ -56,6 +60,7 @@ export interface InvoiceFormProps {
   currency: CurrencyCode;
   prefillItems?: {
     productId: string;
+    size: string;
     description: string;
     unit: string;
     quantity: string;
@@ -86,6 +91,7 @@ export function InvoiceForm({
       ? prefillItems.map((i) => ({
           key: `r-${Math.random().toString(36).slice(2, 8)}`,
           productId: i.productId,
+          size: i.size,
           description: i.description,
           unit: (UNITS.includes(i.unit as (typeof UNITS)[number])
             ? (i.unit as Row['unit'])
@@ -117,6 +123,9 @@ export function InvoiceForm({
 
   const updateRow = (key: string, patch: Partial<Row>) =>
     setRows((rs) => rs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
+  const getProduct = (productId: string) => products.find((product) => product.id === productId);
+  const isShoesProduct = (productId: string) =>
+    getProduct(productId)?.categoryName?.trim().toLowerCase() === 'shoes';
 
   return (
     <form action={formAction} className="space-y-6">
@@ -134,6 +143,7 @@ export function InvoiceForm({
             .filter((r) => r.productId && Number(r.quantity) > 0)
             .map((r) => ({
               productId: r.productId,
+              size: r.size,
               description: r.description,
               unit: r.unit,
               quantity: r.quantity,
@@ -206,7 +216,7 @@ export function InvoiceForm({
             {rows.map((r, idx) => (
               <div
                 key={r.key}
-                className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_0.8fr_auto] gap-2 items-end"
+                className="grid grid-cols-1 md:grid-cols-[2fr_0.9fr_1fr_1fr_1fr_0.8fr_auto] gap-2 items-end"
               >
                 <div>
                   {idx === 0 && <Label className="text-xs">Product</Label>}
@@ -216,6 +226,7 @@ export function InvoiceForm({
                       const p = products.find((x) => x.id === e.target.value);
                       updateRow(r.key, {
                         productId: e.target.value,
+                        size: p?.size ?? '',
                         unit: (p?.unit as Row['unit']) ?? r.unit,
                       });
                     }}
@@ -228,6 +239,16 @@ export function InvoiceForm({
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  {idx === 0 && <Label className="text-xs">Size</Label>}
+                  <Input
+                    value={r.size}
+                    onChange={(e) => updateRow(r.key, { size: e.target.value })}
+                    placeholder={isShoesProduct(r.productId) ? '9, 10, 11' : 'N/A'}
+                    disabled={!isShoesProduct(r.productId)}
+                    required={isShoesProduct(r.productId)}
+                  />
                 </div>
                 <div>
                   {idx === 0 && <Label className="text-xs">Qty</Label>}

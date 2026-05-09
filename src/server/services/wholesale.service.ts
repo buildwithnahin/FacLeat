@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
+import { assertOpenPeriod } from '@/server/periods/guards';
 import type { AppSession } from '@/server/auth/session';
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/errors';
 import { nextDocumentNumber } from '@/lib/document-number';
@@ -164,6 +165,8 @@ export const wholesaleService = {
     }
 
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, input.branchId);
+
       // Negative-stock guard
       if (!warehouse.branch.allowNegativeStock) {
         const productIds = input.items.map((i) => i.productId);
@@ -405,6 +408,8 @@ export const wholesaleService = {
     }
 
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, invoice.branchId);
+
       let refundAmount = ZERO;
       const returnItems: {
         invoiceItemId: string;
@@ -551,6 +556,8 @@ export const wholesaleService = {
     }
 
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, invoice.branchId);
+
       // Reverse stock
       await Promise.all(
         invoice.items.map((li) =>

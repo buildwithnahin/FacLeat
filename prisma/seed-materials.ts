@@ -26,7 +26,7 @@ async function main() {
   });
 
   // 1. Extra categories
-  const extraCategories = ['Hardware', 'Adhesives', 'Dyes & Finishes', 'Tools & Consumables', 'Work in Progress'];
+  const extraCategories = ['Hardware', 'Adhesives', 'Dyes & Finishes', 'Tools & Consumables', 'Work in Progress', 'Shoes'];
   for (const name of extraCategories) {
     await prisma.productCategory.upsert({ where: { name }, update: {}, create: { name } });
   }

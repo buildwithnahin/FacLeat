@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import {
   ShoppingCart,
   Truck,
@@ -25,6 +26,7 @@ function startOfMonth() {
 
 export default async function DashboardPage() {
   const session = await getSession();
+  if (!session) redirect('/login');
   const activeBranchId = session?.activeBranchId ?? undefined;
   const from = startOfMonth();
   const to = new Date();

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import JsBarcode from 'jsbarcode';
 import { Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,11 +14,32 @@ export interface LabelProduct {
   sku: string;
   name: string;
   barcode: string | null;
-  sellPrice: string;
+  size: string | null;
+  categoryName: string | null;
+  // sellPrice: string;
 }
 
 export interface LabelSheetProps {
   products: LabelProduct[];
+}
+
+function BarcodeSvg({ value }: { value: string }) {
+  const ref = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    JsBarcode(ref.current, value, {
+      format: 'CODE128',
+      displayValue: false,
+      margin: 0,
+      width: 1.6,
+      height: 34,
+      background: '#ffffff',
+      lineColor: '#0f172a',
+    });
+  }, [value]);
+
+  return <svg ref={ref} aria-label={`Barcode ${value}`} className="label-barcode-svg" />;
 }
 
 export function LabelSheet({ products }: LabelSheetProps) {
@@ -33,6 +55,7 @@ export function LabelSheet({ products }: LabelSheetProps) {
 
   const labels: LabelProduct[] = toPrint.flatMap(({ p, n }) => Array.from({ length: n }, () => p));
   const totalLabels = labels.length;
+  const isShoeProduct = (product: LabelProduct) => product.categoryName?.trim().toLowerCase() === 'shoes';
 
   return (
     <div className="space-y-6">
@@ -62,6 +85,7 @@ export function LabelSheet({ products }: LabelSheetProps) {
                 <tr>
                   <th className="text-left font-semibold px-3 py-2">SKU</th>
                   <th className="text-left font-semibold px-3 py-2">Name</th>
+                  <th className="text-left font-semibold px-3 py-2">Size</th>
                   <th className="text-left font-semibold px-3 py-2">Barcode</th>
                   <th className="text-right font-semibold px-3 py-2 w-32">Qty</th>
                 </tr>
@@ -71,8 +95,11 @@ export function LabelSheet({ products }: LabelSheetProps) {
                   <tr key={p.id}>
                     <td className="px-3 py-2 font-mono text-xs">{p.sku}</td>
                     <td className="px-3 py-2">{p.name}</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {isShoeProduct(p) ? (p.size ?? '—') : '—'}
+                    </td>
                     <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                      {p.barcode ?? '—'}
+                      {p.barcode}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <Input
@@ -89,6 +116,11 @@ export function LabelSheet({ products }: LabelSheetProps) {
               </tbody>
             </table>
           </div>
+          {products.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              No active products with assigned barcodes are available to print.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -97,15 +129,17 @@ export function LabelSheet({ products }: LabelSheetProps) {
           <div key={`${p.id}-${idx}`} className="label">
             <div className="label-name">{p.name}</div>
             <div className="label-sku">{p.sku}</div>
-            <div className="label-barcode">{p.barcode ?? 'NO BARCODE'}</div>
-            <div className="label-price">৳ {p.sellPrice}</div>
+            {isShoeProduct(p) && p.size && <div className="label-size">Size {p.size}</div>}
+            <BarcodeSvg value={p.barcode ?? ''} />
+            <div className="label-barcode-text">{p.barcode}</div>
+            {/* <div className="label-price">৳ {p.sellPrice}</div> */}
           </div>
         ))}
       </div>
 
       <style jsx>{`
         .label-sheet {
-          display: grid;
+          display: none;
           grid-template-columns: repeat(3, 1fr);
           gap: 4mm;
           padding: 8mm;
@@ -114,10 +148,10 @@ export function LabelSheet({ products }: LabelSheetProps) {
           border: 1px dashed #cbd5e1;
           border-radius: 4px;
           padding: 8px 10px;
-          min-height: 28mm;
+          min-height: 32mm;
           display: flex;
           flex-direction: column;
-          justify-content: space-between;
+          gap: 4px;
           break-inside: avoid;
           background: #fff;
         }
@@ -132,14 +166,23 @@ export function LabelSheet({ products }: LabelSheetProps) {
           font-size: 10px;
           color: #64748b;
         }
-        .label-barcode {
-          font-family: ui-monospace, Menlo, monospace;
-          font-size: 11px;
-          letter-spacing: 1px;
+        .label-size {
+          font-size: 10px;
+          font-weight: 600;
           color: #0f172a;
-          padding: 4px 0;
-          border-top: 1px solid #e2e8f0;
-          border-bottom: 1px solid #e2e8f0;
+        }
+        .label-barcode-svg {
+          width: 100%;
+          height: 34px;
+          display: block;
+          margin-top: 2px;
+        }
+        .label-barcode-text {
+          font-family: ui-monospace, Menlo, monospace;
+          font-size: 9px;
+          letter-spacing: 0.8px;
+          color: #0f172a;
+          text-align: center;
         }
         .label-price {
           font-weight: 700;
@@ -154,6 +197,9 @@ export function LabelSheet({ products }: LabelSheetProps) {
           :global(aside),
           :global(header) {
             display: none !important;
+          }
+          .label-sheet {
+            display: grid;
           }
           .label {
             border-color: #000;

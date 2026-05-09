@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
+import { assertOpenPeriod } from '@/server/periods/guards';
+import { approvalService } from '@/server/services/approval.service';
 import type { AppSession } from '@/server/auth/session';
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/errors';
 import { nextDocumentNumber } from '@/lib/document-number';
@@ -158,13 +160,26 @@ export const posService = {
       throw new ValidationError('Warehouse does not belong to this branch');
     }
 
-    // Enforce discount approval
-    for (const it of input.items) {
-      if (it.discountRate > POS_DISCOUNT_APPROVAL_THRESHOLD && !canOverride) {
-        throw new ForbiddenError(
-          `Discount ${it.discountRate}% exceeds ${POS_DISCOUNT_APPROVAL_THRESHOLD}% — requires approval`,
-        );
-      }
+    const highDiscount = input.items.find(
+      (it) => it.discountRate > POS_DISCOUNT_APPROVAL_THRESHOLD,
+    );
+    if (highDiscount && !canOverride) {
+      const requested = await approvalService.requestIfNeeded(session, {
+        module: 'pos',
+        action: 'discount-override',
+        entityType: 'PosSale',
+        entityId: `pending:${actor.userId}:${input.branchId}:${Date.now()}`,
+        title: `High-discount POS sale (${highDiscount.discountRate}%)`,
+        summary: `Discount ${highDiscount.discountRate}% exceeds ${POS_DISCOUNT_APPROVAL_THRESHOLD}%`,
+        amount: 0,
+        currency: warehouse.branch.currency,
+        branchId: input.branchId,
+      });
+      throw new ForbiddenError(
+        requested
+          ? 'Discount exceeds policy. Approval request created.'
+          : 'Discount exceeds policy, but no approval rule is configured.',
+      );
     }
 
     let sessionRecord = null;
@@ -223,6 +238,8 @@ export const posService = {
     }
 
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, input.branchId);
+
       // Negative-stock guard
       if (!warehouse.branch.allowNegativeStock) {
         const productIds = input.items.map((i) => i.productId);
@@ -389,6 +406,8 @@ export const posService = {
     }
 
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, sale.branchId);
+
       let refundAmount = ZERO;
       const returnItems: { saleItemId: string; productId: string; qty: Prisma.Decimal; unitPrice: Prisma.Decimal; lineTotal: Prisma.Decimal }[] = [];
 

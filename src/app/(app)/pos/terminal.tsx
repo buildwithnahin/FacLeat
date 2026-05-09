@@ -112,7 +112,10 @@ export function PosTerminal({
   async function searchProducts(q: string) {
     setScanQuery(q);
     const res = await fetch(`/api/pos/search?q=${encodeURIComponent(q)}`);
-    if (res.ok) setProducts(await res.json());
+    if (!res.ok) return [] as TerminalProduct[];
+    const data = (await res.json()) as TerminalProduct[];
+    setProducts(data);
+    return data;
   }
 
   function addToCart(p: TerminalProduct) {
@@ -157,7 +160,7 @@ export function PosTerminal({
     );
   }
 
-  function onScanSubmit(e: React.FormEvent) {
+  async function onScanSubmit(e: React.FormEvent) {
     e.preventDefault();
     const q = scanQuery.trim();
     if (!q) return;
@@ -168,7 +171,15 @@ export function PosTerminal({
       setScanQuery('');
       scanRef.current?.focus();
     } else {
-      searchProducts(q);
+      const results = await searchProducts(q);
+      const resolved = results.find(
+        (p) => p.barcode === q || p.sku.toLowerCase() === q.toLowerCase(),
+      );
+      if (resolved) {
+        addToCart(resolved);
+        setScanQuery('');
+        scanRef.current?.focus();
+      }
     }
   }
 

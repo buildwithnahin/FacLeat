@@ -85,14 +85,8 @@ export default async function CashFlowPage({
             <Input type="date" name="to" defaultValue={to} className="h-9 w-36" />
           </div>
           <Button type="submit" size="sm">Apply</Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={undefined}
-            formAction={`/cash-flow?from=${today}&to=${today}`}
-          >
-            Today
+          <Button asChild size="sm" variant="outline">
+            <a href={`/cash-flow?from=${today}&to=${today}`}>Today</a>
           </Button>
         </form>
       </Card>

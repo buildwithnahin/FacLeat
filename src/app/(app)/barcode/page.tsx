@@ -12,7 +12,7 @@ export const metadata = { title: 'Barcode management' };
 
 export default async function BarcodePage() {
   const session = await getSession();
-  const products = await productService.list(session);
+  const products = await productService.listForBarcodeOverview(session);
   const canGen = session?.permissions.includes('barcode:generate') ?? false;
 
   const missing = products.filter((p) => !p.barcode);

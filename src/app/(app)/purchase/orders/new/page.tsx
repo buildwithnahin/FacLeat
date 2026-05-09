@@ -24,7 +24,15 @@ export default async function NewPurchaseOrderPage({
     prisma.product.findMany({
       where: { isActive: true },
       orderBy: { sku: 'asc' },
-      select: { id: true, sku: true, name: true, unit: true, costPrice: true },
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        unit: true,
+        size: true,
+        costPrice: true,
+        category: { select: { name: true } },
+      },
     }),
     sp.requisitionId
       ? prisma.purchaseRequisition.findUnique({
@@ -63,6 +71,8 @@ export default async function NewPurchaseOrderPage({
           sku: p.sku,
           name: p.name,
           unit: p.unit,
+          size: p.size,
+          categoryName: p.category?.name ?? null,
           costPrice: p.costPrice.toString(),
         }))}
         prefill={prefill}

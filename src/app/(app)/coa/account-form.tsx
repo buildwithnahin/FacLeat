@@ -12,7 +12,7 @@ import {
   updateChartAccountAction,
   type CoaFormState,
 } from '@/server/actions/coa';
-import { ACCOUNT_TYPES, NORMAL_SIDES } from '@/server/validators/coa';
+import { ACCOUNT_TYPES, COA_DETAIL_TYPES, NORMAL_SIDES } from '@/server/validators/coa';
 
 export interface AccountFormProps {
   mode: 'create' | 'edit';
@@ -30,6 +30,8 @@ export interface AccountFormProps {
     currency: 'BDT' | 'INR' | 'USD' | 'EUR';
     branchId: string | null;
     openingBalance: string;
+    detailType: string | null;
+    openingBalanceDate: string | null;
     description: string | null;
     isActive: boolean;
   };
@@ -142,6 +144,30 @@ export function AccountForm({ mode, parents, branches, initial }: AccountFormPro
             type="number"
             defaultValue={initial?.openingBalance ?? '0'}
             errors={state?.fieldErrors?.openingBalance}
+          />
+
+          <div className="space-y-2">
+            <Label htmlFor="detailType">Detail type</Label>
+            <select
+              id="detailType"
+              name="detailType"
+              defaultValue={initial?.detailType ?? COA_DETAIL_TYPES[0]!.label}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              {COA_DETAIL_TYPES.map((detail) => (
+                <option key={detail.label} value={detail.label}>
+                  {detail.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <Field
+            label="Opening balance date"
+            name="openingBalanceDate"
+            type="date"
+            defaultValue={initial?.openingBalanceDate ?? ''}
+            errors={state?.fieldErrors?.openingBalanceDate}
           />
 
           <div className="md:col-span-2 space-y-2">

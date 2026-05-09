@@ -268,7 +268,91 @@ async function main() {
   }
   console.log(`  ✓ ${supplierPayments.length} supplier payments`);
 
-  // 8. Pending approval requests
+  // 8. Open POS session and posted journal entries for QA smoke tests
+  const existingSession = await prisma.posSession.findFirst({
+    where: { cashierId: admin.id, branchId: branch.id, warehouseId: warehouse.id, status: 'OPEN' },
+  });
+  if (!existingSession) {
+    await prisma.posSession.create({
+      data: {
+        branchId: branch.id,
+        warehouseId: warehouse.id,
+        cashierId: admin.id,
+        openingFloat: D(5000),
+        notes: 'Demo open till for POS checkout testing',
+      },
+    });
+  }
+
+  const period = await prisma.period.findFirstOrThrow({
+    where: { branchId: branch.id, status: 'OPEN' },
+    orderBy: { startsAt: 'desc' },
+  });
+  const [cashAccount, salesAccount, salaryAccount, payableAccount] = await Promise.all([
+    prisma.chartAccount.findUniqueOrThrow({ where: { code: '1110' } }),
+    prisma.chartAccount.findUniqueOrThrow({ where: { code: '4100' } }),
+    prisma.chartAccount.findUniqueOrThrow({ where: { code: '5310' } }),
+    prisma.chartAccount.findUniqueOrThrow({ where: { code: '2300' } }),
+  ]);
+
+  const journalSeeds = [
+    {
+      number: 'JE-DEMO-0001',
+      date: daysAgo(2),
+      memo: 'Demo cash sale posting',
+      debitAccountId: cashAccount.id,
+      creditAccountId: salesAccount.id,
+      amount: 24550,
+    },
+    {
+      number: 'JE-DEMO-0002',
+      date: daysAgo(1),
+      memo: 'Demo salary accrual',
+      debitAccountId: salaryAccount.id,
+      creditAccountId: payableAccount.id,
+      amount: 64000,
+    },
+  ];
+  for (const j of journalSeeds) {
+    const existing = await prisma.journalEntry.findUnique({ where: { number: j.number } });
+    if (existing) continue;
+    await prisma.journalEntry.create({
+      data: {
+        number: j.number,
+        branchId: branch.id,
+        periodId: period.id,
+        date: j.date,
+        memo: j.memo,
+        status: 'POSTED',
+        totalDebit: D(j.amount),
+        totalCredit: D(j.amount),
+        createdById: admin.id,
+        postedById: admin.id,
+        postedAt: j.date,
+        lines: {
+          create: [
+            {
+              lineNo: 1,
+              accountId: j.debitAccountId,
+              debit: D(j.amount),
+              credit: D(0),
+              currency: 'BDT',
+            },
+            {
+              lineNo: 2,
+              accountId: j.creditAccountId,
+              debit: D(0),
+              credit: D(j.amount),
+              currency: 'BDT',
+            },
+          ],
+        },
+      },
+    });
+  }
+  console.log(`  ✓ POS session and ${journalSeeds.length} posted journals`);
+
+  // 9. Pending approval requests
   const approvals = [
     { module: 'purchase',        action: 'create',  title: 'PO #PO-2026-014 — Chittagong Tannery',     summary: '20 raw hides @ 900 BDT',   amount: 18000,  entityType: 'PurchaseOrder' },
     { module: 'pos',             action: 'discount-override', title: 'High discount — POS-000128',      summary: '18% discount on 12,500 BDT sale', amount: 12500, entityType: 'PosSale' },
@@ -301,7 +385,7 @@ async function main() {
   }
   console.log(`  ✓ ${approvals.length} pending approval requests`);
 
-  // 9. Wholesale invoices (for Receivable + multi-channel Sales card)
+  // 10. Wholesale invoices (for Receivable + multi-channel Sales card)
   const dhakaBag = await prisma.customer.findUniqueOrThrow({ where: { code: 'CUS-002' } });
   const khulna = await prisma.customer.findUniqueOrThrow({ where: { code: 'CUS-004' } });
 
@@ -342,7 +426,7 @@ async function main() {
   }
   console.log(`  ✓ ${wholesaleInvoices.length} wholesale invoices`);
 
-  // 10. Notifications for admin
+  // 11. Notifications for admin
   const notifications = [
     { severity: 'WARNING'  as const, module: 'inventory', title: 'Low stock alert',          body: '3 products have dropped below reorder level.', href: '/reports/inventory' },
     { severity: 'INFO'     as const, module: 'purchase',  title: 'New GRN received',         body: 'GRN #GRN-000045 posted against PO-014.',      href: '/purchase/grn' },

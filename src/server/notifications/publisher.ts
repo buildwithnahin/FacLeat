@@ -1,6 +1,7 @@
 import 'server-only';
 import type { Prisma, NotificationSeverity } from '@prisma/client';
 import { prisma } from '@/server/db';
+import { emailService } from '@/server/email/email.service';
 
 type SseSend = (payload: unknown) => void;
 
@@ -66,8 +67,20 @@ export async function publishNotification(
       body: input.body ?? null,
       href: input.href ?? null,
     },
+    include: { recipient: { select: { email: true } } },
   });
   fanout(input.recipientId, created);
+  void emailService
+    .sendNotificationEmail(created.recipient.email, {
+      module: created.module,
+      title: created.title,
+      body: created.body,
+      href: created.href,
+      severity: created.severity,
+    })
+    .catch(() => {
+      // Email should never block the in-app notification pipeline.
+    });
   return created;
 }
 
@@ -78,4 +91,26 @@ export async function publishToUsers(
   for (const id of userIds) {
     await publishNotification({ ...input, recipientId: id });
   }
+}
+
+export async function publishToPermission(
+  permissionKey: string,
+  input: Omit<PublishInput, 'recipientId'>,
+) {
+  const users = await prisma.user.findMany({
+    where: {
+      status: 'ACTIVE',
+      roles: {
+        some: {
+          role: {
+            permissions: {
+              some: { permission: { key: permissionKey } },
+            },
+          },
+        },
+      },
+    },
+    select: { id: true },
+  });
+  await publishToUsers(users.map((u) => u.id), input);
 }

@@ -1,4 +1,5 @@
 import 'server-only';
+import { revalidateTag, unstable_cache } from 'next/cache';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
@@ -6,18 +7,27 @@ import type { AppSession } from '@/server/auth/session';
 import type { BranchCreateInput, BranchUpdateInput } from '@/server/validators/branches';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 
+const cachedActiveBranches = unstable_cache(
+  () => prisma.branch.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
+  ['branches-active'],
+  { revalidate: 300, tags: ['branches'] },
+);
+
+const cachedAllBranches = unstable_cache(
+  () => prisma.branch.findMany({ orderBy: [{ isActive: 'desc' }, { name: 'asc' }] }),
+  ['branches-all'],
+  { revalidate: 300, tags: ['branches'] },
+);
+
 export const branchService = {
   async listActive(session: AppSession | null) {
     await authorize(session, 'branches:read');
-    return prisma.branch.findMany({
-      where: { isActive: true },
-      orderBy: { name: 'asc' },
-    });
+    return cachedActiveBranches();
   },
 
   async listAll(session: AppSession | null) {
     await authorize(session, 'branches:read');
-    return prisma.branch.findMany({ orderBy: [{ isActive: 'desc' }, { name: 'asc' }] });
+    return cachedAllBranches();
   },
 
   async getById(session: AppSession | null, id: string) {
@@ -32,7 +42,7 @@ export const branchService = {
     const dup = await prisma.branch.findUnique({ where: { code: input.code } });
     if (dup) throw new ValidationError('Branch code already exists');
 
-    return prisma.$transaction(async (tx) => {
+    const branch = await prisma.$transaction(async (tx) => {
       const branch = await tx.branch.create({
         data: {
           code: input.code,
@@ -60,6 +70,8 @@ export const branchService = {
       );
       return branch;
     });
+    revalidateTag('branches');
+    return branch;
   },
 
   async update(session: AppSession | null, input: BranchUpdateInput) {
@@ -71,7 +83,7 @@ export const branchService = {
       if (dup) throw new ValidationError('Branch code already exists');
     }
 
-    return prisma.$transaction(async (tx) => {
+    const branch = await prisma.$transaction(async (tx) => {
       const branch = await tx.branch.update({
         where: { id: input.id },
         data: {
@@ -101,5 +113,7 @@ export const branchService = {
       );
       return branch;
     });
+    revalidateTag('branches');
+    return branch;
   },
 };

@@ -2,6 +2,10 @@ import { auth } from '@/server/auth/config';
 import { prisma } from '@/server/db';
 
 export async function GET() {
+  if (process.env.NODE_ENV !== 'development') {
+    return new Response('Not found', { status: 404 });
+  }
+
   const raw = await auth();
   if (!raw?.user?.id) return Response.json({ error: 'no auth token' });
 

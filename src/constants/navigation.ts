@@ -12,6 +12,7 @@ export interface NavModule {
   iconName: string;
   permission?: string;
   items?: NavItem[];
+  section?: string;
 }
 
 export const MODULES: NavModule[] = [
@@ -21,6 +22,7 @@ export const MODULES: NavModule[] = [
     href: '/dashboard',
     iconName: 'LayoutDashboard',
     permission: 'dashboard:read',
+    section: 'Overview',
   },
   {
     number: 2,
@@ -28,6 +30,7 @@ export const MODULES: NavModule[] = [
     href: '/barcode',
     iconName: 'ScanBarcode',
     permission: 'barcode:read',
+    section: 'Operations',
     items: [
       { label: 'Overview', href: '/barcode', permission: 'barcode:read' },
       { label: 'Print labels', href: '/barcode/print', permission: 'barcode:read' },
@@ -39,6 +42,7 @@ export const MODULES: NavModule[] = [
     href: '/inventory',
     iconName: 'Boxes',
     permission: 'inventory:read',
+    section: 'Operations',
     items: [
       { label: 'Overview', href: '/inventory', permission: 'inventory:read' },
       { label: 'Products', href: '/inventory/products', permission: 'inventory:read' },
@@ -53,6 +57,7 @@ export const MODULES: NavModule[] = [
     href: '/warehouse',
     iconName: 'Warehouse',
     permission: 'warehouse:read',
+    section: 'Operations',
     items: [
       { label: 'Overview', href: '/warehouse', permission: 'warehouse:read' },
       { label: 'Receive', href: '/warehouse/receive', permission: 'warehouse:receive' },
@@ -67,6 +72,7 @@ export const MODULES: NavModule[] = [
     href: '/factory',
     iconName: 'Factory',
     permission: 'factory:read',
+    section: 'Operations',
     items: [
       { label: 'Production orders', href: '/factory', permission: 'factory:read' },
       { label: 'New production order', href: '/factory/new', permission: 'factory:plan' },
@@ -78,6 +84,7 @@ export const MODULES: NavModule[] = [
     href: '/pos',
     iconName: 'ShoppingCart',
     permission: 'pos:sell',
+    section: 'Sales',
     items: [
       { label: 'Terminal', href: '/pos', permission: 'pos:sell' },
       { label: 'Sales', href: '/pos/sales', permission: 'pos:sell' },
@@ -90,6 +97,7 @@ export const MODULES: NavModule[] = [
     href: '/corporate-sales',
     iconName: 'Building2',
     permission: 'corporate-sales:read',
+    section: 'Sales',
     items: [
       { label: 'Overview', href: '/corporate-sales', permission: 'corporate-sales:read' },
       { label: 'Quotes', href: '/corporate-sales/quotes', permission: 'corporate-sales:read' },
@@ -103,6 +111,7 @@ export const MODULES: NavModule[] = [
     href: '/wholesale',
     iconName: 'Package',
     permission: 'wholesale:read',
+    section: 'Sales',
     items: [
       { label: 'Overview', href: '/wholesale', permission: 'wholesale:read' },
       { label: 'New invoice', href: '/wholesale/new', permission: 'wholesale:write' },
@@ -115,6 +124,7 @@ export const MODULES: NavModule[] = [
     href: '/ecommerce',
     iconName: 'Globe',
     permission: 'ecommerce:read',
+    section: 'Sales',
   },
   {
     number: 10,
@@ -122,6 +132,7 @@ export const MODULES: NavModule[] = [
     href: '/trade',
     iconName: 'Ship',
     permission: 'trade:read',
+    section: 'Sales',
     items: [
       { label: 'Overview', href: '/trade', permission: 'trade:read' },
       { label: 'Orders', href: '/trade/orders', permission: 'trade:read' },
@@ -138,6 +149,7 @@ export const MODULES: NavModule[] = [
     href: '/suppliers',
     iconName: 'Truck',
     permission: 'suppliers:read',
+    section: 'Procurement',
     items: [
       { label: 'All suppliers', href: '/suppliers', permission: 'suppliers:read' },
       { label: 'Payments', href: '/suppliers/payments', permission: 'suppliers:read' },
@@ -149,6 +161,7 @@ export const MODULES: NavModule[] = [
     href: '/crm',
     iconName: 'Users',
     permission: 'crm:read',
+    section: 'Procurement',
     items: [
       { label: 'Customers', href: '/crm', permission: 'crm:read' },
       { label: 'New customer', href: '/crm/new', permission: 'crm:write' },
@@ -156,10 +169,26 @@ export const MODULES: NavModule[] = [
   },
   {
     number: 13,
+    label: 'Purchase',
+    href: '/purchase',
+    iconName: 'Package',
+    permission: 'purchase:read',
+    section: 'Procurement',
+    items: [
+      { label: 'Overview', href: '/purchase', permission: 'purchase:read' },
+      { label: 'Requisitions', href: '/purchase/requisitions', permission: 'purchase:read' },
+      { label: 'Orders', href: '/purchase/orders', permission: 'purchase:read' },
+      { label: 'Goods receive', href: '/purchase/grn', permission: 'purchase:receive' },
+      { label: 'Invoices', href: '/purchase/invoices', permission: 'purchase:read' },
+    ],
+  },
+  {
+    number: 14,
     label: 'Accounts & Finance',
     href: '/accounts',
     iconName: 'Banknote',
     permission: 'accounts:read',
+    section: 'Transactions',
     items: [
       { label: 'Overview', href: '/accounts', permission: 'accounts:read' },
       { label: 'Journals', href: '/accounts/journals', permission: 'accounts:read' },
@@ -175,29 +204,40 @@ export const MODULES: NavModule[] = [
     ],
   },
   {
-    number: 14,
+    number: 15,
     label: 'Chart of Accounts',
     href: '/coa',
     iconName: 'BookOpen',
     permission: 'coa:read',
+    section: 'Transactions',
   },
   {
-    number: 15,
+    number: 16,
     label: 'Assets',
     href: '/assets',
     iconName: 'Building2',
     permission: 'assets:read',
+    section: 'Transactions',
     items: [
       { label: 'All assets', href: '/assets', permission: 'assets:read' },
       { label: 'Categories', href: '/assets/categories', permission: 'assets:read' },
     ],
   },
   {
-    number: 16,
+    number: 17,
+    label: 'Transactions',
+    href: '/transactions',
+    iconName: 'Wallet',
+    permission: 'accounts:read',
+    section: 'Transactions',
+  },
+  {
+    number: 18,
     label: 'Reports & Analytics',
     href: '/reports',
     iconName: 'BarChart3',
     permission: 'reports:read',
+    section: 'Analytics',
     items: [
       { label: 'Overview', href: '/reports', permission: 'reports:read' },
       { label: 'Sales', href: '/reports/sales', permission: 'reports:read' },
@@ -208,75 +248,12 @@ export const MODULES: NavModule[] = [
     ],
   },
   {
-    number: 17,
-    label: 'Users & Roles',
-    href: '/users',
-    iconName: 'UserCog',
-    permission: 'users:read',
-    items: [
-      { label: 'Users', href: '/users', permission: 'users:read' },
-      { label: 'Roles', href: '/roles', permission: 'roles:read' },
-    ],
-  },
-  {
-    number: 18,
-    label: 'Audit Log',
-    href: '/audit',
-    iconName: 'History',
-    permission: 'audit:read',
-  },
-  {
     number: 19,
-    label: 'Notifications',
-    href: '/notifications',
-    iconName: 'Bell',
-    permission: 'notifications:read',
-  },
-  {
-    number: 20,
-    label: 'Branches',
-    href: '/branches',
-    iconName: 'Network',
-    permission: 'branches:read',
-  },
-  {
-    number: 21,
-    label: 'Purchase',
-    href: '/purchase',
-    iconName: 'Package',
-    permission: 'purchase:read',
-    items: [
-      { label: 'Overview', href: '/purchase', permission: 'purchase:read' },
-      { label: 'Requisitions', href: '/purchase/requisitions', permission: 'purchase:read' },
-      { label: 'Orders', href: '/purchase/orders', permission: 'purchase:read' },
-      { label: 'Goods receive', href: '/purchase/grn', permission: 'purchase:receive' },
-      { label: 'Invoices', href: '/purchase/invoices', permission: 'purchase:read' },
-    ],
-  },
-  {
-    number: 22,
-    label: 'Approvals',
-    href: '/approvals',
-    iconName: 'FileCheck2',
-    permission: 'approvals:read',
-    items: [
-      { label: 'Queue', href: '/approvals', permission: 'approvals:read' },
-      { label: 'Rules', href: '/approvals/rules', permission: 'approvals:read' },
-    ],
-  },
-  {
-    number: 23,
-    label: 'Documents',
-    href: '/documents',
-    iconName: 'FolderOpen',
-    permission: 'documents:read',
-  },
-  {
-    number: 24,
     label: 'HR & Payroll',
     href: '/hr',
     iconName: 'UsersRound',
     permission: 'hr:read',
+    section: 'HR',
     items: [
       { label: 'Overview', href: '/hr', permission: 'hr:read' },
       { label: 'Employees', href: '/hr/employees', permission: 'hr:read' },
@@ -287,13 +264,59 @@ export const MODULES: NavModule[] = [
     ],
   },
   {
-    number: 25,
-    label: 'Cash Flow',
-    href: '/cash-flow',
-    iconName: 'ArrowRightLeft',
-    permission: 'reports:read',
+    number: 20,
+    label: 'Users & Roles',
+    href: '/users',
+    iconName: 'UserCog',
+    permission: 'users:read',
+    section: 'Administration',
     items: [
-      { label: 'Daily / Range', href: '/cash-flow', permission: 'reports:read' },
+      { label: 'Users', href: '/users', permission: 'users:read' },
+      { label: 'Roles', href: '/roles', permission: 'roles:read' },
     ],
+  },
+  {
+    number: 21,
+    label: 'Audit Log',
+    href: '/audit',
+    iconName: 'History',
+    permission: 'audit:read',
+    section: 'Administration',
+  },
+  {
+    number: 22,
+    label: 'Notifications',
+    href: '/notifications',
+    iconName: 'Bell',
+    permission: 'notifications:read',
+    section: 'Administration',
+  },
+  {
+    number: 23,
+    label: 'Branches',
+    href: '/branches',
+    iconName: 'Network',
+    permission: 'branches:read',
+    section: 'Administration',
+  },
+  {
+    number: 24,
+    label: 'Approvals',
+    href: '/approvals',
+    iconName: 'FileCheck2',
+    permission: 'approvals:read',
+    section: 'Administration',
+    items: [
+      { label: 'Queue', href: '/approvals', permission: 'approvals:read' },
+      { label: 'Rules', href: '/approvals/rules', permission: 'approvals:read' },
+    ],
+  },
+  {
+    number: 25,
+    label: 'Documents',
+    href: '/documents',
+    iconName: 'FolderOpen',
+    permission: 'documents:read',
+    section: 'Administration',
   },
 ];

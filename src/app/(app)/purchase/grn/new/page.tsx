@@ -100,6 +100,7 @@ export default async function NewGrnPage({
           productId: i.productId,
           productSku: i.product.sku,
           productName: i.product.name,
+          size: i.size,
           unit: i.unit,
           orderedQty: i.orderedQty.toString(),
           receivedQty: i.receivedQty.toString(),

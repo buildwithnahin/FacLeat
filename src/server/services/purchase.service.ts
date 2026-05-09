@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
+import { assertOpenPeriod } from '@/server/periods/guards';
+import { approvalService } from '@/server/services/approval.service';
 import type { AppSession } from '@/server/auth/session';
 import type {
   RequisitionCreateInput,
@@ -25,6 +27,15 @@ function computeLineTotal(
   const afterDiscount = gross.minus(discount);
   const tax = afterDiscount.mul(taxRate).div(100);
   return { gross, discount, tax, total: afterDiscount.plus(tax) };
+}
+
+function isShoesCategory(name: string | null | undefined) {
+  return name?.trim().toLowerCase() === 'shoes';
+}
+
+function normalizeSize(size: string | null | undefined) {
+  const value = size?.trim();
+  return value ? value : null;
 }
 
 export const purchaseService = {
@@ -73,6 +84,8 @@ export const purchaseService = {
     const actor = await authorize(session, 'purchase:write');
 
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, po.branchId, input.receivedDate);
+
       const year = new Date().getFullYear();
       const yearCount = await tx.purchaseRequisition.count({
         where: { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } },
@@ -225,6 +238,13 @@ export const purchaseService = {
   async createPurchaseOrder(session: AppSession | null, input: PurchaseOrderCreateInput) {
     const actor = await authorize(session, 'purchase:write');
 
+    const productIds = [...new Set(input.items.map((it) => it.productId))];
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, category: { select: { name: true } }, size: true },
+    });
+    const productById = new Map(products.map((p) => [p.id, p]));
+
     return prisma.$transaction(async (tx) => {
       const year = new Date().getFullYear();
       const yearCount = await tx.purchaseOrder.count({
@@ -236,6 +256,12 @@ export const purchaseService = {
       let taxTotal = new Prisma.Decimal(0);
       let discountTotal = new Prisma.Decimal(0);
       const itemRows = input.items.map((it) => {
+        const product = productById.get(it.productId);
+        if (!product) throw new ValidationError('Selected product was not found');
+        const size = normalizeSize(it.size) ?? product.size;
+        if (isShoesCategory(product.category?.name) && !size) {
+          throw new ValidationError('Size is required for shoes in purchase orders');
+        }
         const qty = new Prisma.Decimal(it.orderedQty);
         const price = new Prisma.Decimal(it.unitPrice);
         const tax = new Prisma.Decimal(it.taxRate);
@@ -246,6 +272,7 @@ export const purchaseService = {
         discountTotal = discountTotal.plus(totals.discount);
         return {
           productId: it.productId,
+          size,
           description: it.description || null,
           unit: it.unit,
           orderedQty: qty,
@@ -307,6 +334,17 @@ export const purchaseService = {
     if (existing.status !== 'PENDING' && existing.status !== 'DRAFT') {
       throw new ValidationError(`Cannot approve PO in ${existing.status} state`);
     }
+    await approvalService.ensureApprovedOrRequest(session, {
+      module: 'purchase',
+      action: 'approve',
+      entityType: 'PurchaseOrder',
+      entityId: existing.id,
+      title: `Purchase order ${existing.number}`,
+      summary: `Approval required before confirming PO ${existing.number}`,
+      amount: existing.grandTotal.toNumber(),
+      currency: existing.currency,
+      branchId: existing.branchId,
+    });
     return prisma.$transaction(async (tx) => {
       const po = await tx.purchaseOrder.update({
         where: { id },
@@ -453,6 +491,7 @@ export const purchaseService = {
             grnId: grn.id,
             purchaseOrderItemId: poItem.id,
             productId: poItem.productId,
+            size: normalizeSize(item.size) ?? poItem.size,
             receivedQty,
             rejectedQty: new Prisma.Decimal(item.rejectedQty),
             unitCost: new Prisma.Decimal(item.unitCost),
@@ -561,6 +600,12 @@ export const purchaseService = {
 
     const supplier = await prisma.supplier.findUnique({ where: { id: input.supplierId } });
     if (!supplier) throw new NotFoundError('Supplier not found');
+    const productIds = [...new Set(input.items.map((it) => it.productId))];
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, category: { select: { name: true } }, size: true },
+    });
+    const productById = new Map(products.map((p) => [p.id, p]));
 
     return prisma.$transaction(async (tx) => {
       const year = new Date().getFullYear();
@@ -572,6 +617,12 @@ export const purchaseService = {
       let subtotal = new Prisma.Decimal(0);
       let taxTotal = new Prisma.Decimal(0);
       const itemRows = input.items.map((it) => {
+        const product = productById.get(it.productId);
+        if (!product) throw new ValidationError('Selected product was not found');
+        const size = normalizeSize(it.size) ?? product.size;
+        if (isShoesCategory(product.category?.name) && !size) {
+          throw new ValidationError('Size is required for shoes in purchase invoices');
+        }
         const qty = new Prisma.Decimal(it.quantity);
         const price = new Prisma.Decimal(it.unitPrice);
         const tax = new Prisma.Decimal(it.taxRate);
@@ -581,6 +632,7 @@ export const purchaseService = {
         taxTotal = taxTotal.plus(taxAmount);
         return {
           productId: it.productId,
+          size,
           description: it.description || null,
           unit: it.unit,
           quantity: qty,

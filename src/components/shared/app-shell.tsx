@@ -1,17 +1,18 @@
-import { Search, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { MODULES } from '@/constants/navigation';
-import { getSession } from '@/server/auth/session';
 import { logoutAction } from '@/server/actions/auth';
 import { BranchSwitcher } from '@/components/shared/branch-switcher';
 import { NotificationBell } from '@/components/shared/notification-bell';
+import { SearchCommand } from '@/components/shared/search-command';
 import { SidebarNav, type ClientNavModule } from '@/components/shared/sidebar-nav';
 import { notificationService } from '@/server/services/notification.service';
+import type { AppSession } from '@/server/auth/session';
 
-async function renderBell(hasPermission: boolean) {
-  if (!hasPermission) return null;
+async function renderBell(session: AppSession) {
+  if (!session.permissions.includes('notifications:read')) return null;
   const [unread, items] = await Promise.all([
-    notificationService.unreadCount(await getSession()),
-    notificationService.list(await getSession(), { limit: 10 }),
+    notificationService.unreadCount(session),
+    notificationService.list(session, { limit: 10 }),
   ]);
   return (
     <NotificationBell
@@ -30,17 +31,22 @@ async function renderBell(hasPermission: boolean) {
   );
 }
 
-export async function AppShell({ children }: { children: React.ReactNode }) {
-  const session = await getSession();
+export async function AppShell({
+  children,
+  session,
+}: {
+  children: React.ReactNode;
+  session: AppSession;
+}) {
   const initials =
-    session?.name
+    session.name
       .split(/\s+/)
       .map((p) => p[0])
       .join('')
       .slice(0, 2)
-      .toUpperCase() ?? '?';
+      .toUpperCase() || '?';
 
-  const perms = session?.permissions ?? [];
+  const perms = session.permissions;
   const can = (p?: string) => !p || perms.includes(p);
 
   const visibleModules: ClientNavModule[] = MODULES.filter((m) => {
@@ -69,8 +75,8 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           <SidebarNav modules={visibleModules} />
           <div className="border-t border-white/10 p-3 space-y-2">
             <div className="px-2 text-xs text-white/80">
-              <p className="font-medium truncate">{session?.name ?? 'Guest'}</p>
-              <p className="text-white/50 truncate">{session?.email}</p>
+              <p className="font-medium truncate">{session.name}</p>
+              <p className="text-white/50 truncate">{session.email}</p>
             </div>
             <form action={logoutAction}>
               <button
@@ -87,17 +93,10 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex-1 flex flex-col min-w-0">
           <header className="h-14 bg-background border-b sticky top-0 z-10 flex items-center gap-3 px-6">
             <div className="flex-1 max-w-xl">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <input
-                  type="search"
-                  placeholder="Search products, SKU, barcode, accounts…"
-                  className="w-full h-9 pl-9 pr-3 rounded-md border bg-muted/40 text-sm outline-none focus:bg-background focus:ring-2 focus:ring-ring"
-                />
-              </div>
+              <SearchCommand permissions={perms} />
             </div>
             <BranchSwitcher />
-            {session && (await renderBell(session.permissions.includes('notifications:read')))}
+            {await renderBell(session)}
             <div className="h-9 w-9 rounded-full bg-primary text-primary-foreground grid place-items-center text-xs font-semibold">
               {initials}
             </div>

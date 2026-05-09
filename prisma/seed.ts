@@ -48,6 +48,11 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
       'corporate-sales:payment',
       'corporate-sales:cancel',
       'corporate-sales:discount-override',
+      'ecommerce:read',
+      'ecommerce:sync',
+      'ecommerce:fulfill',
+      'ecommerce:refund',
+      'ecommerce:reconcile',
     ],
   },
   {
@@ -139,6 +144,11 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
       'corporate-sales:deliver',
       'corporate-sales:invoice',
       'corporate-sales:payment',
+      'ecommerce:read',
+      'ecommerce:sync',
+      'ecommerce:fulfill',
+      'ecommerce:refund',
+      'ecommerce:reconcile',
       'inventory:read',
       'barcode:read',
       'notifications:read',
@@ -199,6 +209,7 @@ const ADDITIONAL_BRANCHES = [
 // Product categories
 const PRODUCT_CATEGORIES = [
   'Finished Leather',
+  'Shoes',
   'Raw Hides',
   'Synthetic Leather',
   'Chemicals',
@@ -313,10 +324,12 @@ const SAMPLE_EMPLOYEES = [
 
 // Sample approval rules
 const APPROVAL_RULES = [
+  { module: 'pos', action: 'discount-override', minAmount: new Prisma.Decimal(0), approverRoles: ['Admin', 'Manager'] },
   { module: 'purchase', action: 'approve', minAmount: new Prisma.Decimal(50000), approverRoles: ['Admin', 'Purchase Manager'] },
   { module: 'purchase', action: 'approve', minAmount: new Prisma.Decimal(200000), approverRoles: ['Admin'] },
   { module: 'accounts', action: 'post', minAmount: new Prisma.Decimal(100000), approverRoles: ['Accountant', 'Admin'] },
   { module: 'assets', action: 'dispose', minAmount: new Prisma.Decimal(50000), approverRoles: ['Admin'] },
+  { module: 'factory', action: 'cost-entry', minAmount: new Prisma.Decimal(25000), approverRoles: ['Admin', 'Factory Manager'] },
   { module: 'hr', action: 'approve-payroll', minAmount: new Prisma.Decimal(0), approverRoles: ['Admin', 'HR Manager'] },
   { module: 'corporate-sales', action: 'discount-override', minAmount: new Prisma.Decimal(100000), approverRoles: ['Admin', 'Sales Rep'] },
 ];

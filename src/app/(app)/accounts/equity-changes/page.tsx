@@ -1,5 +1,6 @@
 import { getSession } from '@/server/auth/session';
 import { accountsService } from '@/server/services/accounts.service';
+import { PrintButton } from '@/components/shared/print-button';
 
 export default async function EquityChangesPage({
   searchParams,
@@ -41,7 +42,7 @@ export default async function EquityChangesPage({
         <input type="date" name="from" defaultValue={from.toISOString().slice(0, 10)} className="border rounded px-2 py-1 text-sm" />
         <input type="date" name="to" defaultValue={to.toISOString().slice(0, 10)} className="border rounded px-2 py-1 text-sm" />
         <button type="submit" className="px-3 py-1 bg-blue-600 text-white text-sm rounded">Apply</button>
-        <button type="button" onClick={() => window.print()} className="px-3 py-1 bg-gray-100 border text-sm rounded ml-auto">Print</button>
+        <PrintButton />
       </form>
 
       <table className="w-full text-sm border-collapse border border-gray-300">

@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
+import { assertOpenPeriod } from '@/server/periods/guards';
+import { publishToPermission } from '@/server/notifications/publisher';
 import type { AppSession } from '@/server/auth/session';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 
@@ -88,6 +90,42 @@ async function getBalances(
   }));
 }
 
+async function notifyLowStockProducts(branchId: string, productIds: string[]) {
+  const uniqueIds = Array.from(new Set(productIds));
+  if (uniqueIds.length === 0) return;
+
+  const [balances, products] = await Promise.all([
+    getBalances(prisma, branchId, undefined, uniqueIds),
+    prisma.product.findMany({
+      where: {
+        id: { in: uniqueIds },
+        isActive: true,
+        reorderLevel: { gt: 0 },
+      },
+      select: { id: true, sku: true, name: true, unit: true, reorderLevel: true },
+    }),
+  ]);
+
+  const totals = new Map<string, Prisma.Decimal>();
+  for (const row of balances) {
+    totals.set(row.productId, (totals.get(row.productId) ?? new Prisma.Decimal(0)).plus(row.balance));
+  }
+
+  for (const product of products) {
+    const qty = totals.get(product.id) ?? new Prisma.Decimal(0);
+    if (qty.lte(product.reorderLevel)) {
+      await publishToPermission('inventory:read', {
+        branchId,
+        severity: qty.lte(0) ? 'CRITICAL' : 'WARNING',
+        module: 'inventory',
+        title: `Low stock: ${product.sku}`,
+        body: `${product.name} is at ${qty.toString()} ${product.unit}; reorder level is ${product.reorderLevel.toString()}.`,
+        href: '/reports/inventory',
+      });
+    }
+  }
+}
+
 export const stockService = {
   async balanceSnapshot(session: AppSession | null, branchId: string, warehouseId?: string) {
     await authorize(session, 'inventory:read');
@@ -137,7 +175,9 @@ export const stockService = {
       throw new ValidationError('Warehouse does not belong to this branch');
     }
 
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, input.branchId);
+
       const created = await Promise.all(
         input.items.map((it) =>
           tx.inventoryLedger.create({
@@ -178,6 +218,8 @@ export const stockService = {
       );
       return { count: created.length };
     });
+    await notifyLowStockProducts(input.branchId, input.items.map((it) => it.productId));
+    return result;
   },
 
   async postIssue(session: AppSession | null, input: IssueInput) {
@@ -192,7 +234,9 @@ export const stockService = {
       throw new ValidationError('Warehouse does not belong to this branch');
     }
 
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, input.branchId);
+
       const productIds = input.items.map((it) => it.productId);
       const balances = await getBalances(tx, input.branchId, input.warehouseId, productIds);
       const balanceByProduct = new Map(balances.map((b) => [b.productId, b.balance]));
@@ -251,6 +295,8 @@ export const stockService = {
       );
       return { count: created.length };
     });
+    await notifyLowStockProducts(input.branchId, input.items.map((it) => it.productId));
+    return result;
   },
 
   async postTransfer(session: AppSession | null, input: TransferInput) {
@@ -272,7 +318,9 @@ export const stockService = {
       throw new ValidationError('Cross-branch transfers are not supported yet');
     }
 
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, input.branchId);
+
       const productIds = input.items.map((it) => it.productId);
       const balances = await getBalances(tx, input.branchId, input.fromWarehouseId, productIds);
       const balanceByProduct = new Map(balances.map((b) => [b.productId, b.balance]));
@@ -343,6 +391,8 @@ export const stockService = {
 
       return { refId, count: input.items.length };
     });
+    await notifyLowStockProducts(input.branchId, input.items.map((it) => it.productId));
+    return result;
   },
 
   async postPhysicalCount(session: AppSession | null, input: PhysicalCountInput) {
@@ -354,7 +404,9 @@ export const stockService = {
       throw new ValidationError('Warehouse does not belong to this branch');
     }
 
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, input.branchId);
+
       const productIds = input.items.map((i) => i.productId);
       const balances = await getBalances(tx, input.branchId, input.warehouseId, productIds);
       const balanceByProduct = new Map(balances.map((b) => [b.productId, b.balance]));
@@ -406,5 +458,7 @@ export const stockService = {
 
       return { refId, adjustmentsPosted, itemsCounted: input.items.length };
     });
+    await notifyLowStockProducts(input.branchId, input.items.map((it) => it.productId));
+    return result;
   },
 };

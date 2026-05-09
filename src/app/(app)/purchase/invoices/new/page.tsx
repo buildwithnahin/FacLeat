@@ -14,7 +14,14 @@ export default async function NewInvoicePage({
   const products = await prisma.product.findMany({
     where: { isActive: true },
     orderBy: { sku: 'asc' },
-    select: { id: true, sku: true, name: true, unit: true },
+    select: {
+      id: true,
+      sku: true,
+      name: true,
+      unit: true,
+      size: true,
+      category: { select: { name: true } },
+    },
   });
 
   if (!sp.purchaseOrderId) {
@@ -76,6 +83,7 @@ export default async function NewInvoicePage({
   const prefillSource = grn ? grn.items : po.items;
   const prefillItems = prefillSource.map((i) => ({
     productId: i.productId,
+    size: i.size ?? i.product.size ?? '',
     description: '',
     unit: grn ? (po.items.find((p) => p.id === (i as { purchaseOrderItemId?: string }).purchaseOrderItemId)?.unit ?? 'PCS') : (i as { unit: string }).unit,
     quantity: (grn ? (i as { receivedQty: { toString: () => string } }).receivedQty : (i as { orderedQty: { toString: () => string } }).orderedQty).toString(),
@@ -104,7 +112,14 @@ export default async function NewInvoicePage({
         grnNumber={grn?.number}
         currency={po.currency as CurrencyCode}
         prefillItems={prefillItems}
-        products={products}
+        products={products.map((product) => ({
+          id: product.id,
+          sku: product.sku,
+          name: product.name,
+          unit: product.unit,
+          size: product.size,
+          categoryName: product.category?.name ?? null,
+        }))}
       />
     </div>
   );

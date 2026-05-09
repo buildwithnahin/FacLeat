@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
+import { approvalService } from '@/server/services/approval.service';
 import type { AppSession } from '@/server/auth/session';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 import type {
@@ -473,6 +474,20 @@ export const hrService = {
 
   async approvePayroll(session: AppSession | null, id: string) {
     const actor = await authorize(session, 'hr:approve-payroll');
+    const pendingRun = await prisma.payrollRun.findUnique({ where: { id } });
+    if (!pendingRun) throw new NotFoundError('Payroll run not found');
+    if (pendingRun.status !== 'DRAFT') throw new ValidationError('Only draft runs can be approved');
+    await approvalService.ensureApprovedOrRequest(session, {
+      module: 'hr',
+      action: 'approve-payroll',
+      entityType: 'PayrollRun',
+      entityId: pendingRun.id,
+      title: `Payroll ${pendingRun.period}`,
+      summary: `Approval required before finalizing payroll for ${pendingRun.period}`,
+      amount: pendingRun.totalNet.toNumber(),
+      currency: 'BDT',
+      branchId: pendingRun.branchId,
+    });
     return prisma.$transaction(async (tx) => {
       const run = await tx.payrollRun.findUnique({ where: { id } });
       if (!run) throw new NotFoundError('Payroll run not found');

@@ -50,6 +50,7 @@ export type RequisitionDecisionInput = z.infer<typeof requisitionDecisionSchema>
 
 export const poItemSchema = z.object({
   productId: z.string().cuid('Select a product'),
+  size: z.string().trim().max(32).optional().or(z.literal('')),
   description: z.string().trim().max(240).optional().or(z.literal('')),
   unit: z.enum(UNITS).default('PCS'),
   orderedQty: z.coerce.number().positive('Quantity must be greater than zero'),
@@ -79,6 +80,7 @@ export const poApproveSchema = z.object({
 export const grnItemSchema = z.object({
   purchaseOrderItemId: z.string().cuid(),
   productId: z.string().cuid(),
+  size: z.string().trim().max(32).optional().or(z.literal('')),
   receivedQty: z.coerce.number().min(0),
   rejectedQty: z.coerce.number().min(0).default(0),
   unitCost: z.coerce.number().min(0),
@@ -100,6 +102,7 @@ export type GrnCreateInput = z.infer<typeof grnCreateSchema>;
 
 export const invoiceItemSchema = z.object({
   productId: z.string().cuid(),
+  size: z.string().trim().max(32).optional().or(z.literal('')),
   description: z.string().trim().max(240).optional().or(z.literal('')),
   unit: z.enum(UNITS).default('PCS'),
   quantity: z.coerce.number().positive(),

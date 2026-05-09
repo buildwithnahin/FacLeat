@@ -14,6 +14,7 @@ export type CoaFormState =
 function parseForm(formData: FormData) {
   const parentId = formData.get('parentId');
   const branchId = formData.get('branchId');
+  const openingBalanceDate = formData.get('openingBalanceDate');
   return {
     code: String(formData.get('code') ?? '').toUpperCase(),
     name: formData.get('name'),
@@ -27,6 +28,9 @@ function parseForm(formData: FormData) {
     openingBalance: formData.get('openingBalance') ?? 0,
     description: formData.get('description') ?? '',
     isActive: formData.get('isActive') !== 'off',
+    detailType: formData.get('detailType') ?? '',
+    openingBalanceDate:
+      openingBalanceDate && String(openingBalanceDate) ? String(openingBalanceDate) : null,
   };
 }
 
@@ -45,6 +49,29 @@ export async function createChartAccountAction(
     throw e;
   }
 
+  revalidatePath('/coa');
+  redirect('/coa');
+}
+
+export async function toggleActiveAction(id: string, isActive: boolean): Promise<void> {
+  const session = await getSession();
+  try {
+    await coaService.toggleActive(session, id, isActive);
+  } catch (e) {
+    if (e instanceof ApiError) return;
+    throw e;
+  }
+  revalidatePath('/coa');
+}
+
+export async function deleteChartAccountAction(id: string): Promise<{ error?: string } | undefined> {
+  const session = await getSession();
+  try {
+    await coaService.delete(session, id);
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    throw e;
+  }
   revalidatePath('/coa');
   redirect('/coa');
 }

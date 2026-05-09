@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
+import { assertOpenPeriod } from '@/server/periods/guards';
 import type { AppSession } from '@/server/auth/session';
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/errors';
 import { nextDocumentNumber } from '@/lib/document-number';
@@ -462,6 +463,8 @@ export const corporateService = {
     }
 
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, order.branchId);
+
       // Negative-stock guard
       if (!order.branch.allowNegativeStock) {
         const productIds = Array.from(

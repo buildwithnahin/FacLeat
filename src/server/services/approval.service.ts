@@ -147,6 +147,49 @@ export const approvalService = {
     });
   },
 
+  async requestIfNeeded(session: AppSession | null, input: ApprovalSubmitInput) {
+    const amount = input.amount ?? 0;
+    const rule = await findMatchingRule(input.module, input.action, amount);
+    if (!rule) return null;
+    return this.submit(session, input);
+  },
+
+  async ensureApprovedOrRequest(session: AppSession | null, input: ApprovalSubmitInput) {
+    if (!session) throw new ForbiddenError('Not authenticated');
+
+    const approved = await prisma.approvalRequest.findFirst({
+      where: {
+        module: input.module,
+        action: input.action,
+        entityType: input.entityType,
+        entityId: input.entityId,
+        status: 'APPROVED',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (approved) return approved;
+
+    const pending = await prisma.approvalRequest.findFirst({
+      where: {
+        module: input.module,
+        action: input.action,
+        entityType: input.entityType,
+        entityId: input.entityId,
+        status: { in: ['PENDING', 'CHANGES_REQUESTED', 'ESCALATED'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (pending) {
+      throw new ForbiddenError(`Approval is pending for ${input.title}`);
+    }
+
+    const requested = await this.requestIfNeeded(session, input);
+    if (requested) {
+      throw new ForbiddenError(`Approval requested for ${input.title}`);
+    }
+    return null;
+  },
+
   async list(
     session: AppSession | null,
     filters: { status?: string; mine?: boolean; forMe?: boolean } = {},

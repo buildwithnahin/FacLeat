@@ -23,6 +23,7 @@ const selectClass =
 interface Row {
   key: string;
   productId: string;
+  size: string;
   description: string;
   unit: (typeof UNITS)[number];
   orderedQty: string;
@@ -35,6 +36,7 @@ function newRow(): Row {
   return {
     key: `r-${Math.random().toString(36).slice(2, 8)}`,
     productId: '',
+    size: '',
     description: '',
     unit: 'PCS',
     orderedQty: '',
@@ -50,6 +52,8 @@ export interface ProductOption {
   name: string;
   unit: string;
   costPrice: string;
+  size: string | null;
+  categoryName: string | null;
 }
 
 export interface SupplierOption {
@@ -122,6 +126,9 @@ export function POForm({ branches, suppliers, products, prefill }: Props) {
 
   const updateRow = (key: string, patch: Partial<Row>) =>
     setRows((rs) => rs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
+  const getProduct = (productId: string) => products.find((product) => product.id === productId);
+  const isShoesProduct = (productId: string) =>
+    getProduct(productId)?.categoryName?.trim().toLowerCase() === 'shoes';
 
   return (
     <form action={formAction} className="space-y-6">
@@ -134,6 +141,7 @@ export function POForm({ branches, suppliers, products, prefill }: Props) {
             .filter((r) => r.productId && Number(r.orderedQty) > 0)
             .map((r) => ({
               productId: r.productId,
+              size: r.size,
               description: r.description,
               unit: r.unit,
               orderedQty: r.orderedQty,
@@ -228,7 +236,7 @@ export function POForm({ branches, suppliers, products, prefill }: Props) {
             {rows.map((r, idx) => (
               <div
                 key={r.key}
-                className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_0.8fr_0.8fr_auto] gap-2 items-end"
+                className="grid grid-cols-1 md:grid-cols-[2fr_0.9fr_1fr_1fr_1fr_0.8fr_0.8fr_auto] gap-2 items-end"
               >
                 <div>
                   {idx === 0 && <Label className="text-xs">Product</Label>}
@@ -238,6 +246,7 @@ export function POForm({ branches, suppliers, products, prefill }: Props) {
                       const p = products.find((x) => x.id === e.target.value);
                       updateRow(r.key, {
                         productId: e.target.value,
+                        size: p?.size ?? '',
                         unit: (p?.unit as Row['unit']) ?? 'PCS',
                         unitPrice: p?.costPrice ?? r.unitPrice,
                       });
@@ -251,6 +260,16 @@ export function POForm({ branches, suppliers, products, prefill }: Props) {
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  {idx === 0 && <Label className="text-xs">Size</Label>}
+                  <Input
+                    value={r.size}
+                    onChange={(e) => updateRow(r.key, { size: e.target.value })}
+                    placeholder={isShoesProduct(r.productId) ? '9, 10, 11' : 'N/A'}
+                    disabled={!isShoesProduct(r.productId)}
+                    required={isShoesProduct(r.productId)}
+                  />
                 </div>
                 <div>
                   {idx === 0 && <Label className="text-xs">Qty</Label>}

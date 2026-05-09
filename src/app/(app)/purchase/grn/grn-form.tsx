@@ -17,6 +17,7 @@ export interface POLine {
   productId: string;
   productSku: string;
   productName: string;
+  size: string | null;
   unit: string;
   orderedQty: string;
   receivedQty: string;
@@ -35,6 +36,7 @@ export interface GrnFormProps {
 }
 
 interface RowState {
+  size: string;
   receivedQty: string;
   rejectedQty: string;
   unitCost: string;
@@ -51,6 +53,7 @@ export function GrnForm({ purchaseOrder, warehouses, lines }: GrnFormProps) {
     for (const l of lines) {
       const remaining = (parseFloat(l.orderedQty) - parseFloat(l.receivedQty)).toString();
       init[l.id] = {
+        size: l.size ?? '',
         receivedQty: remaining,
         rejectedQty: '0',
         unitCost: l.unitPrice,
@@ -65,6 +68,7 @@ export function GrnForm({ purchaseOrder, warehouses, lines }: GrnFormProps) {
     .map((l) => ({
       purchaseOrderItemId: l.id,
       productId: l.productId,
+      size: rowState[l.id]?.size ?? l.size ?? '',
       receivedQty: rowState[l.id]?.receivedQty ?? '0',
       rejectedQty: rowState[l.id]?.rejectedQty ?? '0',
       unitCost: rowState[l.id]?.unitCost ?? l.unitPrice,
@@ -127,11 +131,11 @@ export function GrnForm({ purchaseOrder, warehouses, lines }: GrnFormProps) {
             const remaining = parseFloat(l.orderedQty) - parseFloat(l.receivedQty);
             const st =
               rowState[l.id] ??
-              ({ receivedQty: '', rejectedQty: '0', unitCost: l.unitPrice, note: '' } satisfies RowState);
+              ({ size: l.size ?? '', receivedQty: '', rejectedQty: '0', unitCost: l.unitPrice, note: '' } satisfies RowState);
             return (
               <div
                 key={l.id}
-                className="p-4 grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-3 items-end"
+                className="p-4 grid grid-cols-1 md:grid-cols-[2fr_0.9fr_1fr_1fr_1fr_1fr_1fr] gap-3 items-end"
               >
                 <div>
                   <p className="font-medium">{l.productName}</p>
@@ -141,6 +145,20 @@ export function GrnForm({ purchaseOrder, warehouses, lines }: GrnFormProps) {
                     <span className="tabular">{l.receivedQty}</span> · Remaining{' '}
                     <span className="tabular font-semibold">{remaining}</span> {l.unit}
                   </p>
+                </div>
+                <div>
+                  <Label className="text-xs">Size</Label>
+                  <Input
+                    value={st.size}
+                    onChange={(e) =>
+                      setRowState((s) => ({
+                        ...s,
+                        [l.id]: { ...s[l.id]!, size: e.target.value },
+                      }))
+                    }
+                    placeholder={l.size ? 'Enter size' : 'N/A'}
+                    disabled={!l.size}
+                  />
                 </div>
                 <div>
                   <Label className="text-xs">Receive qty</Label>

@@ -17,9 +17,11 @@ export const productCreateSchema = z.object({
     .min(1)
     .max(64)
     .regex(/^[A-Z0-9._-]+$/, 'SKU: A–Z, 0–9, . _ -'),
+  barcodeMode: z.enum(['generate', 'manual']).default('generate'),
   barcode: z.string().trim().max(64).optional().or(z.literal('')),
   name: z.string().trim().min(1).max(200),
   description: z.string().trim().max(1000).optional().or(z.literal('')),
+  size: z.string().trim().max(32).optional().or(z.literal('')),
   type: z.enum(['RAW_MATERIAL', 'WORK_IN_PROGRESS', 'FINISHED_GOOD', 'CONSUMABLE', 'SERVICE']),
   unit: z.enum(['PCS', 'KG', 'G', 'M', 'M2', 'L', 'ML', 'BOX', 'PACK', 'PAIR', 'SET']),
   categoryId: z.string().cuid().optional().or(z.literal('')),

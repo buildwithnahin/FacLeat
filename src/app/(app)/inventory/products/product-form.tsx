@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,6 +31,7 @@ export interface ProductFormProps {
     barcode: string | null;
     name: string;
     description: string | null;
+    size: string | null;
     type: (typeof PRODUCT_TYPES)[number][0];
     unit: (typeof UNITS)[number];
     categoryId: string | null;
@@ -50,6 +51,14 @@ export interface ProductFormProps {
 export function ProductForm({ mode, initial, categories, brands }: ProductFormProps) {
   const action = mode === 'create' ? createProductAction : updateProductAction;
   const [state, formAction, pending] = useActionState<ProductFormState, FormData>(action, undefined);
+  const initialBarcodeMode = initial?.barcode ? 'manual' : 'generate';
+  const [barcodeMode, setBarcodeMode] = useState<'generate' | 'manual'>(initialBarcodeMode);
+  const [categoryId, setCategoryId] = useState(initial?.categoryId ?? '');
+  const shoeCategoryIds = useMemo(
+    () => new Set(categories.filter((category) => category.name.trim().toLowerCase() === 'shoes').map((category) => category.id)),
+    [categories],
+  );
+  const isShoesCategory = shoeCategoryIds.has(categoryId);
 
   const E = (field: string) => state?.fieldErrors?.[field]?.[0];
 
@@ -67,8 +76,47 @@ export function ProductForm({ mode, initial, categories, brands }: ProductFormPr
             {E('sku') && <p className="text-xs text-destructive">{E('sku')}</p>}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="barcode">Barcode</Label>
-            <Input id="barcode" name="barcode" defaultValue={initial?.barcode ?? ''} />
+            <Label>Barcode</Label>
+            <input type="hidden" name="barcodeMode" value={barcodeMode} />
+            <div className="rounded-md border p-3 space-y-3">
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="radio"
+                  name="barcodeModeUi"
+                  checked={barcodeMode === 'generate'}
+                  onChange={() => setBarcodeMode('generate')}
+                  className="mt-0.5 h-4 w-4 accent-primary"
+                />
+                <span>
+                  <span className="font-medium">Auto-generate barcode</span>
+                  <span className="block text-xs text-muted-foreground">
+                    The system will create a unique barcode when the product is saved.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="radio"
+                  name="barcodeModeUi"
+                  checked={barcodeMode === 'manual'}
+                  onChange={() => setBarcodeMode('manual')}
+                  className="mt-0.5 h-4 w-4 accent-primary"
+                />
+                <span>
+                  <span className="font-medium">Enter barcode manually</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Use this if you already have supplier or printed barcode values.
+                  </span>
+                </span>
+              </label>
+              <Input
+                id="barcode"
+                name="barcode"
+                defaultValue={initial?.barcode ?? ''}
+                disabled={barcodeMode !== 'manual'}
+                placeholder={barcodeMode === 'manual' ? 'Enter barcode value' : 'Will be generated automatically'}
+              />
+            </div>
             {E('barcode') && <p className="text-xs text-destructive">{E('barcode')}</p>}
           </div>
           <div className="space-y-2 md:col-span-2">
@@ -96,7 +144,12 @@ export function ProductForm({ mode, initial, categories, brands }: ProductFormPr
               </option>
             ))}
           </SelectField>
-          <SelectField label="Category" name="categoryId" defaultValue={initial?.categoryId ?? ''}>
+          <SelectField
+            label="Category"
+            name="categoryId"
+            defaultValue={initial?.categoryId ?? ''}
+            onChange={(event) => setCategoryId(event.target.value)}
+          >
             <option value="">— none —</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
@@ -104,6 +157,20 @@ export function ProductForm({ mode, initial, categories, brands }: ProductFormPr
               </option>
             ))}
           </SelectField>
+          <div className="space-y-2">
+            <Label htmlFor="size">
+              Size {isShoesCategory && <span className="text-destructive">*</span>}
+            </Label>
+            {isShoesCategory ? (
+              <Input id="size" name="size" defaultValue={initial?.size ?? ''} placeholder="e.g. 9, 10, 11" required />
+            ) : (
+              <>
+                <input type="hidden" name="size" value="" />
+                <Input id="size" value="" placeholder="Available when category is Shoes" disabled readOnly />
+              </>
+            )}
+            {E('size') && <p className="text-xs text-destructive">{E('size')}</p>}
+          </div>
           <SelectField label="Brand" name="brandId" defaultValue={initial?.brandId ?? ''}>
             <option value="">— none —</option>
             {brands.map((b) => (
@@ -162,11 +229,13 @@ function SelectField({
   name,
   defaultValue,
   children,
+  onChange,
 }: {
   label: string;
   name: string;
   defaultValue?: string;
   children: React.ReactNode;
+  onChange?: React.ChangeEventHandler<HTMLSelectElement>;
 }) {
   return (
     <div className="space-y-2">
@@ -175,6 +244,7 @@ function SelectField({
         id={name}
         name={name}
         defaultValue={defaultValue}
+        onChange={onChange}
         className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
       >
         {children}

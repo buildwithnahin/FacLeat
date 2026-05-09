@@ -451,40 +451,51 @@ model Branch {
   allowNegativeStock Boolean      @default(false)
   isActive           Boolean      @default(true)
 
-  defaultForUsers  User[]                @relation("UserDefaultBranch")
-  periods          Period[]
-  auditLogs        AuditLog[]
-  notifications    Notification[]
-  warehouses       Warehouse[]
-  ledger           InventoryLedger[]
-  suppliers        Supplier[]
-  requisitions     PurchaseRequisition[]
-  purchaseOrders   PurchaseOrder[]
-  grns             GoodsReceiving[]
-  purchaseInvoices PurchaseInvoice[]
-  supplierPayments SupplierPayment[]
-  supplierLedger   SupplierLedger[]
-  productionOrders ProductionOrder[]
-  assets           Asset[]
-  assetMovements   AssetMovement[]
-  customers        Customer[]
-  customerLedger   CustomerLedger[]
-  posSessions      PosSession[]
-  posSales         PosSale[]
-  posReturns       PosReturn[]
-  wholesaleInvoices WholesaleInvoice[]
-  wholesaleReturns  WholesaleReturn[]
-  corporateQuotes     CorporateQuote[]
-  corporateOrders     CorporateOrder[]
-  corporateDeliveries CorporateDelivery[]
-  corporateInvoices   CorporateInvoice[]
-  chartAccounts       ChartAccount[]
-  journalEntries      JournalEntry[]
-  employees           Employee[]
-  payrollRuns         PayrollRun[]
-  tradeOrders         TradeOrder[]
-  lettersOfCredit     LetterOfCredit[]
-  tradePayments       TradePayment[]
+  defaultForUsers             User[]                       @relation("UserDefaultBranch")
+  periods                     Period[]
+  auditLogs                   AuditLog[]
+  notifications               Notification[]
+  warehouses                  Warehouse[]
+  ledger                      InventoryLedger[]
+  suppliers                   Supplier[]
+  requisitions                PurchaseRequisition[]
+  purchaseOrders              PurchaseOrder[]
+  grns                        GoodsReceiving[]
+  purchaseInvoices            PurchaseInvoice[]
+  supplierPayments            SupplierPayment[]
+  supplierLedger              SupplierLedger[]
+  productionOrders            ProductionOrder[]
+  assets                      Asset[]
+  assetMovements              AssetMovement[]
+  customers                   Customer[]
+  customerLedger              CustomerLedger[]
+  posSessions                 PosSession[]
+  posSales                    PosSale[]
+  posReturns                  PosReturn[]
+  wholesaleInvoices           WholesaleInvoice[]
+  wholesaleReturns            WholesaleReturn[]
+  corporateQuotes             CorporateQuote[]
+  corporateOrders             CorporateOrder[]
+  corporateDeliveries         CorporateDelivery[]
+  corporateInvoices           CorporateInvoice[]
+  chartAccounts               ChartAccount[]
+  journalEntries              JournalEntry[]
+  employees                   Employee[]
+  payrollRuns                 PayrollRun[]
+  tradeOrders                 TradeOrder[]
+  lettersOfCredit             LetterOfCredit[]
+  tradePayments               TradePayment[]
+  ecommerceChannels           EcommerceChannel[]
+  ecommerceOrders             EcommerceOrder[]
+  ecommerceFulfillments       EcommerceFulfillment[]
+  ecommercePayments           EcommercePayment[]
+  ecommerceReturns            EcommerceReturn[]
+  ecommerceReconciliationRuns EcommerceReconciliationRun[]
+
+  cashTransfersSent     CashTransfer[]        @relation("CashTransferFrom")
+  cashTransfersReceived CashTransfer[]        @relation("CashTransferTo")
+  cashEntries           CashEntry[]
+  openingBalanceEntries OpeningBalanceEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -505,7 +516,8 @@ model Period {
   endsAt   DateTime
   status   PeriodStatus @default(OPEN)
 
-  journalEntries JournalEntry[]
+  journalEntries        JournalEntry[]
+  openingBalanceEntries OpeningBalanceEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -594,41 +606,45 @@ model ProductBrand {
 }
 
 model Product {
-  id                 String                    @id @default(cuid())
-  sku                String                    @unique
-  barcode            String?                   @unique
-  name               String
-  description        String?
-  type               ProductType               @default(FINISHED_GOOD)
-  unit               UnitOfMeasure             @default(PCS)
-  categoryId         String?
-  category           ProductCategory?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  brandId            String?
-  brand              ProductBrand?             @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  costPrice          Decimal                   @default(0) @db.Decimal(18, 4)
-  sellPrice          Decimal                   @default(0) @db.Decimal(18, 4)
-  taxRate            Decimal                   @default(0) @db.Decimal(5, 2)
-  reorderLevel       Decimal                   @default(0) @db.Decimal(18, 4)
-  reorderQty         Decimal                   @default(0) @db.Decimal(18, 4)
-  isActive           Boolean                   @default(true)
-  imageUrl           String?
-  ledger             InventoryLedger[]
-  requisitionItems   PurchaseRequisitionItem[]
-  purchaseOrderItems PurchaseOrderItem[]
-  grnItems           GoodsReceivingItem[]
-  invoiceItems       PurchaseInvoiceItem[]
-  producedInOrders   ProductionOrder[]         @relation("ProductionOutputProduct")
-  materialsOfOrders  ProductionMaterial[]
-  outputsOfOrders    ProductionOutput[]
-  posSaleItems       PosSaleItem[]
-  posReturnItems     PosReturnItem[]
-  wholesaleItems     WholesaleInvoiceItem[]
-  wholesaleReturns   WholesaleReturnItem[]
-  corpQuoteItems     CorporateQuoteItem[]
-  corpOrderItems     CorporateOrderItem[]
-  corpDeliveryItems  CorporateDeliveryItem[]
-  corpInvoiceItems   CorporateInvoiceItem[]
-  tradeOrderItems    TradeOrderItem[]
+  id                        String                     @id @default(cuid())
+  sku                       String                     @unique
+  barcode                   String?                    @unique
+  name                      String
+  description               String?
+  size                      String?
+  type                      ProductType                @default(FINISHED_GOOD)
+  unit                      UnitOfMeasure              @default(PCS)
+  categoryId                String?
+  category                  ProductCategory?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brandId                   String?
+  brand                     ProductBrand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  costPrice                 Decimal                    @default(0) @db.Decimal(18, 4)
+  sellPrice                 Decimal                    @default(0) @db.Decimal(18, 4)
+  taxRate                   Decimal                    @default(0) @db.Decimal(5, 2)
+  reorderLevel              Decimal                    @default(0) @db.Decimal(18, 4)
+  reorderQty                Decimal                    @default(0) @db.Decimal(18, 4)
+  isActive                  Boolean                    @default(true)
+  imageUrl                  String?
+  ledger                    InventoryLedger[]
+  requisitionItems          PurchaseRequisitionItem[]
+  purchaseOrderItems        PurchaseOrderItem[]
+  grnItems                  GoodsReceivingItem[]
+  invoiceItems              PurchaseInvoiceItem[]
+  producedInOrders          ProductionOrder[]          @relation("ProductionOutputProduct")
+  materialsOfOrders         ProductionMaterial[]
+  outputsOfOrders           ProductionOutput[]
+  posSaleItems              PosSaleItem[]
+  posReturnItems            PosReturnItem[]
+  wholesaleItems            WholesaleInvoiceItem[]
+  wholesaleReturns          WholesaleReturnItem[]
+  corpQuoteItems            CorporateQuoteItem[]
+  corpOrderItems            CorporateOrderItem[]
+  corpDeliveryItems         CorporateDeliveryItem[]
+  corpInvoiceItems          CorporateInvoiceItem[]
+  tradeOrderItems           TradeOrderItem[]
+  ecommerceOrderItems       EcommerceOrderItem[]
+  ecommerceFulfillmentItems EcommerceFulfillmentItem[]
+  ecommerceReturnItems      EcommerceReturnItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -658,8 +674,8 @@ model Warehouse {
   updatedAt       DateTime         @updatedAt
   goodsReceivings GoodsReceiving[]
 
-  productionMaterialSources ProductionMaterial[] @relation("ProductionMaterialFromWarehouse")
-  productionOutputs         ProductionOutput[]   @relation("ProductionOutputToWarehouse")
+  productionMaterialSources ProductionMaterial[]   @relation("ProductionMaterialFromWarehouse")
+  productionOutputs         ProductionOutput[]     @relation("ProductionOutputToWarehouse")
   posSessions               PosSession[]
   posSales                  PosSale[]
   posReturns                PosReturn[]
@@ -667,6 +683,8 @@ model Warehouse {
   wholesaleReturns          WholesaleReturn[]
   corporateOrders           CorporateOrder[]
   corporateDeliveries       CorporateDelivery[]
+  ecommerceOrders           EcommerceOrder[]
+  ecommerceFulfillments     EcommerceFulfillment[]
 
   @@unique([branchId, code])
   @@index([branchId, isActive])
@@ -828,6 +846,7 @@ model PurchaseOrderItem {
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   productId       String
   product         Product       @relation(fields: [productId], references: [id])
+  size            String?
   description     String?
   unit            UnitOfMeasure @default(PCS)
   orderedQty      Decimal       @db.Decimal(18, 4)
@@ -883,6 +902,7 @@ model GoodsReceivingItem {
   purchaseOrderItem   PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id])
   productId           String
   product             Product           @relation(fields: [productId], references: [id])
+  size                String?
   receivedQty         Decimal           @db.Decimal(18, 4)
   rejectedQty         Decimal           @default(0) @db.Decimal(18, 4)
   unitCost            Decimal           @db.Decimal(18, 4)
@@ -937,6 +957,7 @@ model PurchaseInvoiceItem {
   invoice     PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   productId   String
   product     Product         @relation(fields: [productId], references: [id])
+  size        String?
   description String?
   unit        UnitOfMeasure   @default(PCS)
   quantity    Decimal         @db.Decimal(18, 4)
@@ -1062,14 +1083,14 @@ model ProductionStage {
 }
 
 model ProductionMaterial {
-  id              String          @id @default(cuid())
+  id              String                 @id @default(cuid())
   orderId         String
-  order           ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order           ProductionOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId       String
-  product         Product         @relation(fields: [productId], references: [id])
-  unit            UnitOfMeasure   @default(PCS)
-  plannedQty      Decimal         @db.Decimal(18, 4)
-  consumedQty     Decimal         @default(0) @db.Decimal(18, 4)
+  product         Product                @relation(fields: [productId], references: [id])
+  unit            UnitOfMeasure          @default(PCS)
+  plannedQty      Decimal                @db.Decimal(18, 4)
+  consumedQty     Decimal                @default(0) @db.Decimal(18, 4)
   fromWarehouseId String?
   fromWarehouse   Warehouse?             @relation("ProductionMaterialFromWarehouse", fields: [fromWarehouseId], references: [id])
   materialType    ProductionMaterialType @default(OTHER)
@@ -1333,12 +1354,12 @@ model DocumentLink {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model CustomerCategory {
-  id          String     @id @default(cuid())
-  name        String     @unique
+  id          String  @id @default(cuid())
+  name        String  @unique
   description String?
   /// Default discount % for this category (0–100)
-  discountPct Decimal    @default(0) @db.Decimal(5, 2)
-  isActive    Boolean    @default(true)
+  discountPct Decimal @default(0) @db.Decimal(5, 2)
+  isActive    Boolean @default(true)
 
   customers Customer[]
 
@@ -1347,13 +1368,13 @@ model CustomerCategory {
 }
 
 model Customer {
-  id             String         @id @default(cuid())
+  id             String            @id @default(cuid())
   branchId       String
-  branch         Branch         @relation(fields: [branchId], references: [id])
+  branch         Branch            @relation(fields: [branchId], references: [id])
   /// Human customer code (e.g. CUS-001)
-  code           String         @unique
+  code           String            @unique
   name           String
-  type           CustomerType   @default(RETAIL)
+  type           CustomerType      @default(RETAIL)
   categoryId     String?
   category       CustomerCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   contactPerson  String?
@@ -1364,23 +1385,25 @@ model Customer {
   country        String?
   taxId          String?
   /// Credit limit — 0 means cash-only
-  creditLimit    Decimal        @default(0) @db.Decimal(18, 4)
-  creditDays     Int            @default(0)
-  currency       CurrencyCode   @default(BDT)
-  openingBalance Decimal        @default(0) @db.Decimal(18, 4)
-  loyaltyPoints  Int            @default(0)
-  status         CustomerStatus @default(ACTIVE)
+  creditLimit    Decimal           @default(0) @db.Decimal(18, 4)
+  creditDays     Int               @default(0)
+  currency       CurrencyCode      @default(BDT)
+  openingBalance Decimal           @default(0) @db.Decimal(18, 4)
+  loyaltyPoints  Int               @default(0)
+  status         CustomerStatus    @default(ACTIVE)
   notes          String?
   createdById    String?
 
-  interactions CustomerInteraction[]
-  ledger       CustomerLedger[]
-  posSales     PosSale[]
+  interactions      CustomerInteraction[]
+  ledger            CustomerLedger[]
+  posSales          PosSale[]
   wholesaleInvoices WholesaleInvoice[]
   corporateQuotes   CorporateQuote[]
   corporateOrders   CorporateOrder[]
   corporateInvoices CorporateInvoice[]
   tradeOrders       TradeOrder[]
+  ecommerceOrders   EcommerceOrder[]
+  cashEntries       CashEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1439,21 +1462,21 @@ model CustomerLedger {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model PosSession {
-  id             String           @id @default(cuid())
-  branchId       String
-  branch         Branch           @relation(fields: [branchId], references: [id])
-  warehouseId    String
-  warehouse      Warehouse        @relation(fields: [warehouseId], references: [id])
+  id           String           @id @default(cuid())
+  branchId     String
+  branch       Branch           @relation(fields: [branchId], references: [id])
+  warehouseId  String
+  warehouse    Warehouse        @relation(fields: [warehouseId], references: [id])
   /// Cashier user id (denormalised; POS traffic rarely needs the User row)
-  cashierId      String
-  openedAt       DateTime         @default(now())
-  closedAt       DateTime?
-  openingFloat   Decimal          @default(0) @db.Decimal(18, 4)
-  expectedCash   Decimal          @default(0) @db.Decimal(18, 4)
-  countedCash    Decimal          @default(0) @db.Decimal(18, 4)
-  cashVariance   Decimal          @default(0) @db.Decimal(18, 4)
-  status         PosSessionStatus @default(OPEN)
-  notes          String?
+  cashierId    String
+  openedAt     DateTime         @default(now())
+  closedAt     DateTime?
+  openingFloat Decimal          @default(0) @db.Decimal(18, 4)
+  expectedCash Decimal          @default(0) @db.Decimal(18, 4)
+  countedCash  Decimal          @default(0) @db.Decimal(18, 4)
+  cashVariance Decimal          @default(0) @db.Decimal(18, 4)
+  status       PosSessionStatus @default(OPEN)
+  notes        String?
 
   sales   PosSale[]
   returns PosReturn[]
@@ -1540,23 +1563,23 @@ model PosSalePayment {
 }
 
 model PosReturn {
-  id            String          @id @default(cuid())
+  id           String           @id @default(cuid())
   /// Human return number (e.g. POSR-2026-000123)
-  number        String          @unique
-  branchId      String
-  branch        Branch          @relation(fields: [branchId], references: [id])
-  warehouseId   String
-  warehouse     Warehouse       @relation(fields: [warehouseId], references: [id])
-  saleId        String
-  sale          PosSale         @relation(fields: [saleId], references: [id])
-  sessionId     String?
-  session       PosSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  returnDate    DateTime        @default(now())
-  refundAmount  Decimal         @default(0) @db.Decimal(18, 4)
-  refundMethod  PosPaymentMethod @default(CASH)
-  status        PosReturnStatus @default(COMPLETED)
-  reason        String?
-  createdById   String?
+  number       String           @unique
+  branchId     String
+  branch       Branch           @relation(fields: [branchId], references: [id])
+  warehouseId  String
+  warehouse    Warehouse        @relation(fields: [warehouseId], references: [id])
+  saleId       String
+  sale         PosSale          @relation(fields: [saleId], references: [id])
+  sessionId    String?
+  session      PosSession?      @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  returnDate   DateTime         @default(now())
+  refundAmount Decimal          @default(0) @db.Decimal(18, 4)
+  refundMethod PosPaymentMethod @default(CASH)
+  status       PosReturnStatus  @default(COMPLETED)
+  reason       String?
+  createdById  String?
 
   items PosReturnItem[]
 
@@ -1582,6 +1605,276 @@ model PosReturnItem {
   @@index([returnId])
   @@index([saleItemId])
   @@index([productId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// E-commerce / Online Sales
+// External storefront orders are synced into ERP, packed/fulfilled against
+// warehouse stock, returned/refunded, and reconciled against settlement records.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum EcommerceChannelType {
+  SHOPIFY
+  WOOCOMMERCE
+  FACEBOOK
+  DARAZ
+  MANUAL
+  OTHER
+}
+
+enum EcommerceOrderStatus {
+  SYNCED
+  PACKING
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  PARTIALLY_RETURNED
+  RETURNED
+}
+
+enum EcommerceFulfillmentStatus {
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum EcommercePaymentStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  RECONCILED
+  REFUNDED
+}
+
+enum EcommerceReturnStatus {
+  REQUESTED
+  RECEIVED
+  REFUNDED
+  REJECTED
+}
+
+enum EcommerceReconciliationStatus {
+  DRAFT
+  COMPLETED
+  FAILED
+}
+
+model EcommerceChannel {
+  id         String               @id @default(cuid())
+  branchId   String
+  branch     Branch               @relation(fields: [branchId], references: [id])
+  code       String
+  name       String
+  type       EcommerceChannelType @default(MANUAL)
+  storeUrl   String?
+  isActive   Boolean              @default(true)
+  lastSyncAt DateTime?
+
+  orders             EcommerceOrder[]
+  reconciliationRuns EcommerceReconciliationRun[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([branchId, code])
+  @@index([branchId, isActive])
+}
+
+model EcommerceOrder {
+  id               String                 @id @default(cuid())
+  channelId        String
+  channel          EcommerceChannel       @relation(fields: [channelId], references: [id])
+  branchId         String
+  branch           Branch                 @relation(fields: [branchId], references: [id])
+  warehouseId      String?
+  warehouse        Warehouse?             @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  customerId       String?
+  customer         Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  externalId       String
+  number           String                 @unique
+  orderDate        DateTime               @default(now())
+  status           EcommerceOrderStatus   @default(SYNCED)
+  paymentStatus    EcommercePaymentStatus @default(PENDING)
+  currency         CurrencyCode           @default(BDT)
+  subtotal         Decimal                @default(0) @db.Decimal(18, 4)
+  discountTotal    Decimal                @default(0) @db.Decimal(18, 4)
+  shippingTotal    Decimal                @default(0) @db.Decimal(18, 4)
+  taxTotal         Decimal                @default(0) @db.Decimal(18, 4)
+  grandTotal       Decimal                @default(0) @db.Decimal(18, 4)
+  paidTotal        Decimal                @default(0) @db.Decimal(18, 4)
+  reconciledAmount Decimal                @default(0) @db.Decimal(18, 4)
+  customerName     String?
+  customerPhone    String?
+  customerEmail    String?
+  shipToAddress    String?
+  courier          String?
+  trackingNo       String?
+  notes            String?
+  createdById      String?
+
+  items        EcommerceOrderItem[]
+  fulfillments EcommerceFulfillment[]
+  payments     EcommercePayment[]
+  returns      EcommerceReturn[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([channelId, externalId])
+  @@index([branchId, status, orderDate])
+  @@index([customerId, orderDate])
+  @@index([paymentStatus])
+}
+
+model EcommerceOrderItem {
+  id           String         @id @default(cuid())
+  orderId      String
+  order        EcommerceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String?
+  product      Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+  sku          String
+  name         String
+  unit         UnitOfMeasure  @default(PCS)
+  quantity     Decimal        @db.Decimal(18, 4)
+  packedQty    Decimal        @default(0) @db.Decimal(18, 4)
+  fulfilledQty Decimal        @default(0) @db.Decimal(18, 4)
+  returnedQty  Decimal        @default(0) @db.Decimal(18, 4)
+  unitPrice    Decimal        @db.Decimal(18, 4)
+  discountRate Decimal        @default(0) @db.Decimal(5, 2)
+  taxRate      Decimal        @default(0) @db.Decimal(5, 2)
+  lineTotal    Decimal        @db.Decimal(18, 4)
+
+  fulfillmentItems EcommerceFulfillmentItem[]
+  returnItems      EcommerceReturnItem[]
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([sku])
+}
+
+model EcommerceFulfillment {
+  id          String                     @id @default(cuid())
+  orderId     String
+  order       EcommerceOrder             @relation(fields: [orderId], references: [id])
+  branchId    String
+  branch      Branch                     @relation(fields: [branchId], references: [id])
+  warehouseId String
+  warehouse   Warehouse                  @relation(fields: [warehouseId], references: [id])
+  status      EcommerceFulfillmentStatus @default(PACKED)
+  packedAt    DateTime?
+  shippedAt   DateTime?
+  deliveredAt DateTime?
+  courier     String?
+  trackingNo  String?
+  createdById String?
+
+  items EcommerceFulfillmentItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([branchId, status])
+}
+
+model EcommerceFulfillmentItem {
+  id            String               @id @default(cuid())
+  fulfillmentId String
+  fulfillment   EcommerceFulfillment @relation(fields: [fulfillmentId], references: [id], onDelete: Cascade)
+  orderItemId   String
+  orderItem     EcommerceOrderItem   @relation(fields: [orderItemId], references: [id])
+  productId     String?
+  product       Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
+  quantity      Decimal              @db.Decimal(18, 4)
+
+  @@index([fulfillmentId])
+  @@index([orderItemId])
+  @@index([productId])
+}
+
+model EcommercePayment {
+  id           String                 @id @default(cuid())
+  orderId      String
+  order        EcommerceOrder         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  branchId     String
+  branch       Branch                 @relation(fields: [branchId], references: [id])
+  method       PosPaymentMethod
+  provider     String?
+  externalId   String?
+  amount       Decimal                @db.Decimal(18, 4)
+  fee          Decimal                @default(0) @db.Decimal(18, 4)
+  receivedAt   DateTime               @default(now())
+  reconciledAt DateTime?
+  status       EcommercePaymentStatus @default(PAID)
+  createdById  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([branchId, receivedAt])
+  @@index([externalId])
+}
+
+model EcommerceReturn {
+  id              String                @id @default(cuid())
+  orderId         String
+  order           EcommerceOrder        @relation(fields: [orderId], references: [id])
+  branchId        String
+  branch          Branch                @relation(fields: [branchId], references: [id])
+  status          EcommerceReturnStatus @default(RECEIVED)
+  refundAmount    Decimal               @default(0) @db.Decimal(18, 4)
+  refundMethod    PosPaymentMethod      @default(CASH)
+  refundReference String?
+  reason          String?
+  receivedAt      DateTime              @default(now())
+  createdById     String?
+
+  items EcommerceReturnItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([branchId, receivedAt])
+}
+
+model EcommerceReturnItem {
+  id          String             @id @default(cuid())
+  returnId    String
+  return      EcommerceReturn    @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  orderItemId String
+  orderItem   EcommerceOrderItem @relation(fields: [orderItemId], references: [id])
+  productId   String?
+  product     Product?           @relation(fields: [productId], references: [id], onDelete: SetNull)
+  quantity    Decimal            @db.Decimal(18, 4)
+  lineTotal   Decimal            @db.Decimal(18, 4)
+
+  @@index([returnId])
+  @@index([orderItemId])
+  @@index([productId])
+}
+
+model EcommerceReconciliationRun {
+  id             String                        @id @default(cuid())
+  branchId       String
+  branch         Branch                        @relation(fields: [branchId], references: [id])
+  channelId      String
+  channel        EcommerceChannel              @relation(fields: [channelId], references: [id])
+  periodStart    DateTime
+  periodEnd      DateTime
+  status         EcommerceReconciliationStatus @default(DRAFT)
+  matchedCount   Int                           @default(0)
+  unmatchedCount Int                           @default(0)
+  totalSettled   Decimal                       @default(0) @db.Decimal(18, 4)
+  notes          String?
+  createdById    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([branchId, periodStart, periodEnd])
+  @@index([channelId, createdAt])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1680,23 +1973,23 @@ model WholesalePayment {
 }
 
 model WholesaleReturn {
-  id           String                @id @default(cuid())
+  id              String                @id @default(cuid())
   /// Human return number (e.g. WSR-2026-000123)
-  number       String                @unique
-  branchId     String
-  branch       Branch                @relation(fields: [branchId], references: [id])
-  warehouseId  String
-  warehouse    Warehouse             @relation(fields: [warehouseId], references: [id])
-  invoiceId    String
-  invoice      WholesaleInvoice      @relation(fields: [invoiceId], references: [id])
-  returnDate   DateTime              @default(now())
-  refundAmount Decimal               @default(0) @db.Decimal(18, 4)
+  number          String                @unique
+  branchId        String
+  branch          Branch                @relation(fields: [branchId], references: [id])
+  warehouseId     String
+  warehouse       Warehouse             @relation(fields: [warehouseId], references: [id])
+  invoiceId       String
+  invoice         WholesaleInvoice      @relation(fields: [invoiceId], references: [id])
+  returnDate      DateTime              @default(now())
+  refundAmount    Decimal               @default(0) @db.Decimal(18, 4)
   /// Whether refund was cash/bank or just reduced outstanding receivable
-  refundToBalance Boolean            @default(true)
-  refundMethod PosPaymentMethod      @default(CASH)
-  status       WholesaleReturnStatus @default(COMPLETED)
-  reason       String?
-  createdById  String?
+  refundToBalance Boolean               @default(true)
+  refundMethod    PosPaymentMethod      @default(CASH)
+  status          WholesaleReturnStatus @default(COMPLETED)
+  reason          String?
+  createdById     String?
 
   items WholesaleReturnItem[]
 
@@ -1837,9 +2130,9 @@ model CorporateOrder {
   cancelReason  String?
   createdById   String?
 
-  items       CorporateOrderItem[]
-  deliveries  CorporateDelivery[]
-  invoices    CorporateInvoice[]
+  items      CorporateOrderItem[]
+  deliveries CorporateDelivery[]
+  invoices   CorporateInvoice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1849,20 +2142,20 @@ model CorporateOrder {
 }
 
 model CorporateOrderItem {
-  id           String                  @id @default(cuid())
+  id           String         @id @default(cuid())
   orderId      String
-  order        CorporateOrder          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order        CorporateOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId    String
-  product      Product                 @relation(fields: [productId], references: [id])
+  product      Product        @relation(fields: [productId], references: [id])
   description  String?
-  unit         UnitOfMeasure           @default(PCS)
-  quantity     Decimal                 @db.Decimal(18, 4)
-  unitPrice    Decimal                 @db.Decimal(18, 4)
-  discountRate Decimal                 @default(0) @db.Decimal(5, 2)
-  taxRate      Decimal                 @default(0) @db.Decimal(5, 2)
-  lineTotal    Decimal                 @db.Decimal(18, 4)
-  deliveredQty Decimal                 @default(0) @db.Decimal(18, 4)
-  invoicedQty  Decimal                 @default(0) @db.Decimal(18, 4)
+  unit         UnitOfMeasure  @default(PCS)
+  quantity     Decimal        @db.Decimal(18, 4)
+  unitPrice    Decimal        @db.Decimal(18, 4)
+  discountRate Decimal        @default(0) @db.Decimal(5, 2)
+  taxRate      Decimal        @default(0) @db.Decimal(5, 2)
+  lineTotal    Decimal        @db.Decimal(18, 4)
+  deliveredQty Decimal        @default(0) @db.Decimal(18, 4)
+  invoicedQty  Decimal        @default(0) @db.Decimal(18, 4)
 
   deliveryItems CorporateDeliveryItem[]
   invoiceItems  CorporateInvoiceItem[]
@@ -1999,28 +2292,31 @@ enum AccountNormalSide {
 }
 
 model ChartAccount {
-  id             String            @id @default(cuid())
-  code           String            @unique
-  name           String
-  type           AccountType
-  normalSide     AccountNormalSide
-  parentId       String?
-  parent         ChartAccount?     @relation("AccountTree", fields: [parentId], references: [id])
-  children       ChartAccount[]    @relation("AccountTree")
-  path           String
-  depth          Int               @default(0)
-  isPosting      Boolean           @default(true)
-  isControl      Boolean           @default(false)
-  currency       CurrencyCode      @default(BDT)
-  branchId       String?
-  branch         Branch?           @relation(fields: [branchId], references: [id])
-  openingBalance Decimal           @default(0) @db.Decimal(18, 4)
-  description    String?
-  isActive       Boolean           @default(true)
-  isSystem       Boolean           @default(false)
+  id                 String            @id @default(cuid())
+  code               String            @unique
+  name               String
+  type               AccountType
+  normalSide         AccountNormalSide
+  parentId           String?
+  parent             ChartAccount?     @relation("AccountTree", fields: [parentId], references: [id])
+  children           ChartAccount[]    @relation("AccountTree")
+  path               String
+  depth              Int               @default(0)
+  isPosting          Boolean           @default(true)
+  isControl          Boolean           @default(false)
+  currency           CurrencyCode      @default(BDT)
+  branchId           String?
+  branch             Branch?           @relation(fields: [branchId], references: [id])
+  openingBalance     Decimal           @default(0) @db.Decimal(18, 4)
+  description        String?
+  isActive           Boolean           @default(true)
+  detailType         String?
+  openingBalanceDate DateTime?
+  isSystem           Boolean           @default(false)
 
-  journalLines    JournalEntryLine[]
-  systemMappings  SystemAccountMapping[]
+  journalLines          JournalEntryLine[]
+  systemMappings        SystemAccountMapping[]
+  openingBalanceEntries OpeningBalanceEntry[]
 
   createdById String?
   updatedById String?
@@ -2032,6 +2328,32 @@ model ChartAccount {
   @@index([path])
   @@index([branchId])
   @@index([isActive])
+}
+
+model OpeningBalanceEntry {
+  id            String            @id @default(cuid())
+  branchId      String
+  branch        Branch            @relation(fields: [branchId], references: [id])
+  periodId      String?
+  period        Period?           @relation(fields: [periodId], references: [id], onDelete: SetNull)
+  accountId     String
+  account       ChartAccount      @relation(fields: [accountId], references: [id])
+  date          DateTime
+  amount        Decimal           @db.Decimal(18, 4)
+  normalSide    AccountNormalSide
+  reference     String?
+  remarks       String?
+  sourceRefType String?
+  sourceRefId   String?
+  createdById   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId, date])
+  @@index([periodId])
+  @@index([accountId, date])
+  @@index([sourceRefType, sourceRefId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2079,27 +2401,27 @@ model SystemAccountMapping {
 }
 
 model JournalEntry {
-  id             String        @id @default(cuid())
-  number         String        @unique
-  branchId       String
-  branch         Branch        @relation(fields: [branchId], references: [id])
-  periodId       String
-  period         Period        @relation(fields: [periodId], references: [id])
-  date           DateTime
-  memo           String?
-  reference      String?
-  status         JournalStatus @default(DRAFT)
-  sourceModule   String?
-  sourceRefType  String?
-  sourceRefId    String?
-  reversesId     String?       @unique
-  reverses       JournalEntry? @relation("JournalReversal", fields: [reversesId], references: [id])
-  reversedBy     JournalEntry? @relation("JournalReversal")
+  id            String        @id @default(cuid())
+  number        String        @unique
+  branchId      String
+  branch        Branch        @relation(fields: [branchId], references: [id])
+  periodId      String
+  period        Period        @relation(fields: [periodId], references: [id])
+  date          DateTime
+  memo          String?
+  reference     String?
+  status        JournalStatus @default(DRAFT)
+  sourceModule  String?
+  sourceRefType String?
+  sourceRefId   String?
+  reversesId    String?       @unique
+  reverses      JournalEntry? @relation("JournalReversal", fields: [reversesId], references: [id])
+  reversedBy    JournalEntry? @relation("JournalReversal")
 
   totalDebit  Decimal @default(0) @db.Decimal(18, 4)
   totalCredit Decimal @default(0) @db.Decimal(18, 4)
 
-  lines       JournalEntryLine[]
+  lines JournalEntryLine[]
 
   createdById String?
   postedById  String?
@@ -2116,18 +2438,18 @@ model JournalEntry {
 }
 
 model JournalEntryLine {
-  id        String       @id @default(cuid())
-  entryId   String
-  entry     JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  lineNo    Int
-  accountId String
-  account   ChartAccount @relation(fields: [accountId], references: [id])
-  debit     Decimal      @default(0) @db.Decimal(18, 4)
-  credit    Decimal      @default(0) @db.Decimal(18, 4)
-  currency  CurrencyCode @default(BDT)
-  fxRate    Decimal      @default(1) @db.Decimal(18, 6)
+  id         String       @id @default(cuid())
+  entryId    String
+  entry      JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  lineNo     Int
+  accountId  String
+  account    ChartAccount @relation(fields: [accountId], references: [id])
+  debit      Decimal      @default(0) @db.Decimal(18, 4)
+  credit     Decimal      @default(0) @db.Decimal(18, 4)
+  currency   CurrencyCode @default(BDT)
+  fxRate     Decimal      @default(1) @db.Decimal(18, 6)
   costCenter String?
-  memo      String?
+  memo       String?
 
   @@index([entryId])
   @@index([accountId])
@@ -2178,19 +2500,19 @@ enum PayrollRunStatus {
 }
 
 model Employee {
-  id           String           @id @default(cuid())
-  branchId     String
-  branch       Branch           @relation(fields: [branchId], references: [id])
-  code         String           @unique
-  firstName    String
-  lastName     String
-  email        String?          @unique
-  phone        String?
-  designation  String?
-  department   String?
-  joinedAt     DateTime
-  leftAt       DateTime?
-  status       EmploymentStatus @default(ACTIVE)
+  id          String           @id @default(cuid())
+  branchId    String
+  branch      Branch           @relation(fields: [branchId], references: [id])
+  code        String           @unique
+  firstName   String
+  lastName    String
+  email       String?          @unique
+  phone       String?
+  designation String?
+  department  String?
+  joinedAt    DateTime
+  leftAt      DateTime?
+  status      EmploymentStatus @default(ACTIVE)
 
   basicSalary        Decimal @default(0) @db.Decimal(18, 2)
   houseAllowance     Decimal @default(0) @db.Decimal(18, 2)
@@ -2203,9 +2525,9 @@ model Employee {
   bankName    String?
   bankAccount String?
 
-  attendance   AttendanceRecord[]
-  leaves       LeaveRequest[]
-  payslips     Payslip[]
+  attendance AttendanceRecord[]
+  leaves     LeaveRequest[]
+  payslips   Payslip[]
 
   createdById String?
   updatedById String?
@@ -2245,8 +2567,8 @@ model LeaveRequest {
   reason     String?
   status     LeaveStatus @default(PENDING)
 
-  decidedById String?
-  decidedAt   DateTime?
+  decidedById  String?
+  decidedAt    DateTime?
   decisionNote String?
 
   createdById String?
@@ -2295,9 +2617,9 @@ model Payslip {
   employeeId   String
   employee     Employee   @relation(fields: [employeeId], references: [id])
 
-  workedDays   Int
-  leaveDays    Int     @default(0)
-  absentDays   Int     @default(0)
+  workedDays Int
+  leaveDays  Int @default(0)
+  absentDays Int @default(0)
 
   basic              Decimal @db.Decimal(18, 2)
   houseAllowance     Decimal @default(0) @db.Decimal(18, 2)
@@ -2306,9 +2628,9 @@ model Payslip {
   otherAllowance     Decimal @default(0) @db.Decimal(18, 2)
   bonus              Decimal @default(0) @db.Decimal(18, 2)
 
-  providentFund      Decimal @default(0) @db.Decimal(18, 2)
-  taxDeduction       Decimal @default(0) @db.Decimal(18, 2)
-  otherDeduction     Decimal @default(0) @db.Decimal(18, 2)
+  providentFund  Decimal @default(0) @db.Decimal(18, 2)
+  taxDeduction   Decimal @default(0) @db.Decimal(18, 2)
+  otherDeduction Decimal @default(0) @db.Decimal(18, 2)
 
   gross Decimal @db.Decimal(18, 2)
   net   Decimal @db.Decimal(18, 2)
@@ -2325,10 +2647,10 @@ model Payslip {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model TradeOrder {
-  id       String           @id @default(cuid())
-  number   String           @unique
+  id       String @id @default(cuid())
+  number   String @unique
   branchId String
-  branch   Branch           @relation(fields: [branchId], references: [id])
+  branch   Branch @relation(fields: [branchId], references: [id])
 
   type   TradeOrderType
   status TradeOrderStatus @default(DRAFT)
@@ -2340,23 +2662,23 @@ model TradeOrder {
   supplier   Supplier? @relation(fields: [supplierId], references: [id])
 
   // Contract / order basics
-  contractRef     String?
-  currency        CurrencyCode @default(USD)
-  totalValue      Decimal      @default(0) @db.Decimal(18, 4)
-  exchangeRate    Decimal      @default(1) @db.Decimal(18, 6)
-  localValue      Decimal      @default(0) @db.Decimal(18, 4)
+  contractRef  String?
+  currency     CurrencyCode @default(USD)
+  totalValue   Decimal      @default(0) @db.Decimal(18, 4)
+  exchangeRate Decimal      @default(1) @db.Decimal(18, 6)
+  localValue   Decimal      @default(0) @db.Decimal(18, 4)
 
   // Ports / incoterms
-  portOfLoading    String?
-  portOfDischarge  String?
-  incoterms        String?          // FOB, CIF, EXW, etc.
-  latestShipDate   DateTime?        @db.Date
-  expectedArrival  DateTime?        @db.Date
+  portOfLoading   String?
+  portOfDischarge String?
+  incoterms       String? // FOB, CIF, EXW, etc.
+  latestShipDate  DateTime? @db.Date
+  expectedArrival DateTime? @db.Date
 
   // Goods description
   goodsDescription String?
 
-  notes       String?
+  notes String?
 
   items     TradeOrderItem[]
   shipments TradeShipment[]
@@ -2398,31 +2720,31 @@ model TradeShipment {
   sequence     Int                 @default(1)
 
   // Carrier / vessel info
-  carrierName    String?
-  vesselName     String?
-  voyageNumber   String?
-  blNumber       String?           // Bill of Lading number
-  blDate         DateTime?         @db.Date
-  bookingRef     String?
+  carrierName  String?
+  vesselName   String?
+  voyageNumber String?
+  blNumber     String? // Bill of Lading number
+  blDate       DateTime? @db.Date
+  bookingRef   String?
 
   portOfLoading   String?
   portOfDischarge String?
-  etd             DateTime?        @db.Date // estimated departure
-  eta             DateTime?        @db.Date // estimated arrival
-  actualDeparture DateTime?        @db.Date
-  actualArrival   DateTime?        @db.Date
+  etd             DateTime? @db.Date // estimated departure
+  eta             DateTime? @db.Date // estimated arrival
+  actualDeparture DateTime? @db.Date
+  actualArrival   DateTime? @db.Date
 
-  containerNumbers String?         // comma-separated if multiple
+  containerNumbers String? // comma-separated if multiple
   sealNumbers      String?
-  grossWeight      Decimal?        @db.Decimal(18, 4)
-  netWeight        Decimal?        @db.Decimal(18, 4)
-  volume           Decimal?        @db.Decimal(18, 4)
+  grossWeight      Decimal? @db.Decimal(18, 4)
+  netWeight        Decimal? @db.Decimal(18, 4)
+  volume           Decimal? @db.Decimal(18, 4)
   packages         Int?
 
-  freightCost     Decimal? @db.Decimal(18, 4)
-  insuranceCost   Decimal? @db.Decimal(18, 4)
+  freightCost   Decimal? @db.Decimal(18, 4)
+  insuranceCost Decimal? @db.Decimal(18, 4)
 
-  notes       String?
+  notes            String?
   customsClearedAt DateTime?
 
   createdById String?
@@ -2445,36 +2767,36 @@ model LetterOfCredit {
   paymentMode LCPaymentMode @default(AT_SIGHT)
 
   // Parties
-  applicantName    String             // importer / buyer name
-  beneficiaryName  String             // exporter / seller name
-  issuingBank      String
-  issuingBankSwift String?
-  advisingBank     String?
+  applicantName     String // importer / buyer name
+  beneficiaryName   String // exporter / seller name
+  issuingBank       String
+  issuingBankSwift  String?
+  advisingBank      String?
   advisingBankSwift String?
-  confirmingBank   String?
+  confirmingBank    String?
 
   // Amounts
-  currency       CurrencyCode @default(USD)
-  lcAmount       Decimal      @db.Decimal(18, 4)
-  tolerancePlus  Decimal      @default(0) @db.Decimal(5, 2)  // % above allowed
-  toleranceMinus Decimal      @default(0) @db.Decimal(5, 2)  // % below allowed
-  utilizedAmount Decimal      @default(0) @db.Decimal(18, 4)
-  availableAmount Decimal     @default(0) @db.Decimal(18, 4)
+  currency        CurrencyCode @default(USD)
+  lcAmount        Decimal      @db.Decimal(18, 4)
+  tolerancePlus   Decimal      @default(0) @db.Decimal(5, 2) // % above allowed
+  toleranceMinus  Decimal      @default(0) @db.Decimal(5, 2) // % below allowed
+  utilizedAmount  Decimal      @default(0) @db.Decimal(18, 4)
+  availableAmount Decimal      @default(0) @db.Decimal(18, 4)
 
   // Dates
   issueDate        DateTime  @db.Date
   expiryDate       DateTime  @db.Date
   expiryPlace      String?
   latestShipDate   DateTime? @db.Date
-  presentationDays Int       @default(21)   // days after BL date for doc presentation
+  presentationDays Int       @default(21) // days after BL date for doc presentation
 
   // Terms
-  partialShipment    Boolean @default(false)
+  partialShipment     Boolean @default(false)
   transhipmentAllowed Boolean @default(false)
-  portOfLoading      String?
-  portOfDischarge    String?
-  goodsDescription   String?
-  specialConditions  String?
+  portOfLoading       String?
+  portOfDischarge     String?
+  goodsDescription    String?
+  specialConditions   String?
 
   // SWIFT reference
   swiftMt700Ref String?
@@ -2482,7 +2804,7 @@ model LetterOfCredit {
   amendments LCAmendment[]
   drawdowns  LCDrawdown[]
 
-  issuedById String?
+  issuedById  String?
   createdById String?
   updatedById String?
   createdAt   DateTime @default(now())
@@ -2501,9 +2823,9 @@ model LCAmendment {
   status          ApprovalStatus @default(PENDING)
 
   // Fields that can be amended (null = unchanged)
-  newExpiryDate      DateTime? @db.Date
-  newLcAmount        Decimal?  @db.Decimal(18, 4)
-  newLatestShipDate  DateTime? @db.Date
+  newExpiryDate        DateTime? @db.Date
+  newLcAmount          Decimal?  @db.Decimal(18, 4)
+  newLatestShipDate    DateTime? @db.Date
   newSpecialConditions String?
 
   reason        String
@@ -2544,10 +2866,10 @@ model LCDrawdown {
   otherDocs            String?
 
   // Settlement
-  paymentDueDate  DateTime? @db.Date
+  paymentDueDate    DateTime? @db.Date
   paymentReceivedAt DateTime? @db.Date
-  bankCharges     Decimal  @default(0) @db.Decimal(18, 4)
-  notes           String?
+  bankCharges       Decimal   @default(0) @db.Decimal(18, 4)
+  notes             String?
 
   discrepancyNote String?
   rejectionReason String?
@@ -2562,12 +2884,12 @@ model LCDrawdown {
 }
 
 model TradePayment {
-  id           String             @id @default(cuid())
-  number       String             @unique
+  id           String     @id @default(cuid())
+  number       String     @unique
   tradeOrderId String
-  tradeOrder   TradeOrder         @relation(fields: [tradeOrderId], references: [id], onDelete: Restrict)
+  tradeOrder   TradeOrder @relation(fields: [tradeOrderId], references: [id], onDelete: Restrict)
   branchId     String
-  branch       Branch             @relation(fields: [branchId], references: [id])
+  branch       Branch     @relation(fields: [branchId], references: [id])
 
   status TradePaymentStatus @default(PENDING)
 
@@ -2590,4 +2912,83 @@ model TradePayment {
 
   @@index([tradeOrderId])
   @@index([branchId, status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cash Transfer (branch-to-branch)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum CashTransferStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+model CashTransfer {
+  id           String             @id @default(cuid())
+  number       String             @unique
+  fromBranchId String
+  fromBranch   Branch             @relation("CashTransferFrom", fields: [fromBranchId], references: [id])
+  toBranchId   String
+  toBranch     Branch             @relation("CashTransferTo", fields: [toBranchId], references: [id])
+  amount       Decimal            @db.Decimal(18, 4)
+  transferDate DateTime           @default(now())
+  transferVia  String?
+  reference    String?
+  remarks      String
+  imageUrl     String?
+  status       CashTransferStatus @default(PENDING)
+  createdById  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([fromBranchId, transferDate])
+  @@index([toBranchId, transferDate])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cash Entries (manual cash in / cash out vouchers)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum CashEntryType {
+  CASH_IN
+  CASH_OUT
+}
+
+model CashEntry {
+  id          String        @id @default(cuid())
+  number      String        @unique
+  type        CashEntryType
+  branchId    String
+  branch      Branch        @relation(fields: [branchId], references: [id])
+  date        DateTime      @default(now())
+  amount      Decimal       @db.Decimal(18, 4)
+  taxPercent  Decimal?      @db.Decimal(5, 2)
+  taxAmount   Decimal?      @db.Decimal(18, 4)
+  totalAmount Decimal       @db.Decimal(18, 4)
+
+  contactId   String?
+  contact     Customer? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  contactName String?
+  contactType String?
+
+  receiveMode String
+  category    String
+  reference   String?
+  projectName String?
+  remarks     String?
+  imageUrl    String?
+
+  sourceModule  String?
+  sourceRefType String?
+  sourceRefId   String?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([branchId, date])
+  @@index([type, branchId])
+  @@index([contactId])
 }

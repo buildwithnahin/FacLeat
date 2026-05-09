@@ -1,5 +1,6 @@
 import { getSession } from '@/server/auth/session';
 import { accountsService } from '@/server/services/accounts.service';
+import { PrintButton } from '@/components/shared/print-button';
 
 export default async function FinancialNotesPage({
   searchParams,
@@ -29,7 +30,7 @@ export default async function FinancialNotesPage({
         <label className="text-sm self-center">As of:</label>
         <input type="date" name="asOf" defaultValue={asOf.toISOString().slice(0, 10)} className="border rounded px-2 py-1 text-sm" />
         <button type="submit" className="px-3 py-1 bg-blue-600 text-white text-sm rounded">Apply</button>
-        <button type="button" onClick={() => window.print()} className="px-3 py-1 bg-gray-100 border text-sm rounded ml-auto">Print</button>
+        <PrintButton />
       </form>
 
       {/* Note 4.00 — PP&E */}

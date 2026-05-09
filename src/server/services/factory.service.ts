@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
+import { assertOpenPeriod } from '@/server/periods/guards';
+import { approvalService } from '@/server/services/approval.service';
 import type { AppSession } from '@/server/auth/session';
 import type {
   ProductionOrderCreateInput,
@@ -230,6 +232,8 @@ export const factoryService = {
     }
 
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, order.branchId);
+
       for (const item of input.items) {
         const material = order.materials.find((m) => m.id === item.materialId);
         if (!material) throw new ValidationError('Unknown material line');
@@ -312,6 +316,8 @@ export const factoryService = {
     const qty = new Prisma.Decimal(input.quantity);
 
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, order.branchId);
+
       const warehouse = await tx.warehouse.findUnique({ where: { id: input.toWarehouseId } });
       if (!warehouse || warehouse.branchId !== order.branchId) {
         throw new ValidationError('Target warehouse does not belong to this branch');
@@ -470,7 +476,25 @@ export const factoryService = {
       throw new ValidationError(`Cannot add cost entries to a ${order.status.toLowerCase()} order`);
     }
 
+    const approvalAmount =
+      input.type === 'LABOUR'
+        ? new Prisma.Decimal(input.hours!).times(input.rate!)
+        : new Prisma.Decimal(input.amount!);
+    await approvalService.ensureApprovedOrRequest(session, {
+      module: 'factory',
+      action: 'cost-entry',
+      entityType: 'ProductionOrder',
+      entityId: order.id,
+      title: `Factory cost entry for ${order.number}`,
+      summary: `${input.type}: ${input.description}`,
+      amount: approvalAmount.toNumber(),
+      currency: 'BDT',
+      branchId: order.branchId,
+    });
+
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, order.branchId);
+
       let amount: Prisma.Decimal;
       let hours: Prisma.Decimal | null = null;
       let rate: Prisma.Decimal | null = null;
