@@ -15,12 +15,21 @@ function buildPath(parentPath: string | null, code: string) {
   return parentPath ? `${parentPath}/${code}` : code;
 }
 
+const ZERO = new Prisma.Decimal(0);
+
+function coaScope(branchId?: string | null) {
+  if (!branchId) return undefined;
+  return {
+    OR: [{ branchId: null }, { branchId }],
+  } satisfies Prisma.ChartAccountWhereInput;
+}
+
 const cachedCoaList = unstable_cache(
   async (filters?: { type?: string; branchId?: string; activeOnly?: boolean }) =>
     prisma.chartAccount.findMany({
       where: {
+        ...coaScope(filters?.branchId),
         type: filters?.type as never,
-        branchId: filters?.branchId ?? undefined,
         isActive: filters?.activeOnly ? true : undefined,
       },
       orderBy: [{ path: 'asc' }],
@@ -29,21 +38,61 @@ const cachedCoaList = unstable_cache(
   { revalidate: 300, tags: ['coa'] },
 );
 
-const cachedCoaTree = unstable_cache(
-  () => prisma.chartAccount.findMany({ orderBy: [{ path: 'asc' }] }),
-  ['coa-tree'],
-  { revalidate: 300, tags: ['coa'] },
-);
-
 export const coaService = {
   async list(session: AppSession | null, filters?: { type?: string; branchId?: string; activeOnly?: boolean }) {
     await authorize(session, 'coa:read');
-    return cachedCoaList(filters);
+    const effectiveBranchId = filters?.branchId ?? session?.activeBranchId ?? undefined;
+    return cachedCoaList({
+      ...filters,
+      branchId: effectiveBranchId,
+    });
   },
 
   async tree(session: AppSession | null) {
     await authorize(session, 'coa:read');
-    return cachedCoaTree();
+    const effectiveBranchId = session?.activeBranchId ?? undefined;
+    const accounts = await prisma.chartAccount.findMany({
+      where: coaScope(effectiveBranchId),
+      orderBy: [{ path: 'asc' }],
+    });
+
+    const balanceRows = await prisma.journalEntryLine.groupBy({
+      by: ['accountId'],
+      where: {
+        accountId: { in: accounts.map((account) => account.id) },
+        entry: {
+          status: 'POSTED',
+          branchId: effectiveBranchId,
+        },
+      },
+      _sum: {
+        debit: true,
+        credit: true,
+      },
+    });
+
+    const balanceByAccount = new Map(
+      balanceRows.map((row) => [
+        row.accountId,
+        {
+          debit: row._sum.debit ?? ZERO,
+          credit: row._sum.credit ?? ZERO,
+        },
+      ]),
+    );
+
+    return accounts.map((account) => {
+      const sums = balanceByAccount.get(account.id);
+      const debit = sums?.debit ?? ZERO;
+      const credit = sums?.credit ?? ZERO;
+      const movement = account.normalSide === 'DEBIT' ? debit.minus(credit) : credit.minus(debit);
+      const currentBalance = new Prisma.Decimal(account.openingBalance).plus(movement);
+
+      return {
+        ...account,
+        currentBalance,
+      };
+    });
   },
 
   async getById(session: AppSession | null, id: string) {

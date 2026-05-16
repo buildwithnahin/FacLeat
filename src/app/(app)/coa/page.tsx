@@ -23,6 +23,7 @@ export default async function CoaPage() {
         isPosting: account.isPosting,
         isActive: account.isActive,
         openingBalance: account.openingBalance.toString(),
+        currentBalance: account.currentBalance.toString(),
         detailType: account.detailType,
         openingBalanceDate: account.openingBalanceDate?.toISOString() ?? null,
         createdAt: new Date(account.createdAt).toISOString(),

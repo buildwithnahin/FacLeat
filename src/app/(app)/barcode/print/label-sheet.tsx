@@ -15,8 +15,9 @@ export interface LabelProduct {
   name: string;
   barcode: string | null;
   size: string | null;
+  unit: string;
   categoryName: string | null;
-  // sellPrice: string;
+  sellPrice: string;
 }
 
 export interface LabelSheetProps {
@@ -46,6 +47,11 @@ export function LabelSheet({ products }: LabelSheetProps) {
   const [qtyById, setQtyById] = useState<Record<string, string>>({});
 
   const setQty = (id: string, v: string) => setQtyById((prev) => ({ ...prev, [id]: v }));
+  const formatPrice = (value: string) =>
+    `৳${new Intl.NumberFormat('en-IN', {
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 2,
+    }).format(Number(value))}`;
 
   const toPrint: { p: LabelProduct; n: number }[] = [];
   for (const p of products) {
@@ -56,7 +62,11 @@ export function LabelSheet({ products }: LabelSheetProps) {
   const labels: LabelProduct[] = toPrint.flatMap(({ p, n }) => Array.from({ length: n }, () => p));
   const totalLabels = labels.length;
   const isShoeProduct = (product: LabelProduct) => product.categoryName?.trim().toLowerCase() === 'shoes';
-
+  const getQtyLabel = (product: LabelProduct) => {
+    if (product.unit === 'PAIR' || isShoeProduct(product)) return '1 Pair';
+    if (product.unit === 'PCS') return '1 Pc';
+    return `1 ${product.unit}`;
+  };
   return (
     <div className="space-y-6">
       <Card className="print:hidden">
@@ -127,12 +137,23 @@ export function LabelSheet({ products }: LabelSheetProps) {
       <div className="label-sheet">
         {labels.map((p, idx) => (
           <div key={`${p.id}-${idx}`} className="label">
-            <div className="label-name">{p.name}</div>
-            <div className="label-sku">{p.sku}</div>
+            <div className="label-meta">
+              <div className="label-meta-line">
+                <span className="label-meta-title">SKU Code / Qty :</span>{' '}
+                <span className="label-meta-value">
+                  {p.sku} ({getQtyLabel(p)})
+                </span>
+              </div>
+            </div>
+            <div className="label-name">{p.name.toUpperCase()}</div>
+            <div className="label-price">MRP {formatPrice(p.sellPrice)}</div>
             {isShoeProduct(p) && p.size && <div className="label-size">Size {p.size}</div>}
-            <BarcodeSvg value={p.barcode ?? ''} />
-            <div className="label-barcode-text">{p.barcode}</div>
-            {/* <div className="label-price">৳ {p.sellPrice}</div> */}
+            <div className="label-footer">
+              <div className="label-barcode-box">
+                <BarcodeSvg value={p.barcode ?? ''} />
+                <div className="label-barcode-text">{p.barcode}</div>
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -141,54 +162,98 @@ export function LabelSheet({ products }: LabelSheetProps) {
         .label-sheet {
           display: none;
           grid-template-columns: repeat(3, 1fr);
-          gap: 4mm;
-          padding: 8mm;
+          gap: 1.5mm;
+          padding: 6mm;
         }
         .label {
-          border: 1px dashed #cbd5e1;
-          border-radius: 4px;
-          padding: 8px 10px;
-          min-height: 32mm;
+          border: 1.5px solid #111827;
+          border-radius: 2px;
+          padding: 0;
+          min-height: 36mm;
           display: flex;
           flex-direction: column;
-          gap: 4px;
           break-inside: avoid;
           background: #fff;
+          overflow: hidden;
+        }
+        .label-meta {
+          padding: 5px 8px 4px;
+          border-bottom: 1px solid #111827;
+        }
+        .label-meta-line {
+          font-size: 10px;
+          line-height: 1.25;
+          color: #111827;
+          word-break: break-word;
+        }
+        .label-meta-title {
+          font-size: 10px;
+          font-weight: 700;
+          line-height: 1.1;
+          color: #111827;
+        }
+        .label-meta-value {
+          font-size: 10px;
+          font-weight: 800;
+          line-height: 1.2;
+          letter-spacing: 0.02em;
+          color: #020617;
+          text-transform: uppercase;
         }
         .label-name {
-          font-weight: 600;
-          font-size: 11px;
-          line-height: 1.2;
-          color: #0f172a;
+          padding: 6px 8px;
+          font-weight: 900;
+          font-size: 15px;
+          line-height: 1.05;
+          letter-spacing: 0.03em;
+          color: #020617;
+          text-transform: uppercase;
+          border-bottom: 1px solid #111827;
+          min-height: 34px;
+          display: flex;
+          align-items: center;
         }
-        .label-sku {
-          font-family: ui-monospace, Menlo, monospace;
-          font-size: 10px;
-          color: #64748b;
+        .label-price {
+          padding: 4px 8px;
+          border-bottom: 1px solid #111827;
+          font-size: 12px;
+          font-weight: 800;
+          line-height: 1.1;
+          color: #020617;
         }
         .label-size {
-          font-size: 10px;
-          font-weight: 600;
-          color: #0f172a;
+          padding: 4px 8px;
+          border-bottom: 1px solid #111827;
+          font-size: 12px;
+          font-weight: 800;
+          line-height: 1.1;
+          color: #020617;
+          text-transform: uppercase;
+          text-align: center;
+        }
+        .label-footer {
+          display: flex;
         }
         .label-barcode-svg {
           width: 100%;
-          height: 34px;
+          height: 38px;
           display: block;
-          margin-top: 2px;
+        }
+        .label-barcode-box {
+          width: 100%;
+          padding: 4px 8px 0;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-end;
+          align-items: center;
         }
         .label-barcode-text {
           font-family: ui-monospace, Menlo, monospace;
           font-size: 9px;
-          letter-spacing: 0.8px;
+          letter-spacing: 0.08em;
           color: #0f172a;
           text-align: center;
-        }
-        .label-price {
-          font-weight: 700;
-          font-size: 12px;
-          color: #1e40af;
-          text-align: right;
+          line-height: 1;
         }
         @media print {
           :global(body) {
@@ -200,9 +265,6 @@ export function LabelSheet({ products }: LabelSheetProps) {
           }
           .label-sheet {
             display: grid;
-          }
-          .label {
-            border-color: #000;
           }
         }
       `}</style>

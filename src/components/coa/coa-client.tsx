@@ -50,6 +50,7 @@ export interface FlatAccount {
   isPosting: boolean;
   isActive: boolean;
   openingBalance: string;
+  currentBalance: string;
   detailType: string | null;
   openingBalanceDate: string | null;
   createdAt: string;
@@ -347,7 +348,7 @@ export function CoaClient({ accounts, canWrite }: { accounts: FlatAccount[]; can
   const [, startTransition] = useTransition();
 
   const enriched = useMemo(
-    () => accounts.map((account) => ({ ...account, detailLabel: accountDetail(account), balance: Number(account.openingBalance) || 0 })),
+    () => accounts.map((account) => ({ ...account, detailLabel: accountDetail(account), balance: Number(account.currentBalance) || 0 })),
     [accounts],
   );
 
@@ -363,6 +364,7 @@ export function CoaClient({ accounts, canWrite }: { accounts: FlatAccount[]; can
     const statusOk = statusFilter === 'ALL' || (statusFilter === 'ACTIVE' ? account.isActive : !account.isActive);
     return typeOk && nameOk && statusOk;
   });
+  const visibleTypes = TYPE_ORDER.filter((type) => filteredAccounts.some((account) => account.type === type));
 
   function toggleFilter(label: string) {
     setTypeFilter((current) => {
@@ -472,8 +474,17 @@ export function CoaClient({ accounts, canWrite }: { accounts: FlatAccount[]; can
         </div>
       </div>
 
-      <div className="overflow-x-auto border-t-4 border-[#00758a] bg-white">
-        <table className="min-w-[1040px] w-full text-xs">
+      <div className="border-t-4 border-[#00758a] bg-white">
+        <table className="w-full table-fixed text-xs">
+          <colgroup>
+            <col className="w-[24%]" />
+            <col className="w-[16%]" />
+            <col className="w-[19%]" />
+            <col className="w-[11%]" />
+            <col className="w-[14%]" />
+            <col className="w-[11%]" />
+            <col className="w-[5%]" />
+          </colgroup>
           <thead className="bg-[#f0f0fa] text-[#003044]">
             <tr>
               <th className="px-4 py-4 text-left font-bold uppercase">Type</th>
@@ -486,13 +497,12 @@ export function CoaClient({ accounts, canWrite }: { accounts: FlatAccount[]; can
             </tr>
           </thead>
           <tbody>
-            {TYPE_ORDER.map((type) => {
+            {visibleTypes.map((type) => {
               const meta = TYPE_META[type];
               const typeKey = `type:${type}`;
               const typeCollapsed = collapsed.has(typeKey);
               const details = COA_DETAIL_TYPES.filter((detail) => detail.type === type);
               const typeAccounts = filteredAccounts.filter((account) => account.type === type);
-              if (typeFilter.size > 0 && typeAccounts.length === 0) return null;
 
               return [
                 <tr key={typeKey} className="border-b bg-[#e8f5f6] font-bold text-[#006f87] shadow-sm">
@@ -540,10 +550,12 @@ export function CoaClient({ accounts, canWrite }: { accounts: FlatAccount[]; can
                         rows.map((account) => (
                           <tr key={account.id} className="border-b hover:bg-[#f7fbfc]">
                             <td className="px-4 py-4">
-                              <span className="block pl-12">{account.name}</span>
+                              <span className="block truncate pl-12">{account.name}</span>
                             </td>
                             <td className="px-4 py-4 font-semibold">{Number(numberCode(account.code)).toLocaleString('en-US') || account.code}</td>
-                            <td className="px-4 py-4">{account.detailLabel}</td>
+                            <td className="px-4 py-4">
+                              <span className="block truncate">{account.detailLabel}</span>
+                            </td>
                             <td className="px-4 py-4">
                               <ToggleSwitch
                                 checked={account.isActive}
@@ -562,6 +574,13 @@ export function CoaClient({ accounts, canWrite }: { accounts: FlatAccount[]; can
                   }),
               ];
             })}
+            {visibleTypes.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
+                  No chart of accounts found in the database for the current filters.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

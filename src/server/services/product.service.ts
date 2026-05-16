@@ -92,6 +92,7 @@ export const productService = {
         barcode: true,
         name: true,
         size: true,
+        unit: true,
         category: { select: { name: true } },
         sellPrice: true,
       },

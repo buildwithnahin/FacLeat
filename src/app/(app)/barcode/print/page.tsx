@@ -21,6 +21,7 @@ export default async function PrintLabelsPage() {
           name: p.name,
           barcode: p.barcode,
           size: p.size,
+          unit: p.unit,
           categoryName: p.category?.name ?? null,
           sellPrice: p.sellPrice.toString(),
         }))}
