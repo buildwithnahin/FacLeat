@@ -3,13 +3,15 @@
 import { useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Minus, Trash2, Scan, User, X, CheckCircle2 } from 'lucide-react';
+import { Plus, Minus, Trash2, Scan, User, X, CheckCircle2, FileText } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatCurrency, type CurrencyCode } from '@/lib/money';
 import { createSaleAction } from '@/server/actions/pos';
 import { POS_PAYMENT_METHODS, POS_DISCOUNT_APPROVAL_THRESHOLD } from '@/server/validators/pos';
+import { computeMushak63, computeVatBreakdown, VAT_MODE_LABELS, type VatMode } from '@/lib/mushak63';
 
 interface TerminalProduct {
   id: string;
@@ -58,12 +60,16 @@ interface PaymentLine {
   reference: string;
 }
 
-function lineNet(l: CartLine) {
+function lineNet(l: CartLine, vatMode: VatMode) {
   const gross = l.quantity * l.unitPrice;
-  const discount = gross * (l.discountRate / 100);
-  const net = gross - discount;
-  const tax = net * (l.taxRate / 100);
-  return { gross, discount, net, tax, total: net + tax };
+  const breakdown = computeVatBreakdown(gross, l.discountRate, l.taxRate, vatMode);
+  return {
+    gross,
+    discount: breakdown.discount,
+    net: breakdown.baseValue,
+    tax: breakdown.vatAmount,
+    total: breakdown.lineTotal,
+  };
 }
 
 export function PosTerminal({
@@ -88,11 +94,19 @@ export function PosTerminal({
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const scanRef = useRef<HTMLInputElement>(null);
 
+  const [completedSale, setCompletedSale] = useState<{
+    saleId: string;
+    saleNumber: string;
+    changeDue: number;
+    cartSnapshot: CartLine[];
+  } | null>(null);
+  const [vatMode, setVatMode] = useState<VatMode>('A');
+
   const totals = useMemo(() => {
     return cart.reduce(
       (acc, l) => {
-        const ln = lineNet(l);
-        acc.subtotal += ln.gross;
+        const ln = lineNet(l, vatMode);
+        acc.subtotal += ln.net;
         acc.discount += ln.discount;
         acc.tax += ln.tax;
         acc.total += ln.total;
@@ -100,7 +114,7 @@ export function PosTerminal({
       },
       { subtotal: 0, discount: 0, tax: 0, total: 0 },
     );
-  }, [cart]);
+  }, [cart, vatMode]);
 
   const paidTotal = payments.reduce((a, p) => a + (Number(p.amount) || 0), 0);
   const cashPaid = payments.filter((p) => p.method === 'CASH').reduce((a, p) => a + p.amount, 0);
@@ -217,6 +231,7 @@ export function PosTerminal({
         warehouseId: session.warehouseId,
         sessionId: session.id,
         customerId: customerId || undefined,
+        vatMode,
         items: cart.map((l) => ({
           productId: l.productId,
           quantity: l.quantity,
@@ -238,7 +253,12 @@ export function PosTerminal({
         return;
       }
       if (res && 'success' in res && res.success) {
-        setMessage({ type: 'ok', text: `Sale ${res.saleNumber} completed — change ${fmt(changeDue)}` });
+        setCompletedSale({
+          saleId: res.saleId!,
+          saleNumber: res.saleNumber!,
+          changeDue,
+          cartSnapshot: cart,
+        });
         clearCart();
         router.refresh();
       }
@@ -246,6 +266,7 @@ export function PosTerminal({
   }
 
   return (
+    <>
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] gap-4 min-h-[calc(100vh-8rem)]">
       {/* Left: scan + product grid */}
       <div className="flex flex-col gap-4">
@@ -349,7 +370,7 @@ export function PosTerminal({
               </div>
             )}
             {cart.map((l) => {
-              const ln = lineNet(l);
+              const ln = lineNet(l, vatMode);
               const flag = l.discountRate > POS_DISCOUNT_APPROVAL_THRESHOLD;
               return (
                 <div key={l.productId} className="p-3 space-y-2">
@@ -418,7 +439,7 @@ export function PosTerminal({
           </div>
           <div className="border-t p-3 space-y-1 text-sm">
             <div className="flex justify-between text-muted-foreground">
-              <span>Subtotal</span>
+              <span>{vatMode === 'B' ? 'Taxable base' : 'Subtotal'}</span>
               <span className="tabular">{fmt(totals.subtotal)}</span>
             </div>
             <div className="flex justify-between text-muted-foreground">
@@ -437,6 +458,34 @@ export function PosTerminal({
         </Card>
 
         <Card className="p-4 space-y-3">
+          {/* VAT Mode selector */}
+          <div className="flex items-center gap-2 pb-2 border-b">
+            <span className="text-xs text-muted-foreground font-medium">VAT Mode:</span>
+            <div className="flex gap-1">
+              {(['A', 'B', 'C'] as VatMode[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setVatMode(m)}
+                  title={VAT_MODE_LABELS[m].description}
+                  className={`px-2.5 py-0.5 rounded border text-xs font-medium transition ${
+                    vatMode === m
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'border-gray-300 hover:border-blue-400 text-muted-foreground'
+                  }`}
+                >
+                  Option {m}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-muted-foreground truncate">
+              {VAT_MODE_LABELS[vatMode].title}
+            </span>
+          </div>
+          <div className="text-xs text-muted-foreground -mt-1">
+            {VAT_MODE_LABELS[vatMode].formula}
+          </div>
+
           <div className="text-sm font-medium">Payment</div>
           {payments.map((p, i) => (
             <div key={i} className="flex gap-2">
@@ -517,5 +566,102 @@ export function PosTerminal({
         </Card>
       </div>
     </div>
+
+    {/* Mushak 6.3 VAT option dialog shown after every completed sale */}
+    {completedSale && (() => {
+      const preview = computeMushak63(
+        completedSale.cartSnapshot.map((l) => ({
+          sku: l.sku,
+          description: l.name,
+          quantity: l.quantity,
+          unit: l.unit,
+          unitPrice: l.unitPrice,
+          discountRate: l.discountRate,
+          taxRate: l.taxRate,
+        })),
+        vatMode,
+      );
+      return (
+        <Dialog open onOpenChange={(open) => { if (!open) setCompletedSale(null); }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                Sale {completedSale.saleNumber} Completed
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="text-sm text-muted-foreground mb-1">
+              Change due:{' '}
+              <span className="font-semibold text-foreground tabular">
+                {fmt(completedSale.changeDue)}
+              </span>
+            </div>
+
+            <div className="border-t pt-3">
+              <div className="text-sm font-medium mb-1">
+                VAT Mode for Mushak 6.3:{' '}
+                <span className="text-blue-600">Option {vatMode} - {VAT_MODE_LABELS[vatMode].title}</span>
+              </div>
+              <div className="text-xs text-muted-foreground mb-2">{VAT_MODE_LABELS[vatMode].description}</div>
+              <div className="text-xs text-muted-foreground mb-2 font-mono">
+                {VAT_MODE_LABELS[vatMode].formula}
+              </div>
+              <div className="flex gap-1">
+                {(['A', 'B', 'C'] as VatMode[]).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setVatMode(m)}
+                    className={`px-3 py-1 rounded border text-xs font-medium transition ${
+                      vatMode === m
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'border-gray-300 hover:border-blue-400'
+                    }`}
+                  >
+                    Option {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="border rounded-md p-3 text-sm space-y-1">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Taxable base</span>
+                <span className="tabular">{fmt(preview.subtotalBase)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>VAT</span>
+                <span className="tabular">{fmt(preview.totalVat)}</span>
+              </div>
+              <div className="flex justify-between font-semibold border-t pt-1">
+                <span>Grand total</span>
+                <span className="tabular">{fmt(preview.grandTotal)}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  window.open(
+                    `/pos/sales/${completedSale.saleId}/mushak63?mode=${vatMode}`,
+                    '_blank',
+                  );
+                  setCompletedSale(null);
+                }}
+              >
+                <FileText className="h-4 w-4 mr-1" />
+                Print Mushak 6.3 — 3 Copies (Option {vatMode})
+              </Button>
+              <Button variant="outline" onClick={() => setCompletedSale(null)}>
+                Skip
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      );
+    })()}
+    </>
   );
 }

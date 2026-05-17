@@ -26,6 +26,13 @@ const STATUS_TONE = {
   CANCELLED: 'red',
 } as const;
 
+const ACCOUNT_CATEGORY_LABEL: Record<string, string> = {
+  INVENTORY: 'Inventory',
+  ADMINISTRATIVE_EXPENSE: 'Administrative Expense',
+  SALES_AND_DISTRIBUTIVE: 'Sales and Distributive',
+  ASSET: 'Assets',
+};
+
 function stepState(status: string, target: string): StepState {
   const order = ['PR', 'PO', 'GRN', 'INVOICE', 'PAYMENT'];
   const idx = order.indexOf(target);
@@ -165,6 +172,11 @@ export default async function PurchaseOrderDetailPage({
               header: 'Ordered',
               align: 'right',
               cell: (r) => <span className="tabular">{r.orderedQty.toString()} {r.unit}</span>,
+            },
+            {
+              key: 'category',
+              header: 'Account Category',
+              cell: (r) => ACCOUNT_CATEGORY_LABEL[r.accountCategory] ?? r.accountCategory,
             },
             {
               key: 'received',

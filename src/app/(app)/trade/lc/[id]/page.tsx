@@ -115,6 +115,30 @@ export default async function LCDetailPage({ params }: { params: Promise<{ id: s
             </CardContent>
           </Card>
 
+          {(lc.airPortOfLoading || lc.airPortOfDestination || lc.airlineName || lc.flightNumber) && (
+            <Card>
+              <CardHeader><CardTitle className="text-sm">By Air</CardTitle></CardHeader>
+              <CardContent className="divide-y">
+                <Row label="Airport of Loading" value={lc.airPortOfLoading} />
+                <Row label="Airport of Destination" value={lc.airPortOfDestination} />
+                <Row label="Airline Name" value={lc.airlineName} />
+                <Row label="Flight Number" value={lc.flightNumber} />
+              </CardContent>
+            </Card>
+          )}
+
+          {(lc.shipPortOfLoading || lc.shipPortOfDischarge || lc.vesselName || lc.voyageNumber) && (
+            <Card>
+              <CardHeader><CardTitle className="text-sm">By Ship</CardTitle></CardHeader>
+              <CardContent className="divide-y">
+                <Row label="Port of Loading" value={lc.shipPortOfLoading ?? lc.portOfLoading} />
+                <Row label="Port of Discharge" value={lc.shipPortOfDischarge ?? lc.portOfDischarge} />
+                <Row label="Vessel Name" value={lc.vesselName} />
+                <Row label="Voyage Number" value={lc.voyageNumber} />
+              </CardContent>
+            </Card>
+          )}
+
           {lc.goodsDescription && (
             <Card>
               <CardHeader><CardTitle className="text-sm">Goods Description</CardTitle></CardHeader>

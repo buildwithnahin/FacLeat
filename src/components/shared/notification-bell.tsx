@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { markNotificationReadAction } from '@/server/actions/notifications';
 
 interface NotificationLite {
   id: string;
@@ -46,6 +47,18 @@ export function NotificationBell({
     };
     return () => es.close();
   }, []);
+
+  async function markSeen(id: string) {
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === id && !item.readAt
+          ? { ...item, readAt: new Date().toISOString() }
+          : item,
+      ),
+    );
+    setUnread((prev) => Math.max(0, prev - 1));
+    await markNotificationReadAction(id);
+  }
 
   return (
     <div className="relative">
@@ -100,7 +113,19 @@ export function NotificationBell({
                       <div className="flex items-start gap-2">
                         <span className={cn('mt-1 h-2 w-2 rounded-full flex-shrink-0', tone)} />
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{n.title}</div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-medium truncate">{n.title}</div>
+                            <span
+                              className={cn(
+                                'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                                n.readAt
+                                  ? 'bg-muted text-muted-foreground'
+                                  : 'bg-blue-100 text-blue-700',
+                              )}
+                            >
+                              {n.readAt ? 'Seen' : 'Unseen'}
+                            </span>
+                          </div>
                           {n.body && (
                             <div className="text-xs text-muted-foreground line-clamp-2">{n.body}</div>
                           )}
@@ -114,11 +139,23 @@ export function NotificationBell({
                   return (
                     <li key={n.id}>
                       {n.href ? (
-                        <Link href={n.href} onClick={() => setOpen(false)}>
+                        <Link
+                          href={n.href}
+                          onClick={() => {
+                            void markSeen(n.id);
+                            setOpen(false);
+                          }}
+                        >
                           {content}
                         </Link>
                       ) : (
-                        content
+                        <button
+                          type="button"
+                          className="w-full text-left"
+                          onClick={() => void markSeen(n.id)}
+                        >
+                          {content}
+                        </button>
                       )}
                     </li>
                   );

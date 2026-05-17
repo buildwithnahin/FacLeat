@@ -52,6 +52,7 @@ export const createSaleSchema = z
     warehouseId: z.string().cuid(),
     sessionId: z.string().cuid().optional().or(z.literal('')),
     customerId: z.string().cuid().optional().or(z.literal('')),
+    vatMode: z.enum(['A', 'B', 'C']).default('A'),
     items: z.array(saleItemSchema).min(1, 'At least one item is required'),
     payments: z.array(paymentSchema).min(1, 'At least one payment is required'),
     notes: z.string().trim().max(500).optional().or(z.literal('')),

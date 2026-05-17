@@ -17,12 +17,19 @@ import type { CurrencyCode } from '@/lib/money';
 
 const UNITS = ['PCS', 'KG', 'G', 'M', 'M2', 'L', 'ML', 'BOX', 'PACK', 'PAIR', 'SET'] as const;
 const CURRENCIES = ['BDT', 'INR', 'USD', 'EUR'] as const;
+const ACCOUNT_CATEGORIES = [
+  { value: 'INVENTORY', label: 'Inventory' },
+  { value: 'ADMINISTRATIVE_EXPENSE', label: 'Administrative Expense' },
+  { value: 'SALES_AND_DISTRIBUTIVE', label: 'Sales and Distributive' },
+  { value: 'ASSET', label: 'Assets' },
+] as const;
 const selectClass =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm';
 
 interface Row {
   key: string;
   productId: string;
+  accountCategory: (typeof ACCOUNT_CATEGORIES)[number]['value'];
   size: string;
   description: string;
   unit: (typeof UNITS)[number];
@@ -36,6 +43,7 @@ function newRow(): Row {
   return {
     key: `r-${Math.random().toString(36).slice(2, 8)}`,
     productId: '',
+    accountCategory: 'INVENTORY',
     size: '',
     description: '',
     unit: 'PCS',
@@ -141,6 +149,7 @@ export function POForm({ branches, suppliers, products, prefill }: Props) {
             .filter((r) => r.productId && Number(r.orderedQty) > 0)
             .map((r) => ({
               productId: r.productId,
+              accountCategory: r.accountCategory,
               size: r.size,
               description: r.description,
               unit: r.unit,
@@ -236,7 +245,7 @@ export function POForm({ branches, suppliers, products, prefill }: Props) {
             {rows.map((r, idx) => (
               <div
                 key={r.key}
-                className="grid grid-cols-1 md:grid-cols-[2fr_0.9fr_1fr_1fr_1fr_0.8fr_0.8fr_auto] gap-2 items-end"
+                className="grid grid-cols-1 md:grid-cols-[2fr_1.25fr_0.9fr_1fr_1fr_1fr_0.8fr_0.8fr_auto] gap-2 items-end"
               >
                 <div>
                   {idx === 0 && <Label className="text-xs">Product</Label>}
@@ -257,6 +266,24 @@ export function POForm({ branches, suppliers, products, prefill }: Props) {
                     {products.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.sku} · {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  {idx === 0 && <Label className="text-xs">Account Category</Label>}
+                  <select
+                    value={r.accountCategory}
+                    onChange={(e) =>
+                      updateRow(r.key, {
+                        accountCategory: e.target.value as Row['accountCategory'],
+                      })
+                    }
+                    className={selectClass}
+                  >
+                    {ACCOUNT_CATEGORIES.map((category) => (
+                      <option key={category.value} value={category.value}>
+                        {category.label}
                       </option>
                     ))}
                   </select>

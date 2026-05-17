@@ -20,6 +20,7 @@ const selectClass =
 
 interface Row {
   key: string;
+  productId: string;
   productName: string;
   unit: (typeof UNITS)[number];
   quantity: string;
@@ -30,6 +31,7 @@ interface Row {
 function newRow(): Row {
   return {
     key: `r-${Math.random().toString(36).slice(2, 8)}`,
+    productId: '',
     productName: '',
     unit: 'PCS',
     quantity: '',
@@ -38,10 +40,19 @@ function newRow(): Row {
   };
 }
 
+interface ProductOption {
+  id: string;
+  sku: string;
+  name: string;
+  unit: string;
+}
+
 export function RequisitionForm({
   branches,
+  products,
 }: {
   branches: { id: string; name: string; code: string }[];
+  products: ProductOption[];
 }) {
   const [state, formAction, pending] = useActionState<PurchaseFormState, FormData>(
     createRequisitionAction,
@@ -60,6 +71,7 @@ export function RequisitionForm({
           rows
             .filter((r) => r.productName && r.quantity)
             .map((r) => ({
+              productId: r.productId,
               productName: r.productName,
               unit: r.unit,
               quantity: r.quantity,
@@ -142,15 +154,23 @@ export function RequisitionForm({
             <p className="text-sm font-semibold">
               Items <span className="text-destructive">*</span>
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setRows((rs) => [...rs, newRow()])}
-            >
-              <Plus className="h-3 w-3" />
-              Add Item
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" asChild>
+                <Link href="/inventory/products/new">
+                  <Plus className="h-3 w-3" />
+                  Add Product
+                </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setRows((rs) => [...rs, newRow()])}
+              >
+                <Plus className="h-3 w-3" />
+                Add Item
+              </Button>
+            </div>
           </div>
           <div className="space-y-3">
             {rows.map((r, idx) => (
@@ -159,16 +179,35 @@ export function RequisitionForm({
                 className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 items-end"
               >
                 <div>
-                  {idx === 0 && <Label className="text-xs">Product name</Label>}
-                  <Input
-                    value={r.productName}
-                    onChange={(e) =>
+                  {idx === 0 && <Label className="text-xs">Product</Label>}
+                  <select
+                    value={r.productId}
+                    onChange={(e) => {
+                      const product = products.find((x) => x.id === e.target.value);
                       setRows((rs) =>
-                        rs.map((x) => (x.key === r.key ? { ...x, productName: e.target.value } : x)),
-                      )
-                    }
-                    placeholder="e.g. Full grain leather"
-                  />
+                        rs.map((x) =>
+                          x.key === r.key
+                            ? {
+                                ...x,
+                                productId: e.target.value,
+                                productName: product?.name ?? '',
+                                unit: (UNITS.includes(product?.unit as (typeof UNITS)[number])
+                                  ? product?.unit
+                                  : 'PCS') as Row['unit'],
+                              }
+                            : x,
+                        ),
+                      );
+                    }}
+                    className={selectClass}
+                  >
+                    <option value="">— select product —</option>
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.sku} · {product.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   {idx === 0 && <Label className="text-xs">Quantity</Label>}

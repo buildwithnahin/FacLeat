@@ -15,6 +15,12 @@ export const UNITS = [
 ] as const;
 
 export const PRIORITY = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
+export const PURCHASE_ACCOUNT_CATEGORIES = [
+  'INVENTORY',
+  'ADMINISTRATIVE_EXPENSE',
+  'SALES_AND_DISTRIBUTIVE',
+  'ASSET',
+] as const;
 
 // ─── Purchase Requisition ────────────────────────────────────────────────────
 
@@ -50,6 +56,7 @@ export type RequisitionDecisionInput = z.infer<typeof requisitionDecisionSchema>
 
 export const poItemSchema = z.object({
   productId: z.string().cuid('Select a product'),
+  accountCategory: z.enum(PURCHASE_ACCOUNT_CATEGORIES).default('INVENTORY'),
   size: z.string().trim().max(32).optional().or(z.literal('')),
   description: z.string().trim().max(240).optional().or(z.literal('')),
   unit: z.enum(UNITS).default('PCS'),

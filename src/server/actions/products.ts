@@ -23,7 +23,7 @@ function parseForm(formData: FormData) {
     brandId: formData.get('brandId') ?? '',
     costPrice: formData.get('costPrice') ?? '0',
     sellPrice: formData.get('sellPrice') ?? '0',
-    taxRate: formData.get('taxRate') ?? '0',
+    taxRate: formData.get('taxRate') ?? '15',
     reorderLevel: formData.get('reorderLevel') ?? '0',
     reorderQty: formData.get('reorderQty') ?? '0',
     isActive: formData.get('isActive') !== 'off',
