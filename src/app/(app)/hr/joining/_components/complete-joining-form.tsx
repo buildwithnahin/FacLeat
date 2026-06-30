@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { completeJoiningAction, type ActionState } from '@/server/actions/hr-recruitment';
+import { DEFAULT_EMPLOYMENT_TYPES } from '@/server/validators/hr';
 import { CheckSquare } from 'lucide-react';
 
 interface BranchOption {
@@ -21,15 +22,39 @@ interface AcceptedOffer {
   metadata: any;
 }
 
+interface ShiftOption {
+  id: string;
+  name: string;
+  code: string;
+  startTime: string;
+  endTime: string;
+  branchId: string;
+  branch: {
+    name: string;
+    code: string;
+  };
+}
+
 interface Props {
   acceptedOffers: AcceptedOffer[];
   branches: BranchOption[];
+  shifts: ShiftOption[];
 }
 
-export function CompleteJoiningForm({ acceptedOffers, branches }: Props) {
+function formatTime(value: string) {
+  const [hourText, minute] = value.split(':');
+  const hour = Number(hourText);
+  if (Number.isNaN(hour) || !minute) return value;
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  const normalizedHour = hour % 12 || 12;
+  return `${String(normalizedHour).padStart(2, '0')}:${minute} ${suffix}`;
+}
+
+export function CompleteJoiningForm({ acceptedOffers, branches, shifts }: Props) {
   const [selectedOfferId, setSelectedOfferId] = useState<string>('');
   const [empIdInput, setEmpIdInput] = useState<string>('');
-  
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
+
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     completeJoiningAction,
     undefined
@@ -55,11 +80,13 @@ export function CompleteJoiningForm({ acceptedOffers, branches }: Props) {
   // Find selected offer details
   const selectedOffer = acceptedOffers.find((o) => o.id === selectedOfferId);
   const metadata = selectedOffer?.metadata || {};
+  const availableShifts = selectedBranchId ? shifts.filter((shift) => shift.branchId === selectedBranchId) : shifts;
 
   useEffect(() => {
     if (state?.success && formRef.current) {
       formRef.current.reset();
       setSelectedOfferId('');
+      setSelectedBranchId('');
       setChecklist({
         docsUploaded: false,
         contractSigned: false,
@@ -87,7 +114,7 @@ export function CompleteJoiningForm({ acceptedOffers, branches }: Props) {
             <option value="">Select candidate offer...</option>
             {acceptedOffers.map((o) => (
               <option key={o.id} value={o.id}>
-                {metadata.candidateName || 'Candidate'} - {o.subject}
+                {((o.metadata as Record<string, unknown> | null)?.candidateName as string | undefined) || o.title || 'Candidate'} - {o.subject}
               </option>
             ))}
           </select>
@@ -111,6 +138,8 @@ export function CompleteJoiningForm({ acceptedOffers, branches }: Props) {
             id="branchId"
             name="branchId"
             required
+            value={selectedBranchId}
+            onChange={(e) => setSelectedBranchId(e.target.value)}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
           >
             <option value="">Select branch...</option>
@@ -156,23 +185,27 @@ export function CompleteJoiningForm({ acceptedOffers, branches }: Props) {
               defaultValue="PERMANENT"
               className="flex h-8 w-full mt-1 rounded-md border border-input bg-transparent px-2 text-xs"
             >
-              <option value="PERMANENT">Permanent</option>
-              <option value="PROBATIONARY">Probationary</option>
-              <option value="CONTRACT">Contractual</option>
-              <option value="TEMPORARY">Temporary</option>
+              {DEFAULT_EMPLOYMENT_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type.replaceAll('_', ' ')}
+                </option>
+              ))}
             </select>
           </div>
           <div className="md:col-span-4">
             <span className="font-semibold text-muted-foreground block">Shift Assignment</span>
             <select
-              name="shift"
-              defaultValue="General Shift"
+              name="shiftId"
+              required
+              defaultValue=""
               className="flex h-8 w-full mt-1 rounded-md border border-input bg-transparent px-2 text-xs"
             >
-              <option value="General Shift">General Shift (09:00 AM - 05:00 PM)</option>
-              <option value="Morning Shift">Morning Shift (06:00 AM - 02:00 PM)</option>
-              <option value="Evening Shift">Evening Shift (02:00 PM - 10:00 PM)</option>
-              <option value="Night Shift">Night Shift (10:00 PM - 06:00 AM)</option>
+              <option value="">Select a shift...</option>
+              {availableShifts.map((shift) => (
+                <option key={shift.id} value={shift.id}>
+                  {shift.code} · {shift.name} · {formatTime(shift.startTime)}-{formatTime(shift.endTime)} · {shift.branch.code}
+                </option>
+              ))}
             </select>
           </div>
         </div>

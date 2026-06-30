@@ -31,6 +31,7 @@ export const employeeCreateSchema = z.object({
   designation: z.string().trim().max(80).optional().or(z.literal('')),
   department: z.string().trim().max(80).optional().or(z.literal('')),
   employmentType: z.string().trim().max(80).optional().or(z.literal('')),
+  shiftId: z.string().cuid().optional().or(z.literal('')),
   reportingManagerId: z.string().cuid().optional().or(z.literal('')),
   systemRoleId: z.string().cuid().optional().or(z.literal('')),
   joinedAt: z.coerce.date(),
@@ -92,20 +93,36 @@ export const hrMasterDataCreateSchema = z.object({
   status: z.string().trim().min(1).max(40).default('ACTIVE'),
 });
 
+export const hrMasterDataUpdateSchema = hrMasterDataCreateSchema.extend({
+  id: z.string().cuid(),
+});
+
+const hrWorkflowRecordFields = {
+  section: z.string().trim().min(1).max(80),
+  branchId: z.string().cuid().optional().or(z.literal('')),
+  employeeId: z.string().cuid().optional().or(z.literal('')),
+  title: z.string().trim().min(1).max(160),
+  subject: z.string().trim().max(160).optional().or(z.literal('')),
+  status: z.string().trim().min(1).max(40).default('OPEN'),
+  priority: z.string().trim().min(1).max(40).default('NORMAL'),
+  startDate: z.coerce.date().optional().or(z.literal('')),
+  endDate: z.coerce.date().optional().or(z.literal('')),
+  amount: z.coerce.number().finite().min(0).optional().or(z.literal('')),
+  owner: z.string().trim().max(120).optional().or(z.literal('')),
+  notes: z.string().trim().max(1000).optional().or(z.literal('')),
+} as const;
+
 export const hrWorkflowRecordCreateSchema = z
+  .object(hrWorkflowRecordFields)
+  .refine((v) => !v.startDate || !v.endDate || v.endDate >= v.startDate, {
+    message: 'End date must be on/after start date',
+    path: ['endDate'],
+  });
+
+export const hrWorkflowRecordUpdateSchema = z
   .object({
-    section: z.string().trim().min(1).max(80),
-    branchId: z.string().cuid().optional().or(z.literal('')),
-    employeeId: z.string().cuid().optional().or(z.literal('')),
-    title: z.string().trim().min(1).max(160),
-    subject: z.string().trim().max(160).optional().or(z.literal('')),
-    status: z.string().trim().min(1).max(40).default('OPEN'),
-    priority: z.string().trim().min(1).max(40).default('NORMAL'),
-    startDate: z.coerce.date().optional().or(z.literal('')),
-    endDate: z.coerce.date().optional().or(z.literal('')),
-    amount: z.coerce.number().finite().min(0).optional().or(z.literal('')),
-    owner: z.string().trim().max(120).optional().or(z.literal('')),
-    notes: z.string().trim().max(1000).optional().or(z.literal('')),
+    id: z.string().cuid(),
+    ...hrWorkflowRecordFields,
   })
   .refine((v) => !v.startDate || !v.endDate || v.endDate >= v.startDate, {
     message: 'End date must be on/after start date',
@@ -119,4 +136,6 @@ export type LeaveCreateInput = z.infer<typeof leaveCreateSchema>;
 export type LeaveDecisionInput = z.infer<typeof leaveDecisionSchema>;
 export type PayrollRunCreateInput = z.infer<typeof payrollRunCreateSchema>;
 export type HrMasterDataCreateInput = z.infer<typeof hrMasterDataCreateSchema>;
+export type HrMasterDataUpdateInput = z.infer<typeof hrMasterDataUpdateSchema>;
 export type HrWorkflowRecordCreateInput = z.infer<typeof hrWorkflowRecordCreateSchema>;
+export type HrWorkflowRecordUpdateInput = z.infer<typeof hrWorkflowRecordUpdateSchema>;

@@ -15,14 +15,14 @@ export const metadata = { title: 'New employee' };
 export default async function NewEmployeePage() {
   const session = await getSession();
   await authorize(session, 'hr:write');
-  const [branches, masterRows, managers, roles] = await Promise.all([
+  const [branches, masterRows, managers, roles, shifts] = await Promise.all([
     prisma.branch.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
       select: { id: true, code: true, name: true },
     }),
     prisma.hrMasterData.findMany({
-      where: { type: { in: ['departments', 'designations', 'employment-types'] }, status: 'ACTIVE' },
+      where: { type: { in: ['departments', 'designations'] }, status: 'ACTIVE' },
       orderBy: { name: 'asc' },
       select: { type: true, name: true },
     }),
@@ -35,6 +35,11 @@ export default async function NewEmployeePage() {
       where: { name: { in: [...ERP_ROLE_NAMES] } },
       orderBy: { name: 'asc' },
       select: { id: true, name: true },
+    }),
+    prisma.shift.findMany({
+      where: { status: 'ACTIVE' },
+      orderBy: [{ branch: { name: 'asc' } }, { name: 'asc' }],
+      select: { id: true, name: true, code: true, branch: { select: { code: true, name: true } } },
     }),
   ]);
   const valuesFor = (type: string, fallback: readonly string[]) => {
@@ -49,7 +54,11 @@ export default async function NewEmployeePage() {
         branches={branches}
         departments={valuesFor('departments', DEFAULT_DEPARTMENTS)}
         designations={valuesFor('designations', DEFAULT_DESIGNATIONS)}
-        employmentTypes={valuesFor('employment-types', DEFAULT_EMPLOYMENT_TYPES)}
+        employmentTypes={[...DEFAULT_EMPLOYMENT_TYPES]}
+        shifts={shifts.map((shift) => ({
+          id: shift.id,
+          label: `${shift.code} · ${shift.name} · ${shift.branch.code}`,
+        }))}
         managers={managers.map((m) => ({
           id: m.id,
           label: `${m.code} · ${m.firstName} ${m.lastName}${m.designation ? ` · ${m.designation}` : ''}`,

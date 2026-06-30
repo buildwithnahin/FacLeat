@@ -1,6 +1,7 @@
 import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
+import { countChargeableLeaveDays } from '@/server/services/holidays.service';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import { approvalService } from '@/server/services/approval.service';
@@ -10,10 +11,12 @@ import type {
   AttendanceMarkInput,
   EmployeeCreateInput,
   EmployeeUpdateInput,
+  HrMasterDataCreateInput,
+  HrMasterDataUpdateInput,
+  HrWorkflowRecordCreateInput,
+  HrWorkflowRecordUpdateInput,
   LeaveCreateInput,
   LeaveDecisionInput,
-  HrMasterDataCreateInput,
-  HrWorkflowRecordCreateInput,
   PayrollRunCreateInput,
 } from '@/server/validators/hr';
 
@@ -31,10 +34,6 @@ function parseTimeOn(dateStr: string, hhmm: string): Date | null {
   return d;
 }
 
-function daysInclusive(from: Date, to: Date) {
-  const ms = 1000 * 60 * 60 * 24;
-  return Math.floor((to.getTime() - from.getTime()) / ms) + 1;
-}
 
 function monthBounds(period: string) {
   const parts = period.split('-');
@@ -66,7 +65,7 @@ export const hrService = {
             ]
           : undefined,
       },
-      include: { branch: true, reportingManager: true, systemRole: true },
+      include: { branch: true, shift: true, reportingManager: true, systemRole: true },
       orderBy: [{ status: 'asc' }, { code: 'asc' }],
     });
   },
@@ -75,7 +74,7 @@ export const hrService = {
     await authorize(session, 'hr:read');
     const employee = await prisma.employee.findUnique({
       where: { id },
-      include: { branch: true, reportingManager: true, systemRole: true, user: true },
+      include: { branch: true, shift: true, reportingManager: true, systemRole: true, user: true },
     });
     if (!employee) throw new NotFoundError('Employee not found');
     return employee;
@@ -89,11 +88,17 @@ export const hrService = {
       const dupEmail = await prisma.employee.findUnique({ where: { email: input.email } });
       if (dupEmail) throw new ValidationError('Email already in use');
     }
+    if (input.shiftId) {
+      const shift = await prisma.shift.findUnique({ where: { id: input.shiftId } });
+      if (!shift) throw new ValidationError('Selected shift not found');
+      if (shift.branchId !== input.branchId) throw new ValidationError('Selected shift must belong to the employee branch');
+    }
 
     return prisma.$transaction(async (tx) => {
       const emp = await tx.employee.create({
         data: {
           branchId: input.branchId,
+          shiftId: input.shiftId || null,
           code: input.code,
           firstName: input.firstName,
           lastName: input.lastName,
@@ -132,6 +137,7 @@ export const hrService = {
             name: `${emp.firstName} ${emp.lastName}`,
             department: emp.department,
             designation: emp.designation,
+            shiftId: emp.shiftId,
             employmentType: emp.employmentType,
           },
         },
@@ -149,11 +155,17 @@ export const hrService = {
       const dup = await prisma.employee.findUnique({ where: { code: input.code } });
       if (dup && dup.id !== existing.id) throw new ValidationError('Employee code already exists');
     }
+    if (input.shiftId) {
+      const shift = await prisma.shift.findUnique({ where: { id: input.shiftId } });
+      if (!shift) throw new ValidationError('Selected shift not found');
+      if (shift.branchId !== input.branchId) throw new ValidationError('Selected shift must belong to the employee branch');
+    }
     return prisma.$transaction(async (tx) => {
       const emp = await tx.employee.update({
         where: { id: input.id },
         data: {
           branchId: input.branchId,
+          shiftId: input.shiftId || null,
           code: input.code,
           firstName: input.firstName,
           lastName: input.lastName,
@@ -191,6 +203,7 @@ export const hrService = {
             basic: existing.basicSalary.toString(),
             department: existing.department,
             designation: existing.designation,
+            shiftId: existing.shiftId,
             employmentType: existing.employmentType,
           },
           after: {
@@ -198,6 +211,7 @@ export const hrService = {
             basic: emp.basicSalary.toString(),
             department: emp.department,
             designation: emp.designation,
+            shiftId: emp.shiftId,
             employmentType: emp.employmentType,
           },
         },
@@ -230,33 +244,92 @@ export const hrService = {
   async createMasterData(session: AppSession | null, input: HrMasterDataCreateInput) {
     const actor = await authorize(session, 'hr:write');
 
-    return prisma.$transaction(async (tx) => {
-      const row = await tx.hrMasterData.create({
-        data: {
-          branchId: input.branchId || null,
-          type: input.type,
-          code: input.code || null,
-          name: input.name,
-          description: input.description || null,
-          status: input.status || 'ACTIVE',
-          createdById: actor.userId,
-          updatedById: actor.userId,
-        },
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const row = await tx.hrMasterData.create({
+          data: {
+            branchId: input.branchId || null,
+            type: input.type,
+            code: input.code || null,
+            name: input.name,
+            description: input.description || null,
+            status: input.status || 'ACTIVE',
+            createdById: actor.userId,
+            updatedById: actor.userId,
+          },
+        });
+        await recordAudit(
+          {
+            actorId: actor.userId,
+            branchId: input.branchId || null,
+            module: 'hr',
+            action: 'create-master-data',
+            entityType: 'HrMasterData',
+            entityId: row.id,
+            after: { type: row.type, code: row.code, name: row.name },
+          },
+          tx,
+        );
+        return row;
       });
-      await recordAudit(
-        {
-          actorId: actor.userId,
-          branchId: input.branchId || null,
-          module: 'hr',
-          action: 'create-master-data',
-          entityType: 'HrMasterData',
-          entityId: row.id,
-          after: { type: row.type, code: row.code, name: row.name },
-        },
-        tx,
-      );
-      return row;
-    });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ValidationError('Code already exists for this HR section');
+      }
+      throw error;
+    }
+  },
+
+  async updateMasterData(session: AppSession | null, input: HrMasterDataUpdateInput) {
+    const actor = await authorize(session, 'hr:write');
+    const existing = await prisma.hrMasterData.findUnique({ where: { id: input.id } });
+    if (!existing) throw new NotFoundError('HR master data record not found');
+
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const row = await tx.hrMasterData.update({
+          where: { id: input.id },
+          data: {
+            branchId: input.branchId || null,
+            type: input.type,
+            code: input.code || null,
+            name: input.name,
+            description: input.description || null,
+            status: input.status || 'ACTIVE',
+            updatedById: actor.userId,
+          },
+        });
+        await recordAudit(
+          {
+            actorId: actor.userId,
+            branchId: row.branchId,
+            module: 'hr',
+            action: 'update-master-data',
+            entityType: 'HrMasterData',
+            entityId: row.id,
+            before: {
+              branchId: existing.branchId,
+              code: existing.code,
+              name: existing.name,
+              status: existing.status,
+            },
+            after: {
+              branchId: row.branchId,
+              code: row.code,
+              name: row.name,
+              status: row.status,
+            },
+          },
+          tx,
+        );
+        return row;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ValidationError('Code already exists for this HR section');
+      }
+      throw error;
+    }
   },
 
   async listWorkflowRecords(
@@ -317,6 +390,57 @@ export const hrService = {
     });
   },
 
+  async updateWorkflowRecord(session: AppSession | null, input: HrWorkflowRecordUpdateInput) {
+    const actor = await authorize(session, 'hr:write');
+    const existing = await prisma.hrWorkflowRecord.findUnique({ where: { id: input.id } });
+    if (!existing) throw new NotFoundError('HR workflow record not found');
+
+    return prisma.$transaction(async (tx) => {
+      const row = await tx.hrWorkflowRecord.update({
+        where: { id: input.id },
+        data: {
+          branchId: input.branchId || null,
+          employeeId: input.employeeId || null,
+          section: input.section,
+          title: input.title,
+          subject: input.subject || null,
+          status: input.status || 'OPEN',
+          priority: input.priority || 'NORMAL',
+          startDate: input.startDate instanceof Date ? input.startDate : null,
+          endDate: input.endDate instanceof Date ? input.endDate : null,
+          amount: typeof input.amount === 'number' ? D(input.amount) : null,
+          owner: input.owner || null,
+          notes: input.notes || null,
+          updatedById: actor.userId,
+        },
+      });
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: row.branchId,
+          module: 'hr',
+          action: 'update-workflow-record',
+          entityType: 'HrWorkflowRecord',
+          entityId: row.id,
+          before: {
+            employeeId: existing.employeeId,
+            title: existing.title,
+            status: existing.status,
+            priority: existing.priority,
+          },
+          after: {
+            employeeId: row.employeeId,
+            title: row.title,
+            status: row.status,
+            priority: row.priority,
+          },
+        },
+        tx,
+      );
+      return row;
+    });
+  },
+
   // ─── Attendance ───────────────────────────────────────────────────────────
   async markAttendance(session: AppSession | null, input: AttendanceMarkInput) {
     const actor = await authorize(session, 'hr:attendance');
@@ -366,9 +490,9 @@ export const hrService = {
   // ─── Leave ────────────────────────────────────────────────────────────────
   async createLeave(session: AppSession | null, input: LeaveCreateInput) {
     const actor = await authorize(session, 'hr:write');
-    const days = daysInclusive(input.fromDate, input.toDate);
     const emp = await prisma.employee.findUnique({ where: { id: input.employeeId } });
     if (!emp) throw new NotFoundError('Employee not found');
+    const days = await countChargeableLeaveDays(input.fromDate, input.toDate, emp.branchId);
 
     return prisma.$transaction(async (tx) => {
       const lr = await tx.leaveRequest.create({
@@ -491,9 +615,9 @@ export const hrService = {
     });
     if (employees.length === 0) throw new ValidationError('No active employees in this branch');
 
-    // Pre-compute attendance / leave day counts per employee.
+    // Pre-compute attendance / leave day counts per employee, taking holidays into account.
     const employeeIds = employees.map((e) => e.id);
-    const [attendance, leaves] = await Promise.all([
+    const [attendance, leaves, activeHolidays] = await Promise.all([
       prisma.attendanceRecord.findMany({
         where: { employeeId: { in: employeeIds }, date: { gte: start, lte: end } },
       }),
@@ -503,6 +627,13 @@ export const hrService = {
           status: 'APPROVED',
           fromDate: { lte: end },
           toDate: { gte: start },
+        },
+      }),
+      prisma.holiday.findMany({
+        where: {
+          startDate: { lte: end },
+          endDate: { gte: start },
+          status: 'ACTIVE',
         },
       }),
     ]);
@@ -516,7 +647,32 @@ export const hrService = {
     for (const l of leaves) {
       const s = l.fromDate < start ? start : l.fromDate;
       const e = l.toDate > end ? end : l.toDate;
-      const d = daysInclusive(s, e);
+      
+      const emp = employees.find((emp) => emp.id === l.employeeId);
+      const empBranchId = emp?.branchId ?? null;
+      
+      const holidayDates = new Set<string>();
+      for (const h of activeHolidays) {
+        if (h.branchId !== null && h.branchId !== empBranchId) continue;
+        const hStart = new Date(Math.max(h.startDate.getTime(), s.getTime()));
+        const hEnd = new Date(Math.min(h.endDate.getTime(), e.getTime()));
+        const cursor = new Date(hStart);
+        while (cursor <= hEnd) {
+          holidayDates.add(cursor.toISOString().slice(0, 10));
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      }
+      
+      let d = 0;
+      const cursor = new Date(s);
+      const endCursor = new Date(e);
+      while (cursor <= endCursor) {
+        const key = cursor.toISOString().slice(0, 10);
+        if (!holidayDates.has(key)) {
+          d++;
+        }
+        cursor.setDate(cursor.getDate() + 1);
+      }
       leaveDaysByEmp.set(l.employeeId, (leaveDaysByEmp.get(l.employeeId) ?? 0) + d);
     }
 
@@ -548,8 +704,40 @@ export const hrService = {
         const effectiveWorked = fullDays + halfDays * 0.5;
         const workedDays = Math.min(workingDays, Math.max(0, effectiveWorked));
 
-        // Prorate salary by (worked + paid leave) / workingDays.
-        const paidRatio = D(workedDays + leaveDays).div(workingDays).toNumber();
+        // Count paid holidays in this period that apply to this employee's branch
+        const empHolidays = activeHolidays.filter(
+          (h) => h.branchId === null || h.branchId === emp.branchId
+        );
+        
+        // Paid holidays where employee was not marked present/late/half_day
+        let paidHolidaysCount = 0;
+        const processedHolidayDates = new Set<string>();
+        for (const h of empHolidays) {
+          if (!h.isPaid) continue;
+          const hStart = new Date(Math.max(h.startDate.getTime(), start.getTime()));
+          const hEnd = new Date(Math.min(h.endDate.getTime(), end.getTime()));
+          const cursor = new Date(hStart);
+          while (cursor <= hEnd) {
+            const dateStr = cursor.toISOString().slice(0, 10);
+            if (!processedHolidayDates.has(dateStr)) {
+              processedHolidayDates.add(dateStr);
+              const attOnHoliday = att.find(
+                (a) => a.date.toISOString().slice(0, 10) === dateStr
+              );
+              if (
+                !attOnHoliday ||
+                ['HOLIDAY', 'ABSENT', 'ON_LEAVE'].includes(attOnHoliday.status)
+              ) {
+                paidHolidaysCount++;
+              }
+            }
+            cursor.setDate(cursor.getDate() + 1);
+          }
+        }
+
+        // Prorate salary by (worked + paid leave + paid holidays) / workingDays.
+        const paidDays = Math.min(workingDays, workedDays + leaveDays + paidHolidaysCount);
+        const paidRatio = D(paidDays).div(workingDays).toNumber();
 
         const basic = emp.basicSalary.mul(D(paidRatio));
         const ha = emp.houseAllowance.mul(D(paidRatio));

@@ -4,7 +4,8 @@
   "private": true,
   "description": "Annex Leather ERP — Next.js 15 + PostgreSQL + Prisma + shadcn/ui",
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/start-dev.mjs",
+    "dev:next": "next dev",
     "build": "prisma generate && next build",
     "postinstall": "prisma generate",
     "start": "next start",

@@ -743,6 +743,51 @@ async function main() {
   }
   console.log(`  ✓ ${SAMPLE_EMPLOYEES.length} employees`);
 
+  // Seed sample contracts
+  const createdEmployees = await prisma.employee.findMany();
+  const shifts = await prisma.shift.findMany();
+  const activeShift = shifts[0];
+
+  const contractTypes = ['CONTRACT', 'PROBATION', 'INTERNSHIP', 'PERMANENT'];
+
+  for (let i = 0; i < createdEmployees.length; i++) {
+    const emp = createdEmployees[i];
+    const type = contractTypes[i % contractTypes.length];
+    const status = i === 1 ? 'EXPIRED' : (i === 2 ? 'DRAFT' : 'ACTIVE');
+
+    const startDate = new Date();
+    startDate.setFullYear(startDate.getFullYear() - 1);
+    
+    const endDate = new Date();
+    if (i === 0) {
+      endDate.setDate(endDate.getDate() + 15); // Expiring in 15 days
+    } else {
+      endDate.setFullYear(endDate.getFullYear() + 1);
+    }
+
+    await prisma.contract.upsert({
+      where: { contractNo: `CNT-2026-${(i + 1).toString().padStart(4, '0')}` },
+      update: {},
+      create: {
+        contractNo: `CNT-2026-${(i + 1).toString().padStart(4, '0')}`,
+        employeeId: emp.id,
+        branchId: emp.branchId,
+        department: emp.department,
+        designation: emp.designation,
+        contractType: type,
+        startDate,
+        endDate: type === 'PERMANENT' ? null : endDate,
+        basicSalary: emp.basicSalary,
+        allowances: emp.houseAllowance.plus(emp.transportAllowance).plus(emp.medicalAllowance),
+        shiftId: activeShift?.id || null,
+        weeklyOff: 'Friday',
+        status,
+        notes: `Sample ${type.toLowerCase()} contract for ${emp.firstName}`,
+      },
+    });
+  }
+  console.log(`  ✓ ${createdEmployees.length} employee contracts seeded`);
+
   // 17. Approval rules
   for (const rule of APPROVAL_RULES) {
     await prisma.approvalRule.upsert({
@@ -928,6 +973,77 @@ async function main() {
     }
   }
   console.log(`  ✓ ${COA.length} chart-of-account rows + system mappings`);
+
+  // 19. Demo Holidays
+  const demoHolidays = [
+    {
+      name: 'Eid ul-Fitr',
+      code: 'EID_UL_FITR_2026',
+      startDate: new Date('2026-03-20T00:00:00Z'),
+      endDate: new Date('2026-03-22T00:00:00Z'),
+      type: 'RELIGIOUS_HOLIDAY',
+      branchId: null,
+      isPaid: true,
+      status: 'ACTIVE',
+    },
+    {
+      name: 'Eid ul-Adha',
+      code: 'EID_UL_ADHA_2026',
+      startDate: new Date('2026-05-28T00:00:00Z'),
+      endDate: new Date('2026-05-30T00:00:00Z'),
+      type: 'RELIGIOUS_HOLIDAY',
+      branchId: null,
+      isPaid: true,
+      status: 'ACTIVE',
+    },
+    {
+      name: 'Victory Day',
+      code: 'VICTORY_DAY',
+      startDate: new Date('2026-12-16T00:00:00Z'),
+      endDate: new Date('2026-12-16T00:00:00Z'),
+      type: 'GOVERNMENT_HOLIDAY',
+      branchId: null,
+      isPaid: true,
+      status: 'ACTIVE',
+    },
+    {
+      name: 'Independence Day',
+      code: 'INDEPENDENCE_DAY',
+      startDate: new Date('2026-03-26T00:00:00Z'),
+      endDate: new Date('2026-03-26T00:00:00Z'),
+      type: 'GOVERNMENT_HOLIDAY',
+      branchId: null,
+      isPaid: true,
+      status: 'ACTIVE',
+    },
+    {
+      name: 'Pohela Boishakh',
+      code: 'POHELA_BOISHAKH',
+      startDate: new Date('2026-04-14T00:00:00Z'),
+      endDate: new Date('2026-04-14T00:00:00Z'),
+      type: 'FESTIVAL_HOLIDAY',
+      branchId: null,
+      isPaid: true,
+      status: 'ACTIVE',
+    },
+  ];
+
+  for (const h of demoHolidays) {
+    await prisma.holiday.upsert({
+      where: { code: h.code },
+      update: {
+        name: h.name,
+        startDate: h.startDate,
+        endDate: h.endDate,
+        type: h.type,
+        branchId: h.branchId,
+        isPaid: h.isPaid,
+        status: h.status,
+      },
+      create: h,
+    });
+  }
+  console.log(`  ✓ ${demoHolidays.length} demo holidays seeded`);
 
   console.log('\n🎉 Seed complete!');
   console.log('\n📋 Login credentials:');

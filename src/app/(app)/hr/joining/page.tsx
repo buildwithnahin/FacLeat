@@ -35,6 +35,20 @@ export default async function JoiningPage() {
     orderBy: { name: 'asc' },
   });
 
+  const shifts = await prisma.shift.findMany({
+    where: { status: 'ACTIVE' },
+    orderBy: [{ branch: { name: 'asc' } }, { name: 'asc' }],
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      startTime: true,
+      endTime: true,
+      branchId: true,
+      branch: { select: { name: true, code: true } },
+    },
+  });
+
   const serializedAcceptedOffers = acceptedOffers.map((o) => ({
     id: o.id,
     title: o.title,
@@ -97,6 +111,7 @@ export default async function JoiningPage() {
               <CompleteJoiningForm
                 acceptedOffers={serializedAcceptedOffers}
                 branches={branches}
+                shifts={shifts}
               />
             )}
           </CardContent>

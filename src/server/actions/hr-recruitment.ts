@@ -629,12 +629,13 @@ export async function completeJoiningAction(_prev: ActionState, fd: FormData): P
     const branchId = String(fd.get('branchId') || '');
     const designation = String(fd.get('designation') || '').trim();
     const department = String(fd.get('department') || '').trim();
-    const shift = String(fd.get('shift') || 'General Shift').trim();
+    const shiftId = String(fd.get('shiftId') || '');
     const employmentType = String(fd.get('employmentType') || 'PERMANENT');
 
     if (!offerId) return { error: 'Job offer reference is required' };
     if (!employeeCode) return { error: 'Employee ID code is required' };
     if (!branchId) return { error: 'Branch assignment is required' };
+    if (!shiftId) return { error: 'Shift assignment is required' };
 
     const offer = await prisma.hrWorkflowRecord.findUnique({ where: { id: offerId } });
     if (!offer || offer.section !== 'job-offers') {
@@ -657,6 +658,12 @@ export async function completeJoiningAction(_prev: ActionState, fd: FormData): P
     const lastName = nameParts.slice(1).join(' ') || 'Record';
 
     const candidateMeta = (candidate.metadata as Record<string, any>) || {};
+    const shift = await prisma.shift.findUnique({
+      where: { id: shiftId },
+      select: { id: true, name: true, code: true, branchId: true },
+    });
+    if (!shift) return { error: 'Selected shift was not found' };
+    if (shift.branchId !== branchId) return { error: 'Selected shift does not belong to the chosen branch' };
 
     const salary = Number(offer.amount || 0);
 
@@ -669,6 +676,8 @@ export async function completeJoiningAction(_prev: ActionState, fd: FormData): P
       phone: candidateMeta.phone || '',
       designation: designation || candidate.subject || '',
       department: department || candidateMeta.department || 'Production',
+      employmentType,
+      shiftId: shift.id,
       joinedAt: offer.startDate || new Date(),
       status: 'ACTIVE' as const,
       basicSalary: salary,
@@ -702,12 +711,15 @@ export async function completeJoiningAction(_prev: ActionState, fd: FormData): P
           status: 'Completed',
           startDate: offer.startDate,
           amount: salary,
-          notes: `Joined as ${designation} in ${department}. Employment Type: ${employmentType}. Shift: ${shift}`,
+          notes: `Joined as ${designation} in ${department}. Employment Type: ${employmentType}. Shift: ${shift.name} (${shift.code})`,
           metadata: {
             candidateId,
             offerId,
             employeeId: emp.id,
             employeeCode: emp.code,
+            employmentType,
+            shiftId: shift.id,
+            shiftName: shift.name,
             checklist: {
               documentsUploaded: true,
               accountCreated: true,

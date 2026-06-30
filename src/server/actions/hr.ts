@@ -9,7 +9,9 @@ import {
   employeeCreateSchema,
   employeeUpdateSchema,
   hrMasterDataCreateSchema,
+  hrMasterDataUpdateSchema,
   hrWorkflowRecordCreateSchema,
+  hrWorkflowRecordUpdateSchema,
   leaveCreateSchema,
   leaveDecisionSchema,
   payrollRunCreateSchema,
@@ -32,6 +34,7 @@ function parseEmployeeForm(fd: FormData) {
     designation: fd.get('designation') ?? '',
     department: fd.get('department') ?? '',
     employmentType: fd.get('employmentType') ?? '',
+    shiftId: fd.get('shiftId') ?? '',
     reportingManagerId: fd.get('reportingManagerId') ?? '',
     systemRoleId: fd.get('systemRoleId') ?? '',
     joinedAt: fd.get('joinedAt'),
@@ -216,6 +219,61 @@ export async function createHrWorkflowRecordAction(_prev: FormState, fd: FormDat
     const row = await hrService.createWorkflowRecord(session, parsed.data);
     revalidatePath(path);
     return { success: true, id: row.id };
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    throw e;
+  }
+}
+
+export async function updateHrMasterDataAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const path = String(fd.get('path') ?? '/hr');
+  const parsed = hrMasterDataUpdateSchema.safeParse({
+    id: fd.get('id'),
+    type: fd.get('type'),
+    branchId: fd.get('branchId') ?? '',
+    code: fd.get('code') ?? '',
+    name: fd.get('name'),
+    description: fd.get('description') ?? '',
+    status: fd.get('status') ?? 'ACTIVE',
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+
+  try {
+    const session = await getSession();
+    await hrService.updateMasterData(session, parsed.data);
+    revalidatePath(path);
+    if (parsed.data.type === 'departments') revalidatePath('/hr/recruitment');
+    redirect(path);
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    throw e;
+  }
+}
+
+export async function updateHrWorkflowRecordAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const path = String(fd.get('path') ?? '/hr');
+  const parsed = hrWorkflowRecordUpdateSchema.safeParse({
+    id: fd.get('id'),
+    section: fd.get('section'),
+    branchId: fd.get('branchId') ?? '',
+    employeeId: fd.get('employeeId') ?? '',
+    title: fd.get('title'),
+    subject: fd.get('subject') ?? '',
+    status: fd.get('status') ?? 'OPEN',
+    priority: fd.get('priority') ?? 'NORMAL',
+    startDate: fd.get('startDate') ?? '',
+    endDate: fd.get('endDate') ?? '',
+    amount: fd.get('amount') ?? '',
+    owner: fd.get('owner') ?? '',
+    notes: fd.get('notes') ?? '',
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+
+  try {
+    const session = await getSession();
+    await hrService.updateWorkflowRecord(session, parsed.data);
+    revalidatePath(path);
+    redirect(path);
   } catch (e) {
     if (e instanceof ApiError) return { error: e.message };
     throw e;

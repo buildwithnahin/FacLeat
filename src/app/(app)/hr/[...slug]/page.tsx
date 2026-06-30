@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getSession } from '@/server/auth/session';
 import { authorize } from '@/server/auth/authorize';
 import { hrService } from '@/server/services/hr.service';
@@ -66,19 +66,6 @@ const SECTION_CONFIG: Record<
     description: 'Maintain grade, position, and title structure for HR and payroll operations.',
     category: 'Organization',
     highlights: ['Role hierarchy', 'Title standardization', 'Employee assignment consistency'],
-  },
-  'employment-types': {
-    title: 'Employment Types',
-    description: 'Configure whether employees are permanent, probationary, contract, or temporary.',
-    category: 'Organization',
-    highlights: ['Policy and benefit grouping', 'Contractual distinction', 'Payroll rule support'],
-  },
-  shifts: {
-    title: 'Shifts',
-    description: 'Set working shifts for attendance rules, late tracking, and overtime calculation.',
-    category: 'Organization',
-    highlights: ['Shift master', 'Attendance benchmark', 'Late and overtime rule base'],
-    links: [{ label: 'Attendance', href: '/hr/attendance' }],
   },
   'holiday-calendar': {
     title: 'Holiday Calendar',
@@ -315,17 +302,27 @@ const SECTION_CONFIG: Record<
 const MASTER_SECTIONS = new Set([
   'departments',
   'designations',
-  'employment-types',
-  'shifts',
   'holiday-calendar',
   'leave-policy',
   'kpi',
   'salary-structure',
 ]);
 
-export default async function HrSectionPage({ params }: { params: Promise<{ slug: string[] }> }) {
+export default async function HrSectionPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string[] }>;
+  searchParams: Promise<{ edit?: string }>;
+}) {
   const { slug } = await params;
+  const { edit } = await searchParams;
   const key = slug.join('/');
+
+  if (key === 'holiday-calendar') {
+    redirect('/hr/holidays');
+  }
+
   const config = SECTION_CONFIG[key];
 
   if (!config) notFound();
@@ -347,6 +344,9 @@ export default async function HrSectionPage({ params }: { params: Promise<{ slug
     kind === 'workflow' ? hrService.listWorkflowRecords(session, { section: key, branchId: session?.activeBranchId ?? undefined }) : Promise.resolve([]),
   ]);
 
+  const editMasterRow = kind === 'master' && edit ? masterRows.find((row) => row.id === edit) ?? null : null;
+  const editWorkflowRow = kind === 'workflow' && edit ? workflowRows.find((row) => row.id === edit) ?? null : null;
+
   return (
     <HrSectionShell
       {...config}
@@ -359,6 +359,37 @@ export default async function HrSectionPage({ params }: { params: Promise<{ slug
         id: employee.id,
         label: `${employee.code} · ${employee.firstName} ${employee.lastName}`,
       }))}
+      editId={editMasterRow?.id ?? editWorkflowRow?.id ?? null}
+      editMasterRow={
+        editMasterRow
+          ? {
+              id: editMasterRow.id,
+              branchId: editMasterRow.branchId,
+              code: editMasterRow.code,
+              name: editMasterRow.name,
+              description: editMasterRow.description,
+              status: editMasterRow.status,
+            }
+          : null
+      }
+      editWorkflowRow={
+        editWorkflowRow
+          ? {
+              id: editWorkflowRow.id,
+              branchId: editWorkflowRow.branchId,
+              employeeId: editWorkflowRow.employeeId,
+              title: editWorkflowRow.title,
+              subject: editWorkflowRow.subject,
+              status: editWorkflowRow.status,
+              priority: editWorkflowRow.priority,
+              startDate: editWorkflowRow.startDate,
+              endDate: editWorkflowRow.endDate,
+              amount: editWorkflowRow.amount?.toString() ?? '',
+              owner: editWorkflowRow.owner,
+              notes: editWorkflowRow.notes,
+            }
+          : null
+      }
       masterRows={masterRows}
       workflowRows={workflowRows}
     />

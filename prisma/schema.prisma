@@ -530,12 +530,15 @@ model Branch {
   chartAccounts               ChartAccount[]
   journalEntries              JournalEntry[]
   employees                   Employee[]
+  shifts                      Shift[]
+  holidays                    Holiday[]
   hrMasterData                HrMasterData[]
   hrWorkflowRecords           HrWorkflowRecord[]
   payrollRuns                 PayrollRun[]
   tradeOrders                 TradeOrder[]
   lettersOfCredit             LetterOfCredit[]
   tradePayments               TradePayment[]
+  contracts                   Contract[]
   ecommerceChannels           EcommerceChannel[]
   ecommerceOrders             EcommerceOrder[]
   ecommerceFulfillments       EcommerceFulfillment[]
@@ -2666,6 +2669,8 @@ model Employee {
   id          String           @id @default(cuid())
   branchId    String
   branch      Branch           @relation(fields: [branchId], references: [id])
+  shiftId     String?
+  shift       Shift?           @relation(fields: [shiftId], references: [id], onDelete: SetNull)
   reportingManagerId String?
   reportingManager   Employee?  @relation("EmployeeReportingManager", fields: [reportingManagerId], references: [id], onDelete: SetNull)
   directReports      Employee[] @relation("EmployeeReportingManager")
@@ -2699,6 +2704,7 @@ model Employee {
   leaves     LeaveRequest[]
   payslips   Payslip[]
   hrWorkflowRecords HrWorkflowRecord[]
+  contracts          Contract[]
 
   createdById String?
   updatedById String?
@@ -2709,8 +2715,69 @@ model Employee {
   @@index([department])
   @@index([designation])
   @@index([employmentType])
+  @@index([shiftId])
   @@index([reportingManagerId])
   @@index([systemRoleId])
+}
+
+model Shift {
+  id                    String   @id @default(cuid())
+  branchId              String
+  branch                Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  name                  String
+  code                  String
+  status                String   @default("ACTIVE")
+  description           String?
+  shiftType             String
+  startTime             String
+  endTime               String
+  breakStart            String?
+  breakEnd              String?
+  lateGraceMinutes      Int      @default(0)
+  earlyExitGraceMinutes Int      @default(0)
+  minPresentMinutes     Int
+  minHalfDayMinutes     Int
+  absentBelowMinutes    Int
+  overtimeAllowed       Boolean  @default(false)
+  otStartsAfter         String?
+  minOtMinutes          Int      @default(0)
+  maxOtMinutesPerDay    Int      @default(0)
+  weeklyOffDays         Json?
+
+  employees             Employee[]
+  contracts             Contract[]
+
+  createdById           String?
+  updatedById           String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([branchId, code])
+  @@index([branchId, status])
+  @@index([branchId, name])
+}
+
+model Holiday {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  startDate   DateTime @db.Date
+  endDate     DateTime @db.Date
+  type        String
+  branchId    String?
+  branch      Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  isPaid      Boolean  @default(true)
+  status      String   @default("ACTIVE")
+  description String?
+
+  createdById String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([startDate, endDate, status])
+  @@index([branchId, startDate, endDate])
+  @@index([type, status])
 }
 
 model HrMasterData {
@@ -2761,6 +2828,38 @@ model HrWorkflowRecord {
   @@index([employeeId, section])
   @@index([section, status])
   @@index([startDate])
+}
+
+model Contract {
+  id             String    @id @default(cuid())
+  contractNo     String    @unique
+  employeeId     String
+  employee       Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  branchId       String?
+  branch         Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  department     String?
+  designation    String?
+  contractType   String    // e.g. Contract, Probation, Internship, Permanent
+  startDate      DateTime  @db.Date
+  endDate        DateTime? @db.Date  // Nullable if permanent / no end date
+  basicSalary    Decimal   @db.Decimal(18, 2)
+  allowances     Decimal   @db.Decimal(18, 2) @default(0)
+  shiftId        String?
+  shift          Shift?    @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  weeklyOff      String    @default("Friday")
+  status         String    @default("DRAFT") // DRAFT, ACTIVE, EXPIRED, RENEWED, TERMINATED
+  attachmentUrl  String?   // URL or path to signed PDF contract
+  notes          String?
+
+  createdById    String?
+  updatedById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([employeeId])
+  @@index([branchId])
+  @@index([status])
+  @@index([endDate])
 }
 
 model AttendanceRecord {

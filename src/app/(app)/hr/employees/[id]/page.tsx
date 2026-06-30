@@ -14,6 +14,15 @@ import { Card, CardContent } from '@/components/ui/card';
 
 export const metadata = { title: 'Employee Profile' };
 
+function formatTime(value: string) {
+  const [hourText, minute] = value.split(':');
+  const hour = Number(hourText);
+  if (Number.isNaN(hour) || !minute) return value;
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  const normalizedHour = hour % 12 || 12;
+  return `${String(normalizedHour).padStart(2, '0')}:${minute} ${suffix}`;
+}
+
 const STATUS_VARIANT: Record<string, 'default' | 'outline' | 'success' | 'warning' | 'destructive'> = {
   ACTIVE: 'success',
   ON_LEAVE: 'warning',
@@ -139,7 +148,14 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
             value={employee.reportingManager ? `${employee.reportingManager.firstName} ${employee.reportingManager.lastName}` : '—'}
           />
           <InfoRow label="Role" value={employee.systemRole?.name ?? 'No system access role'} />
-          <InfoRow label="Shift" value="Not yet configured" />
+          <InfoRow
+            label="Shift"
+            value={
+              employee.shift
+                ? `${employee.shift.name} (${formatTime(employee.shift.startTime)}–${formatTime(employee.shift.endTime)})`
+                : '—'
+            }
+          />
         </SectionCard>
 
         <SectionCard title="Salary Information">

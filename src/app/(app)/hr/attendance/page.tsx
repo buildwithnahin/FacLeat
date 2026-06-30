@@ -1,5 +1,6 @@
 import { getSession } from '@/server/auth/session';
 import { hrService } from '@/server/services/hr.service';
+import { holidaysService } from '@/server/services/holidays.service';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -29,9 +30,10 @@ export default async function AttendancePage({
   const dateStr = sp.date ?? new Date().toISOString().slice(0, 10);
   const day = new Date(dateStr);
   const session = await getSession();
-  const [employees, records] = await Promise.all([
+  const [employees, records, holidays] = await Promise.all([
     hrService.listEmployees(session, { status: 'ACTIVE' }),
     hrService.listAttendance(session, { from: day, to: day }),
+    holidaysService.listOnDate(session, day),
   ]);
   const canMark = session?.permissions.includes('hr:attendance') ?? false;
   const byEmp = new Map(records.map((r) => [r.employeeId, r]));
@@ -57,6 +59,9 @@ export default async function AttendancePage({
               <tr>
                 <th className="text-left font-semibold px-4 py-3">Code</th>
                 <th className="text-left font-semibold px-4 py-3">Employee</th>
+                <th className="text-left font-semibold px-4 py-3">Check-in</th>
+                <th className="text-left font-semibold px-4 py-3">Check-out</th>
+                <th className="text-left font-semibold px-4 py-3">OT / Worked Hours</th>
                 <th className="text-left font-semibold px-4 py-3">Status</th>
                 {canMark && <th className="text-left font-semibold px-4 py-3">Mark</th>}
               </tr>
@@ -64,20 +69,47 @@ export default async function AttendancePage({
             <tbody className="divide-y">
               {employees.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                     No active employees.
                   </td>
                 </tr>
               )}
               {employees.map((e) => {
                 const r = byEmp.get(e.id);
+                const holiday = holidays.find(
+                  (h) => h.branchId === null || h.branchId === e.branchId,
+                );
+                
+                let otDisplay = '-';
+                if (r?.checkIn && r?.checkOut) {
+                  const diffHours = (r.checkOut.getTime() - r.checkIn.getTime()) / (1000 * 60 * 60);
+                  if (holiday) {
+                    otDisplay = `${Math.max(0, diffHours).toFixed(1)} hrs (Holiday OT)`;
+                  } else {
+                    otDisplay = `${Math.max(0, diffHours).toFixed(1)} hrs`;
+                  }
+                }
+
                 return (
                   <tr key={e.id} className="hover:bg-muted/30">
                     <td className="px-4 py-3 font-mono text-xs">{e.code}</td>
-                    <td className="px-4 py-3 font-medium">{e.firstName} {e.lastName}</td>
+                    <td className="px-4 py-3 font-medium">
+                      {e.firstName} {e.lastName}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs">
+                      {r?.checkIn ? r.checkIn.toISOString().slice(11, 16) : '-'}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs">
+                      {r?.checkOut ? r.checkOut.toISOString().slice(11, 16) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-xs font-medium text-primary">
+                      {otDisplay}
+                    </td>
                     <td className="px-4 py-3">
                       {r ? (
                         <Badge variant={STATUS_VARIANT[r.status] ?? 'outline'}>{r.status}</Badge>
+                      ) : holiday ? (
+                        <Badge variant="outline">HOLIDAY</Badge>
                       ) : (
                         <span className="text-xs text-muted-foreground">Not marked</span>
                       )}
@@ -89,14 +121,18 @@ export default async function AttendancePage({
                           <input type="hidden" name="date" value={dateStr} />
                           <select
                             name="status"
-                            defaultValue={r?.status ?? 'PRESENT'}
+                            defaultValue={r?.status ?? (holiday ? 'HOLIDAY' : 'PRESENT')}
                             className="flex h-8 rounded-md border border-input bg-transparent px-2 text-xs"
                           >
                             {ATTENDANCE_STATUSES.map((s) => (
-                              <option key={s} value={s}>{s}</option>
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
                             ))}
                           </select>
-                          <Button type="submit" size="sm" variant="outline">Save</Button>
+                          <Button type="submit" size="sm" variant="outline">
+                            Save
+                          </Button>
                         </form>
                       </td>
                     )}

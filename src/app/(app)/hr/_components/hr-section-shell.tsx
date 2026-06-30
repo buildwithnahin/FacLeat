@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import { ArrowRight, Database, FolderKanban, PlusCircle } from 'lucide-react';
+import { Database, Pencil, PlusCircle } from 'lucide-react';
 import { formatCurrency } from '@/lib/money';
 import { PageHeader } from '@/components/shared/page-header';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { HrMasterDataForm, HrWorkflowRecordForm, type SelectOption } from './hr-section-forms';
 
@@ -19,8 +20,32 @@ export interface HrSectionShellProps {
   branches: SelectOption[];
   employees: SelectOption[];
   links?: { label: string; href: string }[];
+  editId?: string | null;
+  editMasterRow?: {
+    id: string;
+    branchId: string | null;
+    code: string | null;
+    name: string;
+    description: string | null;
+    status: string;
+  } | null;
+  editWorkflowRow?: {
+    id: string;
+    branchId: string | null;
+    employeeId: string | null;
+    title: string;
+    subject: string | null;
+    status: string;
+    priority: string;
+    startDate: Date | null;
+    endDate: Date | null;
+    amount: string;
+    owner: string | null;
+    notes: string | null;
+  } | null;
   masterRows?: Array<{
     id: string;
+    branchId?: string | null;
     code: string | null;
     name: string;
     description: string | null;
@@ -30,6 +55,8 @@ export interface HrSectionShellProps {
   }>;
   workflowRows?: Array<{
     id: string;
+    branchId?: string | null;
+    employeeId?: string | null;
     title: string;
     subject: string | null;
     status: string;
@@ -54,39 +81,42 @@ export function HrSectionShell({
   canWrite,
   branches,
   employees,
-  links = [],
+  editId,
+  editMasterRow,
+  editWorkflowRow,
   masterRows = [],
   workflowRows = [],
 }: HrSectionShellProps) {
-  const rowCount = kind === 'master' ? masterRows.length : workflowRows.length;
+  const isEditing = kind === 'master' ? Boolean(editMasterRow) : Boolean(editWorkflowRow);
 
   return (
     <div className="space-y-6">
       <PageHeader title={title} description={description} />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Metric label="Saved Records" value={String(rowCount)} />
-        <Metric label="Data Layer" value={kind === 'master' ? 'Master' : 'Workflow'} />
-        <Metric label="Branch Scope" value="Global/Branch" />
-      </div>
-
       {canWrite && (
         <Card>
           <CardContent className="p-6">
             <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
-              <PlusCircle className="h-4 w-4 text-primary" />
-              New {kind === 'master' ? 'Setup Record' : 'Workflow Record'}
+              {isEditing ? <Pencil className="h-4 w-4 text-primary" /> : <PlusCircle className="h-4 w-4 text-primary" />}
+              {isEditing ? `Edit ${kind === 'master' ? 'Setup Record' : 'Workflow Record'}` : `New ${kind === 'master' ? 'Setup Record' : 'Workflow Record'}`}
             </div>
             {kind === 'master' ? (
-              <HrMasterDataForm type={slug} path={path} branches={branches} />
+              <HrMasterDataForm mode={isEditing ? 'edit' : 'create'} type={slug} path={path} branches={branches} initial={editMasterRow ?? undefined} />
             ) : (
-              <HrWorkflowRecordForm section={slug} path={path} branches={branches} employees={employees} />
+              <HrWorkflowRecordForm
+                mode={isEditing ? 'edit' : 'create'}
+                section={slug}
+                path={path}
+                branches={branches}
+                employees={employees}
+                initial={editWorkflowRow ?? undefined}
+              />
             )}
           </CardContent>
         </Card>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
+      <div>
         <Card>
           <CardContent className="p-0">
             <div className="border-b px-6 py-4">
@@ -95,32 +125,7 @@ export function HrSectionShell({
                 Saved Data
               </div>
             </div>
-            {kind === 'master' ? <MasterTable rows={masterRows} /> : <WorkflowTable rows={workflowRows} />}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
-              <FolderKanban className="h-4 w-4 text-primary" />
-              Related Pages
-            </div>
-            {links.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No linked operational pages yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {links.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition-colors hover:border-primary hover:text-primary"
-                  >
-                    <span>{link.label}</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                ))}
-              </div>
-            )}
+            {kind === 'master' ? <MasterTable rows={masterRows} path={path} canWrite={canWrite} /> : <WorkflowTable rows={workflowRows} path={path} canWrite={canWrite} />}
           </CardContent>
         </Card>
       </div>
@@ -128,18 +133,15 @@ export function HrSectionShell({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardContent className="p-5">
-        <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className="mt-2 text-2xl font-semibold">{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function MasterTable({ rows }: { rows: NonNullable<HrSectionShellProps['masterRows']> }) {
+function MasterTable({
+  rows,
+  path,
+  canWrite,
+}: {
+  rows: NonNullable<HrSectionShellProps['masterRows']>;
+  path: string;
+  canWrite: boolean;
+}) {
   if (rows.length === 0) return <EmptyState text="No records saved yet." />;
 
   return (
@@ -152,6 +154,7 @@ function MasterTable({ rows }: { rows: NonNullable<HrSectionShellProps['masterRo
             <th className="px-4 py-3 text-left">Branch</th>
             <th className="px-4 py-3 text-left">Status</th>
             <th className="px-4 py-3 text-left">Updated</th>
+            {canWrite && <th className="px-4 py-3 text-right">Actions</th>}
           </tr>
         </thead>
         <tbody className="divide-y">
@@ -165,6 +168,13 @@ function MasterTable({ rows }: { rows: NonNullable<HrSectionShellProps['masterRo
               <td className="px-4 py-3">{row.branch?.code ?? 'All'}</td>
               <td className="px-4 py-3"><Badge variant={row.status === 'ACTIVE' ? 'success' : 'outline'}>{row.status}</Badge></td>
               <td className="px-4 py-3 text-muted-foreground">{row.updatedAt.toISOString().slice(0, 10)}</td>
+              {canWrite && (
+                <td className="px-4 py-3 text-right">
+                  <Button type="button" variant="outline" size="sm" asChild>
+                    <Link href={`${path}?edit=${row.id}`}>Edit</Link>
+                  </Button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -173,7 +183,15 @@ function MasterTable({ rows }: { rows: NonNullable<HrSectionShellProps['masterRo
   );
 }
 
-function WorkflowTable({ rows }: { rows: NonNullable<HrSectionShellProps['workflowRows']> }) {
+function WorkflowTable({
+  rows,
+  path,
+  canWrite,
+}: {
+  rows: NonNullable<HrSectionShellProps['workflowRows']>;
+  path: string;
+  canWrite: boolean;
+}) {
   if (rows.length === 0) return <EmptyState text="No workflow records saved yet." />;
 
   return (
@@ -187,6 +205,7 @@ function WorkflowTable({ rows }: { rows: NonNullable<HrSectionShellProps['workfl
             <th className="px-4 py-3 text-right">Amount</th>
             <th className="px-4 py-3 text-left">Status</th>
             <th className="px-4 py-3 text-left">Updated</th>
+            {canWrite && <th className="px-4 py-3 text-right">Actions</th>}
           </tr>
         </thead>
         <tbody className="divide-y">
@@ -217,6 +236,13 @@ function WorkflowTable({ rows }: { rows: NonNullable<HrSectionShellProps['workfl
                 </div>
               </td>
               <td className="px-4 py-3 text-muted-foreground">{row.updatedAt.toISOString().slice(0, 10)}</td>
+              {canWrite && (
+                <td className="px-4 py-3 text-right">
+                  <Button type="button" variant="outline" size="sm" asChild>
+                    <Link href={`${path}?edit=${row.id}`}>Edit</Link>
+                  </Button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

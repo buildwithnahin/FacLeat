@@ -28,6 +28,7 @@ export interface EmployeeFormProps {
     designation: string | null;
     department: string | null;
     employmentType: string | null;
+    shiftId: string | null;
     reportingManagerId: string | null;
     systemRoleId: string | null;
     joinedAt: string;
@@ -45,6 +46,7 @@ export interface EmployeeFormProps {
   departments?: string[];
   designations?: string[];
   employmentTypes?: string[];
+  shifts?: { id: string; label: string }[];
   managers?: { id: string; label: string }[];
   roles?: { id: string; name: string }[];
 }
@@ -56,6 +58,7 @@ export function EmployeeForm({
   departments = [...DEFAULT_DEPARTMENTS],
   designations = [...DEFAULT_DESIGNATIONS],
   employmentTypes = [...DEFAULT_EMPLOYMENT_TYPES],
+  shifts = [],
   managers = [],
   roles = [],
 }: EmployeeFormProps) {
@@ -88,6 +91,20 @@ export function EmployeeForm({
           <SelectField label="Department" name="department" required defaultValue={initial?.department ?? ''} options={departments} />
           <SelectField label="Designation" name="designation" required defaultValue={initial?.designation ?? ''} options={designations} />
           <SelectField label="Employment Type" name="employmentType" required defaultValue={initial?.employmentType ?? 'PERMANENT'} options={employmentTypes} />
+          <div className="space-y-2">
+            <Label htmlFor="shiftId">Shift</Label>
+            <select
+              id="shiftId"
+              name="shiftId"
+              defaultValue={initial?.shiftId ?? ''}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+            >
+              <option value="">No shift assigned</option>
+              {shifts.map((shift) => (
+                <option key={shift.id} value={shift.id}>{shift.label}</option>
+              ))}
+            </select>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="reportingManagerId">Reporting Manager</Label>
             <select
