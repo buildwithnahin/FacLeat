@@ -56,7 +56,7 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
     ],
   },
   {
-    name: 'Accountant',
+    name: 'Accounts',
     description: 'Finance operations',
     permissions: [
       'dashboard:read',
@@ -76,7 +76,7 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
     ],
   },
   {
-    name: 'Purchase Manager',
+    name: 'Purchase',
     description: 'Procurement operations',
     permissions: [
       'dashboard:read',
@@ -97,7 +97,7 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
     ],
   },
   {
-    name: 'Warehouse Operator',
+    name: 'Store',
     description: 'Goods in / out, transfers, counts',
     permissions: [
       'dashboard:read',
@@ -116,7 +116,7 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
     ],
   },
   {
-    name: 'Cashier',
+    name: 'Sales',
     description: 'POS operations',
     permissions: [
       'dashboard:read',
@@ -128,8 +128,8 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
     ],
   },
   {
-    name: 'Sales Rep',
-    description: 'Wholesale invoicing, CRM, and customer follow-up',
+    name: 'Commercial',
+    description: 'Wholesale, corporate sales, CRM, and customer follow-up',
     permissions: [
       'dashboard:read',
       'crm:read',
@@ -155,7 +155,7 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
     ],
   },
   {
-    name: 'Factory Manager',
+    name: 'Production',
     description: 'Production operations',
     permissions: [
       'dashboard:read',
@@ -169,7 +169,7 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
     ],
   },
   {
-    name: 'HR Manager',
+    name: 'HR',
     description: 'HR and payroll operations',
     permissions: [
       'dashboard:read',
@@ -184,18 +184,44 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
       'notifications:read',
     ],
   },
+  {
+    name: 'Inventory',
+    description: 'Inventory visibility and stock reporting',
+    permissions: [
+      'dashboard:read',
+      'inventory:read',
+      'warehouse:read',
+      'barcode:read',
+      'reports:read',
+      'notifications:read',
+    ],
+  },
+  {
+    name: 'Management',
+    description: 'Management review and approvals',
+    permissions: [
+      'dashboard:read',
+      'approvals:read',
+      'approvals:approve',
+      'approvals:reject',
+      'reports:read',
+      'reports:export',
+      'audit:read',
+      'notifications:read',
+    ],
+  },
 ];
 
 // Sample users with different roles
 const SAMPLE_USERS = [
   { email: 'admin@annex.local', name: 'Admin User', role: 'Super Admin', branch: 'HQ' },
-  { email: 'accountant@annex.local', name: 'Rahim Ahmed', role: 'Accountant', branch: 'HQ' },
-  { email: 'purchase@annex.local', name: 'Karim Hassan', role: 'Purchase Manager', branch: 'HQ' },
-  { email: 'warehouse@annex.local', name: 'Ali Miah', role: 'Warehouse Operator', branch: 'HQ' },
-  { email: 'cashier@annex.local', name: 'Salman Khan', role: 'Cashier', branch: 'HQ' },
-  { email: 'sales@annex.local', name: 'Rashid Chowdhury', role: 'Sales Rep', branch: 'HQ' },
-  { email: 'factory@annex.local', name: 'Jahid Hasan', role: 'Factory Manager', branch: 'Factory' },
-  { email: 'hr@annex.local', name: 'Nadia Begum', role: 'HR Manager', branch: 'HQ' },
+  { email: 'accountant@annex.local', name: 'Rahim Ahmed', role: 'Accounts', branch: 'HQ' },
+  { email: 'purchase@annex.local', name: 'Karim Hassan', role: 'Purchase', branch: 'HQ' },
+  { email: 'warehouse@annex.local', name: 'Ali Miah', role: 'Store', branch: 'HQ' },
+  { email: 'cashier@annex.local', name: 'Salman Khan', role: 'Sales', branch: 'HQ' },
+  { email: 'sales@annex.local', name: 'Rashid Chowdhury', role: 'Commercial', branch: 'HQ' },
+  { email: 'factory@annex.local', name: 'Jahid Hasan', role: 'Production', branch: 'Factory' },
+  { email: 'hr@annex.local', name: 'Nadia Begum', role: 'HR', branch: 'HQ' },
 ];
 
 // Additional branches
@@ -204,6 +230,35 @@ const ADDITIONAL_BRANCHES = [
   { code: 'CTG', name: 'Chittagong Warehouse', type: 'WAREHOUSE', currency: 'BDT' as const },
   { code: 'FACTORY', name: 'Production Factory', type: 'FACTORY', currency: 'BDT' as const },
   { code: 'INDIA', name: 'India Operations', type: 'MAIN', currency: 'INR' as const },
+];
+
+const HR_MASTER_DATA = [
+  { type: 'departments', code: 'SUPER_ADMIN', name: 'Super Admin' },
+  { type: 'departments', code: 'HR', name: 'HR' },
+  { type: 'departments', code: 'ADMIN', name: 'Admin' },
+  { type: 'departments', code: 'ACCOUNTS', name: 'Accounts' },
+  { type: 'departments', code: 'COMMERCIAL', name: 'Commercial' },
+  { type: 'departments', code: 'INVENTORY', name: 'Inventory' },
+  { type: 'departments', code: 'PRODUCTION', name: 'Production' },
+  { type: 'departments', code: 'PURCHASE', name: 'Purchase' },
+  { type: 'departments', code: 'STORE', name: 'Store' },
+  { type: 'departments', code: 'SALES', name: 'Sales' },
+  { type: 'departments', code: 'MANAGEMENT', name: 'Management' },
+  { type: 'designations', code: 'HR_MANAGER', name: 'HR Manager' },
+  { type: 'designations', code: 'ACCOUNTANT', name: 'Accountant' },
+  { type: 'designations', code: 'FACTORY_MANAGER', name: 'Factory Manager' },
+  { type: 'designations', code: 'PURCHASE_MANAGER', name: 'Purchase Manager' },
+  { type: 'designations', code: 'SALES_REP', name: 'Sales Rep' },
+  { type: 'designations', code: 'WAREHOUSE_OPERATOR', name: 'Warehouse Operator' },
+  { type: 'designations', code: 'CASHIER', name: 'Cashier' },
+  { type: 'employment-types', code: 'PERMANENT', name: 'PERMANENT' },
+  { type: 'employment-types', code: 'PROBATION', name: 'PROBATION' },
+  { type: 'employment-types', code: 'CONTRACT', name: 'CONTRACT' },
+  { type: 'employment-types', code: 'TEMPORARY', name: 'TEMPORARY' },
+  { type: 'shifts', code: 'GENERAL', name: 'General Shift', description: '09:00 to 18:00' },
+  { type: 'shifts', code: 'FACTORY_DAY', name: 'Factory Day Shift', description: '08:00 to 17:00' },
+  { type: 'holiday-calendar', code: 'EID_UL_FITR', name: 'Eid ul-Fitr' },
+  { type: 'holiday-calendar', code: 'VICTORY_DAY', name: 'Victory Day' },
 ];
 
 // Product categories
@@ -310,12 +365,12 @@ const ASSET_CATEGORIES = [
 
 // Employees
 const SAMPLE_EMPLOYEES = [
-  { code: 'EMP-001', firstName: 'Rahim', lastName: 'Ahmed', designation: 'Manager', department: 'Administration', basicSalary: 50000 },
-  { code: 'EMP-002', firstName: 'Karim', lastName: 'Hassan', designation: 'Accountant', department: 'Finance', basicSalary: 40000 },
+  { code: 'EMP-001', firstName: 'Rahim', lastName: 'Ahmed', designation: 'Accountant', department: 'Accounts', basicSalary: 50000 },
+  { code: 'EMP-002', firstName: 'Karim', lastName: 'Hassan', designation: 'Accountant', department: 'Accounts', basicSalary: 40000 },
   { code: 'EMP-003', firstName: 'Salman', lastName: 'Khan', designation: 'Sales Executive', department: 'Sales', basicSalary: 35000 },
   { code: 'EMP-004', firstName: 'Ali', lastName: 'Miah', designation: 'Warehouse Supervisor', department: 'Warehouse', basicSalary: 30000 },
-  { code: 'EMP-005', firstName: 'Nadia', lastName: 'Begum', designation: 'HR Officer', department: 'HR', basicSalary: 35000 },
-  { code: 'EMP-006', firstName: 'Jahid', lastName: 'Hasan', designation: 'Production Supervisor', department: 'Production', basicSalary: 32000 },
+  { code: 'EMP-005', firstName: 'Nadia', lastName: 'Begum', designation: 'HR Manager', department: 'HR', basicSalary: 35000 },
+  { code: 'EMP-006', firstName: 'Jahid', lastName: 'Hasan', designation: 'Factory Manager', department: 'Production', basicSalary: 32000 },
   { code: 'EMP-007', firstName: 'Rashid', lastName: 'Chowdhury', designation: 'Sales Manager', department: 'Sales', basicSalary: 45000 },
   { code: 'EMP-008', firstName: 'Priya', lastName: 'Devi', designation: 'Designer', department: 'Design', basicSalary: 38000 },
   { code: 'EMP-009', firstName: 'Monir', lastName: 'Uddin', designation: 'Machine Operator', department: 'Production', basicSalary: 25000 },
@@ -324,14 +379,14 @@ const SAMPLE_EMPLOYEES = [
 
 // Sample approval rules
 const APPROVAL_RULES = [
-  { module: 'pos', action: 'discount-override', minAmount: new Prisma.Decimal(0), approverRoles: ['Admin', 'Manager'] },
-  { module: 'purchase', action: 'approve', minAmount: new Prisma.Decimal(50000), approverRoles: ['Admin', 'Purchase Manager'] },
+  { module: 'pos', action: 'discount-override', minAmount: new Prisma.Decimal(0), approverRoles: ['Admin', 'Management'] },
+  { module: 'purchase', action: 'approve', minAmount: new Prisma.Decimal(50000), approverRoles: ['Admin', 'Purchase'] },
   { module: 'purchase', action: 'approve', minAmount: new Prisma.Decimal(200000), approverRoles: ['Admin'] },
-  { module: 'accounts', action: 'post', minAmount: new Prisma.Decimal(100000), approverRoles: ['Accountant', 'Admin'] },
+  { module: 'accounts', action: 'post', minAmount: new Prisma.Decimal(100000), approverRoles: ['Accounts', 'Admin'] },
   { module: 'assets', action: 'dispose', minAmount: new Prisma.Decimal(50000), approverRoles: ['Admin'] },
-  { module: 'factory', action: 'cost-entry', minAmount: new Prisma.Decimal(25000), approverRoles: ['Admin', 'Factory Manager'] },
-  { module: 'hr', action: 'approve-payroll', minAmount: new Prisma.Decimal(0), approverRoles: ['Admin', 'HR Manager'] },
-  { module: 'corporate-sales', action: 'discount-override', minAmount: new Prisma.Decimal(100000), approverRoles: ['Admin', 'Sales Rep'] },
+  { module: 'factory', action: 'cost-entry', minAmount: new Prisma.Decimal(25000), approverRoles: ['Admin', 'Production'] },
+  { module: 'hr', action: 'approve-payroll', minAmount: new Prisma.Decimal(0), approverRoles: ['Admin', 'HR'] },
+  { module: 'corporate-sales', action: 'discount-override', minAmount: new Prisma.Decimal(100000), approverRoles: ['Admin', 'Sales'] },
 ];
 
 async function main() {
@@ -374,6 +429,22 @@ async function main() {
     });
   }
   console.log(`  ✓ ${ADDITIONAL_BRANCHES.length} additional branches`);
+
+  // 3a. HR master data
+  for (const row of HR_MASTER_DATA) {
+    await prisma.hrMasterData.upsert({
+      where: { type_code: { type: row.type, code: row.code } },
+      update: { name: row.name, description: row.description ?? null, status: 'ACTIVE' },
+      create: {
+        type: row.type,
+        code: row.code,
+        name: row.name,
+        description: row.description ?? null,
+        status: 'ACTIVE',
+      },
+    });
+  }
+  console.log(`  ✓ ${HR_MASTER_DATA.length} HR master records`);
 
   // 4. Roles + role permissions
   for (const roleSpec of SYSTEM_ROLES) {

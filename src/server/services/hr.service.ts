@@ -12,6 +12,8 @@ import type {
   EmployeeUpdateInput,
   LeaveCreateInput,
   LeaveDecisionInput,
+  HrMasterDataCreateInput,
+  HrWorkflowRecordCreateInput,
   PayrollRunCreateInput,
 } from '@/server/validators/hr';
 
@@ -64,7 +66,7 @@ export const hrService = {
             ]
           : undefined,
       },
-      include: { branch: true },
+      include: { branch: true, reportingManager: true, systemRole: true },
       orderBy: [{ status: 'asc' }, { code: 'asc' }],
     });
   },
@@ -73,7 +75,7 @@ export const hrService = {
     await authorize(session, 'hr:read');
     const employee = await prisma.employee.findUnique({
       where: { id },
-      include: { branch: true },
+      include: { branch: true, reportingManager: true, systemRole: true, user: true },
     });
     if (!employee) throw new NotFoundError('Employee not found');
     return employee;
@@ -99,6 +101,9 @@ export const hrService = {
           phone: input.phone || null,
           designation: input.designation || null,
           department: input.department || null,
+          employmentType: input.employmentType || 'PERMANENT',
+          reportingManagerId: input.reportingManagerId || null,
+          systemRoleId: input.systemRoleId || null,
           joinedAt: input.joinedAt,
           status: input.status,
           basicSalary: D(input.basicSalary),
@@ -122,7 +127,13 @@ export const hrService = {
           action: 'create-employee',
           entityType: 'Employee',
           entityId: emp.id,
-          after: { code: emp.code, name: `${emp.firstName} ${emp.lastName}` },
+          after: {
+            code: emp.code,
+            name: `${emp.firstName} ${emp.lastName}`,
+            department: emp.department,
+            designation: emp.designation,
+            employmentType: emp.employmentType,
+          },
         },
         tx,
       );
@@ -150,6 +161,9 @@ export const hrService = {
           phone: input.phone || null,
           designation: input.designation || null,
           department: input.department || null,
+          employmentType: input.employmentType || 'PERMANENT',
+          reportingManagerId: input.reportingManagerId || null,
+          systemRoleId: input.systemRoleId || null,
           joinedAt: input.joinedAt,
           status: input.status,
           basicSalary: D(input.basicSalary),
@@ -172,12 +186,134 @@ export const hrService = {
           action: 'update-employee',
           entityType: 'Employee',
           entityId: emp.id,
-          before: { status: existing.status, basic: existing.basicSalary.toString() },
-          after: { status: emp.status, basic: emp.basicSalary.toString() },
+          before: {
+            status: existing.status,
+            basic: existing.basicSalary.toString(),
+            department: existing.department,
+            designation: existing.designation,
+            employmentType: existing.employmentType,
+          },
+          after: {
+            status: emp.status,
+            basic: emp.basicSalary.toString(),
+            department: emp.department,
+            designation: emp.designation,
+            employmentType: emp.employmentType,
+          },
         },
         tx,
       );
       return emp;
+    });
+  },
+
+  // ─── HR master data and lifecycle workflow records ───────────────────────
+  async listMasterData(
+    session: AppSession | null,
+    filters: { type?: string; branchId?: string; status?: string } = {},
+  ) {
+    await authorize(session, 'hr:read');
+    return prisma.hrMasterData.findMany({
+      where: {
+        type: filters.type,
+        status: filters.status,
+        OR: filters.branchId
+          ? [{ branchId: filters.branchId }, { branchId: null }]
+          : undefined,
+      },
+      include: { branch: true },
+      orderBy: [{ status: 'asc' }, { name: 'asc' }],
+      take: 300,
+    });
+  },
+
+  async createMasterData(session: AppSession | null, input: HrMasterDataCreateInput) {
+    const actor = await authorize(session, 'hr:write');
+
+    return prisma.$transaction(async (tx) => {
+      const row = await tx.hrMasterData.create({
+        data: {
+          branchId: input.branchId || null,
+          type: input.type,
+          code: input.code || null,
+          name: input.name,
+          description: input.description || null,
+          status: input.status || 'ACTIVE',
+          createdById: actor.userId,
+          updatedById: actor.userId,
+        },
+      });
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: input.branchId || null,
+          module: 'hr',
+          action: 'create-master-data',
+          entityType: 'HrMasterData',
+          entityId: row.id,
+          after: { type: row.type, code: row.code, name: row.name },
+        },
+        tx,
+      );
+      return row;
+    });
+  },
+
+  async listWorkflowRecords(
+    session: AppSession | null,
+    filters: { section?: string; branchId?: string; employeeId?: string; status?: string } = {},
+  ) {
+    await authorize(session, 'hr:read');
+    return prisma.hrWorkflowRecord.findMany({
+      where: {
+        section: filters.section,
+        status: filters.status,
+        employeeId: filters.employeeId,
+        OR: filters.branchId
+          ? [{ branchId: filters.branchId }, { branchId: null }]
+          : undefined,
+      },
+      include: { branch: true, employee: true },
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+      take: 300,
+    });
+  },
+
+  async createWorkflowRecord(session: AppSession | null, input: HrWorkflowRecordCreateInput) {
+    const actor = await authorize(session, 'hr:write');
+
+    return prisma.$transaction(async (tx) => {
+      const row = await tx.hrWorkflowRecord.create({
+        data: {
+          branchId: input.branchId || null,
+          employeeId: input.employeeId || null,
+          section: input.section,
+          title: input.title,
+          subject: input.subject || null,
+          status: input.status || 'OPEN',
+          priority: input.priority || 'NORMAL',
+          startDate: input.startDate instanceof Date ? input.startDate : null,
+          endDate: input.endDate instanceof Date ? input.endDate : null,
+          amount: typeof input.amount === 'number' ? D(input.amount) : null,
+          owner: input.owner || null,
+          notes: input.notes || null,
+          createdById: actor.userId,
+          updatedById: actor.userId,
+        },
+      });
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: input.branchId || null,
+          module: 'hr',
+          action: 'create-workflow-record',
+          entityType: 'HrWorkflowRecord',
+          entityId: row.id,
+          after: { section: row.section, title: row.title, status: row.status },
+        },
+        tx,
+      );
+      return row;
     });
   },
 

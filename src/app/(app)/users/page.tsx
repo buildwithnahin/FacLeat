@@ -29,33 +29,50 @@ export default async function UsersPage() {
         )}
       </PageHeader>
 
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+      <Card className="max-w-full overflow-hidden">
+        <div className="max-w-full overflow-x-hidden">
+          <table className="w-full table-fixed text-sm">
+            <colgroup>
+              <col className="w-[17%]" />
+              <col className="w-[19%]" />
+              <col className="w-[11%]" />
+              <col className="w-[13%]" />
+              <col className="w-[12%]" />
+              <col className="w-[8%]" />
+              <col className="w-[8%]" />
+              <col className="w-[12%]" />
+            </colgroup>
             <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="text-left font-semibold px-4 py-3">Name</th>
-                <th className="text-left font-semibold px-4 py-3">Email</th>
-                <th className="text-left font-semibold px-4 py-3">Roles</th>
-                <th className="text-left font-semibold px-4 py-3">Branch</th>
-                <th className="text-left font-semibold px-4 py-3">Status</th>
-                <th className="text-left font-semibold px-4 py-3">Created</th>
-                <th className="text-right font-semibold px-4 py-3">Actions</th>
+                <th className="px-3 py-3 text-left font-semibold">Employee</th>
+                <th className="px-3 py-3 text-left font-semibold">Email</th>
+                <th className="px-3 py-3 text-left font-semibold">Role</th>
+                <th className="px-3 py-3 text-left font-semibold">Designation</th>
+                <th className="px-3 py-3 text-left font-semibold">Branch</th>
+                <th className="px-3 py-3 text-left font-semibold">Status</th>
+                <th className="px-3 py-3 text-left font-semibold">Created</th>
+                <th className="px-3 py-3 text-right font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
                     No users yet.
                   </td>
                 </tr>
               )}
               {users.map((u) => (
                 <tr key={u.id} className="hover:bg-muted/30">
-                  <td className="px-4 py-3 font-medium">{u.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3 font-medium">
+                    <span className="block whitespace-normal break-words leading-5">
+                      {u.employee ? `${u.employee.firstName} ${u.employee.lastName}` : u.name}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 text-muted-foreground">
+                    <span className="block break-all leading-5">{u.email}</span>
+                  </td>
+                  <td className="px-3 py-3">
                     <div className="flex flex-wrap gap-1">
                       {u.roles.map((ur) => (
                         <Badge key={ur.role.id} variant="secondary">
@@ -65,16 +82,21 @@ export default async function UsersPage() {
                       {u.roles.length === 0 && <span className="text-muted-foreground">—</span>}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">{u.defaultBranch?.name ?? '—'}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3 text-muted-foreground">
+                    <span className="block truncate">{u.employee?.designation ?? '—'}</span>
+                  </td>
+                  <td className="px-3 py-3 text-muted-foreground">
+                    <span className="block truncate">{u.defaultBranch?.name ?? '—'}</span>
+                  </td>
+                  <td className="px-3 py-3">
                     <StatusBadge status={u.status} />
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground tabular">
+                  <td className="px-3 py-3 text-muted-foreground tabular">
                     {u.createdAt.toISOString().slice(0, 10)}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     {canWrite && (
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1">
                         <Button size="sm" variant="ghost" asChild>
                           <Link href={`/users/${u.id}`}>
                             <Pencil className="h-3.5 w-3.5" />
@@ -87,7 +109,7 @@ export default async function UsersPage() {
                             name="status"
                             value={u.status === 'DISABLED' ? 'ACTIVE' : 'DISABLED'}
                           />
-                          <Button size="sm" variant="outline" type="submit">
+                          <Button size="sm" variant="outline" type="submit" className="px-2">
                             {u.status === 'DISABLED' ? 'Enable' : 'Disable'}
                           </Button>
                         </form>

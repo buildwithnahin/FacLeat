@@ -34,7 +34,7 @@ export type IssueInput = {
 };
 
 export type TransferInput = {
-  branchId: string; // source branch (transfers happen within a branch for now)
+  branchId: string; // UI context; source/destination branches are inferred from the warehouses
   fromWarehouseId: string;
   toWarehouseId: string;
   note?: string;
@@ -314,15 +314,19 @@ export const stockService = {
       prisma.warehouse.findUnique({ where: { id: input.toWarehouseId } }),
     ]);
     if (!from || !to) throw new NotFoundError('Warehouse not found');
-    if (from.branchId !== input.branchId || to.branchId !== input.branchId) {
-      throw new ValidationError('Cross-branch transfers are not supported yet');
+    if (from.type !== 'SHOWROOM' || to.type !== 'SHOWROOM') {
+      throw new ValidationError('Transfers are only allowed between showroom warehouses');
+    }
+    if (from.branchId === to.branchId) {
+      throw new ValidationError('Transfers must be between different showroom branches');
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      await assertOpenPeriod(tx, input.branchId);
+      await assertOpenPeriod(tx, from.branchId);
+      await assertOpenPeriod(tx, to.branchId);
 
       const productIds = input.items.map((it) => it.productId);
-      const balances = await getBalances(tx, input.branchId, input.fromWarehouseId, productIds);
+      const balances = await getBalances(tx, from.branchId, input.fromWarehouseId, productIds);
       const balanceByProduct = new Map(balances.map((b) => [b.productId, b.balance]));
 
       if (!from.branch.allowNegativeStock) {
@@ -342,7 +346,7 @@ export const stockService = {
         input.items.flatMap((it) => [
           tx.inventoryLedger.create({
             data: {
-              branchId: input.branchId,
+              branchId: from.branchId,
               warehouseId: input.fromWarehouseId,
               productId: it.productId,
               direction: 'OUT',
@@ -356,7 +360,7 @@ export const stockService = {
           }),
           tx.inventoryLedger.create({
             data: {
-              branchId: input.branchId,
+              branchId: to.branchId,
               warehouseId: input.toWarehouseId,
               productId: it.productId,
               direction: 'IN',
@@ -374,13 +378,15 @@ export const stockService = {
       await recordAudit(
         {
           actorId: actor.userId,
-          branchId: input.branchId,
+          branchId: from.branchId,
           module: 'warehouse',
           action: 'transfer',
           entityType: 'InventoryLedger',
           entityId: null,
           after: {
             refId,
+            fromBranchId: from.branchId,
+            toBranchId: to.branchId,
             fromWarehouseId: input.fromWarehouseId,
             toWarehouseId: input.toWarehouseId,
             itemCount: input.items.length,
@@ -391,7 +397,7 @@ export const stockService = {
 
       return { refId, count: input.items.length };
     });
-    await notifyLowStockProducts(input.branchId, input.items.map((it) => it.productId));
+    await notifyLowStockProducts(from.branchId, input.items.map((it) => it.productId));
     return result;
   },
 

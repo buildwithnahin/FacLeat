@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { FileText } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,6 +40,12 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
         description={`${sale.warehouse.name} · ${sale.saleDate.toLocaleString()}`}
       >
         <Pill tone={STATUS_TONE[sale.status] ?? 'grey'}>{sale.status.toLowerCase().replace('_', ' ')}</Pill>
+        <Button variant="outline" asChild>
+          <Link href={`/pos/sales/${sale.id}/mushak63?mode=A`}>
+            <FileText className="h-4 w-4 mr-1" />
+            Mushak 6.3
+          </Link>
+        </Button>
         <Button variant="outline" asChild>
           <Link href="/pos/sales">Back</Link>
         </Button>

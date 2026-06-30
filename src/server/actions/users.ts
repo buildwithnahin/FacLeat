@@ -11,13 +11,12 @@ export type UserFormState = { error?: string; fieldErrors?: Record<string, strin
 
 function parseForm(formData: FormData) {
   return {
-    name: formData.get('name'),
+    employeeId: formData.get('employeeId'),
     email: formData.get('email'),
-    phone: formData.get('phone') ?? '',
     password: formData.get('password') ?? '',
     defaultBranchId: formData.get('defaultBranchId') ?? '',
     status: formData.get('status') ?? 'ACTIVE',
-    roleIds: formData.getAll('roleIds'),
+    roleId: formData.get('roleId'),
   };
 }
 

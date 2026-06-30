@@ -4,29 +4,18 @@ import { logoutAction } from '@/server/actions/auth';
 import { BranchSwitcher } from '@/components/shared/branch-switcher';
 import { NotificationBell } from '@/components/shared/notification-bell';
 import { SearchCommand } from '@/components/shared/search-command';
-import { SidebarNav, type ClientNavModule } from '@/components/shared/sidebar-nav';
+import { SidebarNav, type ClientNavItem, type ClientNavModule } from '@/components/shared/sidebar-nav';
 import { notificationService } from '@/server/services/notification.service';
 import type { AppSession } from '@/server/auth/session';
+import type { NavItem } from '@/constants/navigation';
 
 async function renderBell(session: AppSession) {
   if (!session.permissions.includes('notifications:read')) return null;
-  const [unread, items] = await Promise.all([
-    notificationService.unreadCount(session),
-    notificationService.list(session, { limit: 10 }),
-  ]);
+  const unread = await notificationService.unreadCount(session);
   return (
     <NotificationBell
       initialUnread={unread}
-      initialItems={items.map((n) => ({
-        id: n.id,
-        severity: n.severity,
-        module: n.module,
-        title: n.title,
-        body: n.body,
-        href: n.href,
-        readAt: n.readAt?.toISOString() ?? null,
-        createdAt: n.createdAt.toISOString(),
-      }))}
+      initialItems={[]}
     />
   );
 }
@@ -49,19 +38,34 @@ export async function AppShell({
   const perms = session.permissions;
   const can = (p?: string) => !p || perms.includes(p);
 
+  const visibleItems = (items?: NavItem[]): ClientNavItem[] | undefined => {
+    const filtered: ClientNavItem[] = [];
+
+    for (const item of items ?? []) {
+      const children = visibleItems(item.items);
+      const visible = can(item.permission) && (!!item.href || !!children?.length);
+      if (!visible) continue;
+
+      const navItem: ClientNavItem = { label: item.label };
+      if (item.href) navItem.href = item.href;
+      if (children) navItem.items = children;
+      filtered.push(navItem);
+    }
+
+    return filtered && filtered.length > 0 ? filtered : undefined;
+  };
+
   const visibleModules: ClientNavModule[] = MODULES.filter((m) => {
     if (!can(m.permission)) return false;
-    const childrenVisible = m.items?.some((i) => can(i.permission)) ?? false;
+    const childrenVisible = !!visibleItems(m.items)?.length;
     return !m.items || childrenVisible || can(m.permission);
-  }).map((m) => ({
+  }).map((m, index) => ({
     number: m.number,
+    displayNumber: index + 1,
     label: m.label,
     href: m.href,
     iconName: m.iconName,
-    items: m.items?.filter((i) => can(i.permission)).map((i) => ({
-      label: i.label,
-      href: i.href,
-    })),
+    items: visibleItems(m.items),
   }));
 
   return (
@@ -95,7 +99,7 @@ export async function AppShell({
             <div className="flex-1 max-w-xl">
               <SearchCommand permissions={perms} />
             </div>
-            <BranchSwitcher />
+            <BranchSwitcher session={session} />
             {await renderBell(session)}
             <div className="h-9 w-9 rounded-full bg-primary text-primary-foreground grid place-items-center text-xs font-semibold">
               {initials}

@@ -3,6 +3,7 @@ import { Settings } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { DataTable } from '@/components/shared/data-table';
 import { Pill } from '@/components/shared/pill';
 import { KpiCard } from '@/components/shared/kpi-card';
@@ -10,6 +11,8 @@ import { Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { approvalService } from '@/server/services/approval.service';
 import { getSession } from '@/server/auth/session';
 import { APPROVAL_STATUS } from '@/server/validators/approvals';
+import { prisma } from '@/server/db';
+import { decideRecruitmentRequestAction } from '@/server/actions/hr-recruitment';
 
 export const metadata = { title: 'Approvals' };
 
@@ -28,6 +31,21 @@ interface Search {
   scope?: string;
 }
 
+const RECRUITMENT_APPROVAL_ROLE_BY_STATUS: Record<string, string> = {
+  'HR Review': 'HR',
+  'Accounts Budget Check': 'Accounts',
+  'Management Approval': 'Management',
+};
+
+const RECRUITMENT_STATUS_VARIANT: Record<string, 'default' | 'outline' | 'success' | 'warning' | 'destructive'> = {
+  'HR Review': 'warning',
+  'Accounts Budget Check': 'warning',
+  'Management Approval': 'warning',
+  Approved: 'success',
+  Rejected: 'destructive',
+  Cancelled: 'outline',
+};
+
 export default async function ApprovalsPage({
   searchParams,
 }: {
@@ -36,6 +54,13 @@ export default async function ApprovalsPage({
   const session = await getSession();
   const sp = await searchParams;
   const scope = sp.scope ?? 'for-me';
+  const approverRoles = session?.roles ?? [];
+  const canReviewRecruitment = approverRoles.some((role) =>
+    ['HR', 'Accounts', 'Management', 'Admin', 'Super Admin'].includes(role),
+  );
+  const recruitmentStatusesForUser = Object.entries(RECRUITMENT_APPROVAL_ROLE_BY_STATUS)
+    .filter(([, role]) => approverRoles.includes(role) || approverRoles.includes('Admin') || approverRoles.includes('Super Admin'))
+    .map(([status]) => status);
   const [rows, stats] = await Promise.all([
     approvalService.list(session, {
       status: sp.status && sp.status !== 'ALL' ? sp.status : undefined,
@@ -44,6 +69,17 @@ export default async function ApprovalsPage({
     }),
     approvalService.queueStats(session),
   ]);
+  const recruitmentApprovalRows = canReviewRecruitment
+    ? await prisma.hrWorkflowRecord.findMany({
+        where: {
+          section: 'recruitment',
+          status: {
+            in: recruitmentStatusesForUser.length > 0 ? recruitmentStatusesForUser : Object.keys(RECRUITMENT_APPROVAL_ROLE_BY_STATUS),
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+    : [];
 
   return (
     <div className="space-y-6">
@@ -140,6 +176,121 @@ export default async function ApprovalsPage({
           ]}
         />
       </Card>
+
+      {canReviewRecruitment && (
+        <Card className="overflow-hidden">
+          <div className="px-4 py-3 border-b">
+            <div className="text-sm font-medium">Recruitment Approvals</div>
+            <p className="text-xs text-muted-foreground">Manager and role-based hiring requests waiting for decision.</p>
+          </div>
+          <div className="overflow-x-hidden">
+            <table className="w-full table-fixed text-sm">
+              <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="w-[14%] px-4 py-3 text-left font-semibold">Request No</th>
+                  <th className="w-[14%] px-4 py-3 text-left font-semibold">Department</th>
+                  <th className="w-[16%] px-4 py-3 text-left font-semibold">Position</th>
+                  <th className="w-[10%] px-4 py-3 text-right font-semibold">Vacancies</th>
+                  <th className="w-[12%] px-4 py-3 text-left font-semibold">Salary Range</th>
+                  <th className="w-[12%] px-4 py-3 text-left font-semibold">Joining</th>
+                  <th className="w-[10%] px-4 py-3 text-left font-semibold">Status</th>
+                  <th className="w-[12%] px-4 py-3 text-left font-semibold">Approver</th>
+                  <th className="w-[16%] px-4 py-3 text-right font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {recruitmentApprovalRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
+                      No recruitment approvals are waiting for your role.
+                    </td>
+                  </tr>
+                ) : (
+                  recruitmentApprovalRows.map((row) => {
+                    const meta = (row.metadata as Record<string, any>) || {};
+                    const currentRole = RECRUITMENT_APPROVAL_ROLE_BY_STATUS[row.status] ?? '—';
+                    const canActOnRow =
+                      approverRoles.includes(currentRole) ||
+                      approverRoles.includes('Admin') ||
+                      approverRoles.includes('Super Admin');
+
+                    return (
+                      <tr key={row.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 font-mono font-semibold text-primary break-words">
+                          <Link href="/hr/recruitment" className="hover:underline">
+                            {meta.requestNo || 'REC-XXXX-XXXX'}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 break-words font-medium">{row.subject}</td>
+                        <td className="px-4 py-3 break-words">{row.title}</td>
+                        <td className="px-4 py-3 text-right font-semibold tabular-nums">{Number(row.amount || 0)}</td>
+                        <td className="px-4 py-3 break-words text-muted-foreground">{row.owner || '—'}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{row.startDate ? row.startDate.toISOString().slice(0, 10) : '—'}</td>
+                        <td className="px-4 py-3">
+                          <Badge className="max-w-full whitespace-normal break-words leading-tight" variant={RECRUITMENT_STATUS_VARIANT[row.status] || 'outline'}>
+                            {row.status}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3">{currentRole}</td>
+                        <td className="px-4 py-3 align-top">
+                          <div className="flex flex-col items-stretch gap-2">
+                            <RecruitmentApprovalAction
+                              id={row.id}
+                              decision="Approved"
+                              label={`${currentRole} approve`}
+                              disabled={!canActOnRow}
+                            />
+                            <RecruitmentApprovalAction
+                              id={row.id}
+                              decision="Rejected"
+                              label="Reject"
+                              danger
+                              disabled={!canActOnRow}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </div>
+  );
+}
+
+function RecruitmentApprovalAction({
+  id,
+  decision,
+  label,
+  danger,
+  disabled,
+}: {
+  id: string;
+  decision: 'Approved' | 'Rejected';
+  label: string;
+  danger?: boolean;
+  disabled?: boolean;
+}) {
+  async function action() {
+    'use server';
+    await decideRecruitmentRequestAction(id, decision);
+  }
+
+  return (
+    <form action={action}>
+      <Button
+        type="submit"
+        size="sm"
+        className="w-full whitespace-normal break-words text-center leading-tight"
+        variant={danger ? 'destructive' : 'outline'}
+        disabled={disabled}
+      >
+        {label}
+      </Button>
+    </form>
   );
 }

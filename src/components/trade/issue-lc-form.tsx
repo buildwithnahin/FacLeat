@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -17,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import { createLCSchema } from '@/server/validators/trade';
 import { createLetterOfCredit } from '@/server/actions/trade';
 
@@ -50,6 +51,7 @@ const CURRENCIES = ['USD', 'EUR', 'BDT', 'INR'] as const;
 export function IssueLCForm({ orders, branches, defaultBranchId, preselectedOrderId }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [transportMode, setTransportMode] = useState<'AIR' | 'SHIP'>('SHIP');
 
   const form = useForm<FormValues>({
     resolver: zodResolver(createLCSchema),
@@ -76,6 +78,14 @@ export function IssueLCForm({ orders, branches, defaultBranchId, preselectedOrde
       confirmingBank: '',
       portOfLoading: '',
       portOfDischarge: '',
+      airPortOfLoading: '',
+      airPortOfDestination: '',
+      flightNumber: '',
+      airlineName: '',
+      shipPortOfLoading: '',
+      shipPortOfDischarge: '',
+      vesselName: '',
+      voyageNumber: '',
       goodsDescription: '',
       specialConditions: '',
       expiryPlace: '',
@@ -93,13 +103,19 @@ export function IssueLCForm({ orders, branches, defaultBranchId, preselectedOrde
     const counterparty = selectedOrder.customer?.name ?? selectedOrder.supplier?.name ?? '';
     form.setValue('currency', selectedOrder.currency as 'USD' | 'EUR' | 'BDT' | 'INR');
     form.setValue('lcAmount', selectedOrder.totalValue);
-    if (selectedOrder.portOfLoading) form.setValue('portOfLoading', selectedOrder.portOfLoading);
-    if (selectedOrder.portOfDischarge) form.setValue('portOfDischarge', selectedOrder.portOfDischarge);
+    if (selectedOrder.portOfLoading) {
+      form.setValue('portOfLoading', selectedOrder.portOfLoading);
+      form.setValue('shipPortOfLoading', selectedOrder.portOfLoading);
+    }
+    if (selectedOrder.portOfDischarge) {
+      form.setValue('portOfDischarge', selectedOrder.portOfDischarge);
+      form.setValue('shipPortOfDischarge', selectedOrder.portOfDischarge);
+    }
     if (selectedOrder.goodsDescription) form.setValue('goodsDescription', selectedOrder.goodsDescription);
     if (selectedOrder.latestShipDate) form.setValue('latestShipDate', new Date(selectedOrder.latestShipDate));
     if (selectedOrder.type === 'EXPORT') form.setValue('beneficiaryName', counterparty);
     else form.setValue('applicantName', counterparty);
-  }, [selectedOrderId]);
+  }, [form, selectedOrder, selectedOrderId]);
 
   function onSubmit(values: FormValues) {
     startTransition(async () => {
@@ -350,6 +366,149 @@ export function IssueLCForm({ orders, branches, defaultBranchId, preselectedOrde
                 </FormItem>
               )} />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-sm">Transport Details</CardTitle></CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setTransportMode('AIR')}
+                aria-pressed={transportMode === 'AIR'}
+                className={cn(
+                  'rounded-lg border p-4 text-left transition-all',
+                  transportMode === 'AIR'
+                    ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20'
+                    : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted/70'
+                )}
+              >
+                <p className="text-sm font-semibold text-foreground">By Air</p>
+                <p className="mt-1 text-xs">Capture flight and airport details for air shipment terms.</p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTransportMode('SHIP')}
+                aria-pressed={transportMode === 'SHIP'}
+                className={cn(
+                  'rounded-lg border p-4 text-left transition-all',
+                  transportMode === 'SHIP'
+                    ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20'
+                    : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted/70'
+                )}
+              >
+                <p className="text-sm font-semibold text-foreground">By Ship</p>
+                <p className="mt-1 text-xs">Capture vessel and seaport details for sea shipment terms.</p>
+              </button>
+            </div>
+
+            <fieldset
+              disabled={transportMode !== 'AIR'}
+              className={cn(
+                'space-y-4 rounded-xl border p-4 transition-all',
+                transportMode === 'AIR'
+                  ? 'border-primary/30 bg-background'
+                  : 'border-border bg-muted/20 opacity-45 blur-[1px]'
+              )}
+            >
+              <div>
+                <h3 className="text-sm font-semibold">By Air</h3>
+                <p className="text-xs text-muted-foreground">Capture flight and airport details for air shipment terms.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField control={form.control} name="airPortOfLoading" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Airport of Loading</FormLabel>
+                    <FormControl><Input placeholder="Hazrat Shahjalal International Airport" {...field} /></FormControl>
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="airPortOfDestination" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Airport of Destination</FormLabel>
+                    <FormControl><Input placeholder="Dubai International Airport" {...field} /></FormControl>
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="airlineName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Airline Name</FormLabel>
+                    <FormControl><Input placeholder="Emirates SkyCargo" {...field} /></FormControl>
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="flightNumber" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Flight Number</FormLabel>
+                    <FormControl><Input placeholder="EK-587" {...field} /></FormControl>
+                  </FormItem>
+                )} />
+              </div>
+            </fieldset>
+
+            <fieldset
+              disabled={transportMode !== 'SHIP'}
+              className={cn(
+                'space-y-4 rounded-xl border p-4 transition-all',
+                transportMode === 'SHIP'
+                  ? 'border-primary/30 bg-background'
+                  : 'border-border bg-muted/20 opacity-45 blur-[1px]'
+              )}
+            >
+              <div>
+                <h3 className="text-sm font-semibold">By Ship</h3>
+                <p className="text-xs text-muted-foreground">Capture vessel and seaport details for sea shipment terms.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField control={form.control} name="shipPortOfLoading" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Port of Loading</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Chattogram Port"
+                        {...field}
+                        onChange={(event) => {
+                          field.onChange(event);
+                          form.setValue('portOfLoading', event.target.value, { shouldDirty: true });
+                        }}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="shipPortOfDischarge" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Port of Discharge</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Jebel Ali Port"
+                        {...field}
+                        onChange={(event) => {
+                          field.onChange(event);
+                          form.setValue('portOfDischarge', event.target.value, { shouldDirty: true });
+                        }}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="vesselName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Vessel Name</FormLabel>
+                    <FormControl><Input placeholder="MV Ocean Star" {...field} /></FormControl>
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="voyageNumber" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Voyage Number</FormLabel>
+                    <FormControl><Input placeholder="VOY-1024" {...field} /></FormControl>
+                  </FormItem>
+                )} />
+              </div>
+            </fieldset>
           </CardContent>
         </Card>
 

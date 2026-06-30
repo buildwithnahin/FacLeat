@@ -77,6 +77,42 @@ enum InventoryDirection {
   OUT
 }
 
+enum CustomerReturnStatus {
+  PENDING_INSPECTION
+  INSPECTED
+  COMPLETED
+  REJECTED
+}
+
+enum CustomerReturnDisposition {
+  RESTOCK
+  REWORK
+  DAMAGED
+  REJECT
+}
+
+enum ReturnFinanceAction {
+  NONE
+  REFUND
+  EXCHANGE
+  CREDIT_ADJUSTMENT
+}
+
+enum DamageReportStatus {
+  REPORTED
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  RESOLVED
+}
+
+enum DamageResolution {
+  SCRAP
+  REPAIR
+  B_GRADE
+  SUPPLIER_CLAIM
+}
+
 enum SupplierStatus {
   ACTIVE
   INACTIVE
@@ -212,6 +248,13 @@ enum PurchaseInvoiceMatch {
   UNMATCHED
   MATCHED
   DISPUTED
+}
+
+enum PurchaseAccountCategory {
+  INVENTORY
+  ADMINISTRATIVE_EXPENSE
+  SALES_AND_DISTRIBUTIVE
+  ASSET
 }
 
 enum SupplierPaymentMethod {
@@ -371,6 +414,8 @@ enum PosReturnStatus {
 
 model User {
   id              String     @id @default(cuid())
+  employeeId      String?    @unique
+  employee        Employee?  @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   email           String     @unique
   passwordHash    String
   name            String
@@ -397,6 +442,7 @@ model Role {
   isSystem    Boolean @default(false)
 
   users       UserRole[]
+  employees   Employee[]
   permissions RolePermission[]
 
   createdAt DateTime @default(now())
@@ -450,6 +496,7 @@ model Branch {
   email              String?
   allowNegativeStock Boolean      @default(false)
   isActive           Boolean      @default(true)
+  vatNumber          String?      // BIN for Mushak 6.3
 
   defaultForUsers             User[]                       @relation("UserDefaultBranch")
   periods                     Period[]
@@ -457,6 +504,8 @@ model Branch {
   notifications               Notification[]
   warehouses                  Warehouse[]
   ledger                      InventoryLedger[]
+  customerReturns             CustomerReturn[]
+  damageReports               DamageReport[]
   suppliers                   Supplier[]
   requisitions                PurchaseRequisition[]
   purchaseOrders              PurchaseOrder[]
@@ -481,6 +530,8 @@ model Branch {
   chartAccounts               ChartAccount[]
   journalEntries              JournalEntry[]
   employees                   Employee[]
+  hrMasterData                HrMasterData[]
+  hrWorkflowRecords           HrWorkflowRecord[]
   payrollRuns                 PayrollRun[]
   tradeOrders                 TradeOrder[]
   lettersOfCredit             LetterOfCredit[]
@@ -620,12 +671,14 @@ model Product {
   brand                     ProductBrand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
   costPrice                 Decimal                    @default(0) @db.Decimal(18, 4)
   sellPrice                 Decimal                    @default(0) @db.Decimal(18, 4)
-  taxRate                   Decimal                    @default(0) @db.Decimal(5, 2)
+  taxRate                   Decimal                    @default(15) @db.Decimal(5, 2)
   reorderLevel              Decimal                    @default(0) @db.Decimal(18, 4)
   reorderQty                Decimal                    @default(0) @db.Decimal(18, 4)
   isActive                  Boolean                    @default(true)
   imageUrl                  String?
   ledger                    InventoryLedger[]
+  customerReturnItems       CustomerReturnItem[]
+  damageReportItems         DamageReportItem[]
   requisitionItems          PurchaseRequisitionItem[]
   purchaseOrderItems        PurchaseOrderItem[]
   grnItems                  GoodsReceivingItem[]
@@ -679,6 +732,10 @@ model Warehouse {
   posSessions               PosSession[]
   posSales                  PosSale[]
   posReturns                PosReturn[]
+  customerReturns           CustomerReturn[]      @relation("CustomerReturnDestinationWarehouse")
+  damageReports             DamageReport[]        @relation("DamageReportSourceWarehouse")
+  returnInspectionCases     CustomerReturn[]      @relation("CustomerReturnInspectionWarehouse")
+  damageQuarantineCases     DamageReport[]        @relation("DamageReportQuarantineWarehouse")
   wholesaleInvoices         WholesaleInvoice[]
   wholesaleReturns          WholesaleReturn[]
   corporateOrders           CorporateOrder[]
@@ -714,6 +771,108 @@ model InventoryLedger {
   @@index([createdAt])
 }
 
+model CustomerReturn {
+  id                    String                @id @default(cuid())
+  number                String                @unique
+  branchId              String
+  branch                Branch                @relation(fields: [branchId], references: [id])
+  warehouseId           String
+  warehouse             Warehouse             @relation("CustomerReturnDestinationWarehouse", fields: [warehouseId], references: [id])
+  inspectionWarehouseId String
+  inspectionWarehouse   Warehouse             @relation("CustomerReturnInspectionWarehouse", fields: [inspectionWarehouseId], references: [id])
+  sourceDocumentType    String?
+  sourceDocumentNumber  String?
+  customerName          String?
+  customerPhone         String?
+  returnDate            DateTime              @default(now())
+  status                CustomerReturnStatus  @default(PENDING_INSPECTION)
+  financeAction         ReturnFinanceAction   @default(NONE)
+  financeNote           String?
+  intakeNote            String?
+  inspectionNote        String?
+  createdById           String?
+  inspectedById         String?
+  inspectedAt           DateTime?
+  completedAt           DateTime?
+
+  items CustomerReturnItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId, returnDate])
+  @@index([status, createdAt])
+}
+
+model CustomerReturnItem {
+  id          String                    @id @default(cuid())
+  returnId    String
+  return      CustomerReturn            @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product                   @relation(fields: [productId], references: [id])
+  quantity    Decimal                   @db.Decimal(18, 4)
+  disposition CustomerReturnDisposition?
+  note        String?
+  createdAt   DateTime                  @default(now())
+
+  @@index([returnId])
+  @@index([productId])
+}
+
+model DamageReport {
+  id                    String              @id @default(cuid())
+  number                String              @unique
+  branchId              String
+  branch                Branch              @relation(fields: [branchId], references: [id])
+  warehouseId           String
+  warehouse             Warehouse           @relation("DamageReportSourceWarehouse", fields: [warehouseId], references: [id])
+  quarantineWarehouseId String
+  quarantineWarehouse   Warehouse           @relation("DamageReportQuarantineWarehouse", fields: [quarantineWarehouseId], references: [id])
+  reportDate            DateTime            @default(now())
+  reason                String
+  note                  String?
+  status                DamageReportStatus  @default(REPORTED)
+  estimatedValue        Decimal             @default(0) @db.Decimal(18, 4)
+  requiresApproval      Boolean             @default(false)
+  resolution            DamageResolution?
+  supplierId            String?
+  supplier              Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  grnId                 String?
+  grn                   GoodsReceiving?     @relation(fields: [grnId], references: [id], onDelete: SetNull)
+  purchaseInvoiceId     String?
+  purchaseInvoice       PurchaseInvoice?    @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
+  claimAmount           Decimal             @default(0) @db.Decimal(18, 4)
+  claimReference        String?
+  resolutionNote        String?
+  reportedById          String?
+  resolvedById          String?
+  resolvedAt            DateTime?
+
+  items DamageReportItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId, reportDate])
+  @@index([status, createdAt])
+  @@index([supplierId])
+}
+
+model DamageReportItem {
+  id          String            @id @default(cuid())
+  reportId    String
+  report      DamageReport      @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product           @relation(fields: [productId], references: [id])
+  quantity    Decimal           @db.Decimal(18, 4)
+  costPerUnit Decimal           @default(0) @db.Decimal(18, 4)
+  note        String?
+  createdAt   DateTime          @default(now())
+
+  @@index([reportId])
+  @@index([productId])
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Suppliers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -745,6 +904,7 @@ model Supplier {
   payments         SupplierPayment[]
   ledger           SupplierLedger[]
   tradeOrders      TradeOrder[]
+  damageReports    DamageReport[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -846,6 +1006,7 @@ model PurchaseOrderItem {
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   productId       String
   product         Product       @relation(fields: [productId], references: [id])
+  accountCategory PurchaseAccountCategory @default(INVENTORY)
   size            String?
   description     String?
   unit            UnitOfMeasure @default(PCS)
@@ -885,6 +1046,7 @@ model GoodsReceiving {
 
   items    GoodsReceivingItem[]
   invoices PurchaseInvoice[]
+  damageReports DamageReport[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -942,6 +1104,7 @@ model PurchaseInvoice {
 
   items    PurchaseInvoiceItem[]
   payments SupplierPayment[]
+  damageReports DamageReport[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2503,6 +2666,12 @@ model Employee {
   id          String           @id @default(cuid())
   branchId    String
   branch      Branch           @relation(fields: [branchId], references: [id])
+  reportingManagerId String?
+  reportingManager   Employee?  @relation("EmployeeReportingManager", fields: [reportingManagerId], references: [id], onDelete: SetNull)
+  directReports      Employee[] @relation("EmployeeReportingManager")
+  systemRoleId       String?
+  systemRole         Role?      @relation(fields: [systemRoleId], references: [id], onDelete: SetNull)
+  user               User?
   code        String           @unique
   firstName   String
   lastName    String
@@ -2510,6 +2679,7 @@ model Employee {
   phone       String?
   designation String?
   department  String?
+  employmentType String?        @default("PERMANENT")
   joinedAt    DateTime
   leftAt      DateTime?
   status      EmploymentStatus @default(ACTIVE)
@@ -2528,6 +2698,7 @@ model Employee {
   attendance AttendanceRecord[]
   leaves     LeaveRequest[]
   payslips   Payslip[]
+  hrWorkflowRecords HrWorkflowRecord[]
 
   createdById String?
   updatedById String?
@@ -2536,6 +2707,60 @@ model Employee {
 
   @@index([branchId, status])
   @@index([department])
+  @@index([designation])
+  @@index([employmentType])
+  @@index([reportingManagerId])
+  @@index([systemRoleId])
+}
+
+model HrMasterData {
+  id          String  @id @default(cuid())
+  branchId    String?
+  branch      Branch? @relation(fields: [branchId], references: [id])
+  type        String
+  code        String?
+  name        String
+  description String?
+  status      String  @default("ACTIVE")
+  metadata    Json?
+
+  createdById String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([type, code])
+  @@index([branchId, type])
+  @@index([type, status])
+}
+
+model HrWorkflowRecord {
+  id          String    @id @default(cuid())
+  branchId    String?
+  branch      Branch?   @relation(fields: [branchId], references: [id])
+  employeeId  String?
+  employee    Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  section     String
+  title       String
+  subject     String?
+  status      String    @default("OPEN")
+  priority    String    @default("NORMAL")
+  startDate   DateTime?
+  endDate     DateTime?
+  amount      Decimal?  @db.Decimal(18, 2)
+  owner       String?
+  notes       String?
+  metadata    Json?
+
+  createdById String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([branchId, section])
+  @@index([employeeId, section])
+  @@index([section, status])
+  @@index([startDate])
 }
 
 model AttendanceRecord {
@@ -2795,6 +3020,14 @@ model LetterOfCredit {
   transhipmentAllowed Boolean @default(false)
   portOfLoading       String?
   portOfDischarge     String?
+  airPortOfLoading    String?
+  airPortOfDestination String?
+  flightNumber        String?
+  airlineName         String?
+  shipPortOfLoading   String?
+  shipPortOfDischarge String?
+  vesselName          String?
+  voyageNumber        String?
   goodsDescription    String?
   specialConditions   String?
 

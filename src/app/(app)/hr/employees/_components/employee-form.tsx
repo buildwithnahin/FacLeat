@@ -7,7 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { createEmployeeAction, updateEmployeeAction, type FormState } from '@/server/actions/hr';
-import { EMPLOYMENT_STATUSES } from '@/server/validators/hr';
+import {
+  DEFAULT_DEPARTMENTS,
+  DEFAULT_DESIGNATIONS,
+  DEFAULT_EMPLOYMENT_TYPES,
+  EMPLOYMENT_STATUSES,
+} from '@/server/validators/hr';
 
 export interface EmployeeFormProps {
   mode: 'create' | 'edit';
@@ -22,6 +27,9 @@ export interface EmployeeFormProps {
     phone: string | null;
     designation: string | null;
     department: string | null;
+    employmentType: string | null;
+    reportingManagerId: string | null;
+    systemRoleId: string | null;
     joinedAt: string;
     status: (typeof EMPLOYMENT_STATUSES)[number];
     basicSalary: string;
@@ -34,9 +42,23 @@ export interface EmployeeFormProps {
     bankName: string | null;
     bankAccount: string | null;
   };
+  departments?: string[];
+  designations?: string[];
+  employmentTypes?: string[];
+  managers?: { id: string; label: string }[];
+  roles?: { id: string; name: string }[];
 }
 
-export function EmployeeForm({ mode, branches, initial }: EmployeeFormProps) {
+export function EmployeeForm({
+  mode,
+  branches,
+  initial,
+  departments = [...DEFAULT_DEPARTMENTS],
+  designations = [...DEFAULT_DESIGNATIONS],
+  employmentTypes = [...DEFAULT_EMPLOYMENT_TYPES],
+  managers = [],
+  roles = [],
+}: EmployeeFormProps) {
   const action = mode === 'create' ? createEmployeeAction : updateEmployeeAction;
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, undefined);
 
@@ -63,8 +85,37 @@ export function EmployeeForm({ mode, branches, initial }: EmployeeFormProps) {
           <Field label="Last name" name="lastName" required defaultValue={initial?.lastName} />
           <Field label="Email" name="email" type="email" defaultValue={initial?.email ?? ''} />
           <Field label="Phone" name="phone" defaultValue={initial?.phone ?? ''} />
-          <Field label="Designation" name="designation" defaultValue={initial?.designation ?? ''} />
-          <Field label="Department" name="department" defaultValue={initial?.department ?? ''} />
+          <SelectField label="Department" name="department" required defaultValue={initial?.department ?? ''} options={departments} />
+          <SelectField label="Designation" name="designation" required defaultValue={initial?.designation ?? ''} options={designations} />
+          <SelectField label="Employment Type" name="employmentType" required defaultValue={initial?.employmentType ?? 'PERMANENT'} options={employmentTypes} />
+          <div className="space-y-2">
+            <Label htmlFor="reportingManagerId">Reporting Manager</Label>
+            <select
+              id="reportingManagerId"
+              name="reportingManagerId"
+              defaultValue={initial?.reportingManagerId ?? ''}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+            >
+              <option value="">No manager</option>
+              {managers.map((manager) => (
+                <option key={manager.id} value={manager.id}>{manager.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="systemRoleId">Role</Label>
+            <select
+              id="systemRoleId"
+              name="systemRoleId"
+              defaultValue={initial?.systemRoleId ?? ''}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+            >
+              <option value="">No system access role</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>{role.name}</option>
+              ))}
+            </select>
+          </div>
           <Field label="Joined at" name="joinedAt" type="date" required defaultValue={initial?.joinedAt} />
           <div className="space-y-2">
             <Label htmlFor="status">Status</Label>
@@ -114,6 +165,42 @@ export function EmployeeForm({ mode, branches, initial }: EmployeeFormProps) {
         </Button>
       </div>
     </form>
+  );
+}
+
+function SelectField({
+  label,
+  name,
+  required,
+  defaultValue,
+  options,
+}: {
+  label: string;
+  name: string;
+  required?: boolean;
+  defaultValue?: string;
+  options: string[];
+}) {
+  const values = Array.from(new Set([defaultValue, ...options].filter(Boolean)));
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={name}>
+        {label}
+        {required && <span className="text-destructive"> *</span>}
+      </Label>
+      <select
+        id={name}
+        name={name}
+        required={required}
+        defaultValue={defaultValue}
+        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+      >
+        <option value="">Select {label.toLowerCase()}</option>
+        {values.map((value) => (
+          <option key={value} value={value}>{value}</option>
+        ))}
+      </select>
+    </div>
   );
 }
 

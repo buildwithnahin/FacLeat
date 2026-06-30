@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { getSession } from '@/server/auth/session';
 import { hrService } from '@/server/services/hr.service';
-import { branchService } from '@/server/services/branch.service';
+import { prisma } from '@/server/db';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +21,11 @@ export default async function PayrollPage() {
   const session = await getSession();
   const [runs, branches] = await Promise.all([
     hrService.listPayrollRuns(session),
-    branchService.listActive(session),
+    prisma.branch.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, code: true, name: true },
+    }),
   ]);
   const canProcess = session?.permissions.includes('hr:process-payroll') ?? false;
 

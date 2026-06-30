@@ -12,18 +12,18 @@ export interface UserFormProps {
   mode: 'create' | 'edit';
   initial?: {
     id: string;
-    name: string;
+    employeeId: string | null;
     email: string;
-    phone: string | null;
     status: 'ACTIVE' | 'DISABLED' | 'PENDING';
     defaultBranchId: string | null;
-    roleIds: string[];
+    roleId: string | null;
   };
   roles: { id: string; name: string; description: string | null }[];
   branches: { id: string; name: string; code: string }[];
+  employees: { id: string; label: string }[];
 }
 
-export function UserForm({ mode, initial, roles, branches }: UserFormProps) {
+export function UserForm({ mode, initial, roles, branches, employees }: UserFormProps) {
   const action = mode === 'create' ? createUserAction : updateUserAction;
   const [state, formAction, pending] = useActionState<UserFormState, FormData>(action, undefined);
 
@@ -33,16 +33,32 @@ export function UserForm({ mode, initial, roles, branches }: UserFormProps) {
 
       <Card>
         <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="Full name" name="name" required defaultValue={initial?.name} errors={state?.fieldErrors?.name} />
+          <div className="space-y-2">
+            <Label htmlFor="employeeId">Employee <span className="text-destructive">*</span></Label>
+            <select
+              id="employeeId"
+              name="employeeId"
+              required
+              defaultValue={initial?.employeeId ?? ''}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              <option value="">Select employee</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>{employee.label}</option>
+              ))}
+            </select>
+            {state?.fieldErrors?.employeeId?.length ? (
+              <p className="text-xs text-destructive">{state.fieldErrors.employeeId[0]}</p>
+            ) : null}
+          </div>
           <Field
-            label="Email"
+            label="Username / Email"
             name="email"
             type="email"
             required
             defaultValue={initial?.email}
             errors={state?.fieldErrors?.email}
           />
-          <Field label="Phone" name="phone" defaultValue={initial?.phone ?? ''} errors={state?.fieldErrors?.phone} />
           <Field
             label={mode === 'create' ? 'Password' : 'New password (leave blank to keep current)'}
             name="password"
@@ -67,6 +83,24 @@ export function UserForm({ mode, initial, roles, branches }: UserFormProps) {
             </select>
           </div>
           <div className="space-y-2">
+            <Label htmlFor="roleId">Role <span className="text-destructive">*</span></Label>
+            <select
+              id="roleId"
+              name="roleId"
+              required
+              defaultValue={initial?.roleId ?? ''}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              <option value="">Select ERP role</option>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+            {state?.fieldErrors?.roleId?.length ? (
+              <p className="text-xs text-destructive">{state.fieldErrors.roleId[0]}</p>
+            ) : null}
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="status">Status</Label>
             <select
               id="status"
@@ -78,33 +112,6 @@ export function UserForm({ mode, initial, roles, branches }: UserFormProps) {
               <option value="DISABLED">Disabled</option>
               <option value="PENDING">Pending</option>
             </select>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-6">
-          <Label>Roles</Label>
-          <p className="text-xs text-muted-foreground mb-3">Assign one or more roles to control access.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {roles.map((r) => (
-              <label
-                key={r.id}
-                className="flex items-start gap-3 rounded-md border p-3 text-sm hover:bg-muted/30 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  name="roleIds"
-                  value={r.id}
-                  defaultChecked={initial?.roleIds.includes(r.id)}
-                  className="mt-0.5 h-4 w-4 accent-primary"
-                />
-                <div>
-                  <p className="font-medium">{r.name}</p>
-                  {r.description && <p className="text-xs text-muted-foreground">{r.description}</p>}
-                </div>
-              </label>
-            ))}
           </div>
         </CardContent>
       </Card>

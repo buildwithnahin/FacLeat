@@ -27,6 +27,23 @@ export const warehouseService = {
     });
   },
 
+  async listActiveShowroomsForBranch(session: AppSession | null, branchId: string) {
+    await authorize(session, 'warehouse:read');
+    return prisma.warehouse.findMany({
+      where: { branchId, isActive: true, type: 'SHOWROOM' },
+      orderBy: { name: 'asc' },
+    });
+  },
+
+  async listActiveShowrooms(session: AppSession | null) {
+    await authorize(session, 'warehouse:read');
+    return prisma.warehouse.findMany({
+      where: { isActive: true, type: 'SHOWROOM' },
+      orderBy: [{ branch: { name: 'asc' } }, { name: 'asc' }],
+      include: WAREHOUSE_INCLUDE,
+    });
+  },
+
   async getById(session: AppSession | null, id: string) {
     await authorize(session, 'warehouse:read');
     const wh = await prisma.warehouse.findUnique({ where: { id }, include: WAREHOUSE_INCLUDE });

@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
-import { publishNotification } from '@/server/notifications/publisher';
+import { publishNotification, publishToPermission } from '@/server/notifications/publisher';
 import type { AppSession } from '@/server/auth/session';
 import type {
   ApprovalRuleInput,
@@ -358,7 +358,17 @@ export const approvalService = {
         tx,
       );
 
-      return { updated, notifyNextRole, notifyRequester: true, title: request.title };
+      return {
+        updated,
+        notifyNextRole,
+        notifyRequester: true,
+        title: request.title,
+        module: request.module,
+        action: request.action,
+        entityType: request.entityType,
+        entityId: request.entityId,
+        branchId: request.branchId,
+      };
     }).then(async (result) => {
       if (result.notifyNextRole) {
         await notifyRole(result.notifyNextRole, {
@@ -381,6 +391,23 @@ export const approvalService = {
           title: `Approval ${result.updated.status.toLowerCase()}: ${result.title}`,
           body: input.note || undefined,
           href: `/approvals/${result.updated.id}`,
+        });
+      }
+      if (
+        result.updated.status === 'APPROVED' &&
+        result.module === 'inventory' &&
+        result.action === 'damage' &&
+        result.entityType === 'DamageReport' &&
+        result.entityId &&
+        result.branchId
+      ) {
+        await publishToPermission('inventory:damage', {
+          branchId: result.branchId,
+          severity: 'WARNING',
+          module: 'inventory',
+          title: `Action pending: ${result.title}`,
+          body: 'Approval is complete. Choose the final action for this faulty report.',
+          href: `/warehouse/faulty/${result.entityId}`,
         });
       }
       return result.updated;

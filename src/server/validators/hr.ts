@@ -4,6 +4,22 @@ export const EMPLOYMENT_STATUSES = ['ACTIVE', 'ON_LEAVE', 'TERMINATED', 'RESIGNE
 export const ATTENDANCE_STATUSES = ['PRESENT', 'ABSENT', 'LATE', 'HALF_DAY', 'ON_LEAVE', 'HOLIDAY'] as const;
 export const LEAVE_TYPES = ['CASUAL', 'SICK', 'EARNED', 'UNPAID', 'MATERNITY', 'OTHER'] as const;
 export const LEAVE_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'] as const;
+export const DEFAULT_DEPARTMENTS = ['HR', 'Accounts', 'Production'] as const;
+export const DEFAULT_DESIGNATIONS = ['HR Manager', 'Accountant', 'Factory Manager'] as const;
+export const DEFAULT_EMPLOYMENT_TYPES = ['PERMANENT', 'PROBATION', 'CONTRACT', 'TEMPORARY', 'INTERN'] as const;
+export const ERP_ROLE_NAMES = [
+  'Super Admin',
+  'Admin',
+  'HR',
+  'Accounts',
+  'Commercial',
+  'Inventory',
+  'Production',
+  'Purchase',
+  'Store',
+  'Sales',
+  'Management',
+] as const;
 
 export const employeeCreateSchema = z.object({
   branchId: z.string().cuid(),
@@ -14,6 +30,9 @@ export const employeeCreateSchema = z.object({
   phone: z.string().trim().max(32).optional().or(z.literal('')),
   designation: z.string().trim().max(80).optional().or(z.literal('')),
   department: z.string().trim().max(80).optional().or(z.literal('')),
+  employmentType: z.string().trim().max(80).optional().or(z.literal('')),
+  reportingManagerId: z.string().cuid().optional().or(z.literal('')),
+  systemRoleId: z.string().cuid().optional().or(z.literal('')),
   joinedAt: z.coerce.date(),
   status: z.enum(EMPLOYMENT_STATUSES).default('ACTIVE'),
   basicSalary: z.coerce.number().finite().min(0).default(0),
@@ -64,9 +83,40 @@ export const payrollRunActionSchema = z.object({
   id: z.string().cuid(),
 });
 
+export const hrMasterDataCreateSchema = z.object({
+  type: z.string().trim().min(1).max(80),
+  branchId: z.string().cuid().optional().or(z.literal('')),
+  code: z.string().trim().max(32).optional().or(z.literal('')),
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(500).optional().or(z.literal('')),
+  status: z.string().trim().min(1).max(40).default('ACTIVE'),
+});
+
+export const hrWorkflowRecordCreateSchema = z
+  .object({
+    section: z.string().trim().min(1).max(80),
+    branchId: z.string().cuid().optional().or(z.literal('')),
+    employeeId: z.string().cuid().optional().or(z.literal('')),
+    title: z.string().trim().min(1).max(160),
+    subject: z.string().trim().max(160).optional().or(z.literal('')),
+    status: z.string().trim().min(1).max(40).default('OPEN'),
+    priority: z.string().trim().min(1).max(40).default('NORMAL'),
+    startDate: z.coerce.date().optional().or(z.literal('')),
+    endDate: z.coerce.date().optional().or(z.literal('')),
+    amount: z.coerce.number().finite().min(0).optional().or(z.literal('')),
+    owner: z.string().trim().max(120).optional().or(z.literal('')),
+    notes: z.string().trim().max(1000).optional().or(z.literal('')),
+  })
+  .refine((v) => !v.startDate || !v.endDate || v.endDate >= v.startDate, {
+    message: 'End date must be on/after start date',
+    path: ['endDate'],
+  });
+
 export type EmployeeCreateInput = z.infer<typeof employeeCreateSchema>;
 export type EmployeeUpdateInput = z.infer<typeof employeeUpdateSchema>;
 export type AttendanceMarkInput = z.infer<typeof attendanceMarkSchema>;
 export type LeaveCreateInput = z.infer<typeof leaveCreateSchema>;
 export type LeaveDecisionInput = z.infer<typeof leaveDecisionSchema>;
 export type PayrollRunCreateInput = z.infer<typeof payrollRunCreateSchema>;
+export type HrMasterDataCreateInput = z.infer<typeof hrMasterDataCreateSchema>;
+export type HrWorkflowRecordCreateInput = z.infer<typeof hrWorkflowRecordCreateSchema>;

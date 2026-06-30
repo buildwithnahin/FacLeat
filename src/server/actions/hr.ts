@@ -8,6 +8,8 @@ import {
   attendanceMarkSchema,
   employeeCreateSchema,
   employeeUpdateSchema,
+  hrMasterDataCreateSchema,
+  hrWorkflowRecordCreateSchema,
   leaveCreateSchema,
   leaveDecisionSchema,
   payrollRunCreateSchema,
@@ -29,6 +31,9 @@ function parseEmployeeForm(fd: FormData) {
     phone: fd.get('phone') ?? '',
     designation: fd.get('designation') ?? '',
     department: fd.get('department') ?? '',
+    employmentType: fd.get('employmentType') ?? '',
+    reportingManagerId: fd.get('reportingManagerId') ?? '',
+    systemRoleId: fd.get('systemRoleId') ?? '',
     joinedAt: fd.get('joinedAt'),
     status: fd.get('status') ?? 'ACTIVE',
     basicSalary: num('basicSalary'),
@@ -162,4 +167,57 @@ export async function payrollStatusAction(fd: FormData) {
   }
   revalidatePath('/hr/payroll');
   revalidatePath(`/hr/payroll/${id}`);
+}
+
+export async function createHrMasterDataAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const path = String(fd.get('path') ?? '/hr');
+  const parsed = hrMasterDataCreateSchema.safeParse({
+    type: fd.get('type'),
+    branchId: fd.get('branchId') ?? '',
+    code: fd.get('code') ?? '',
+    name: fd.get('name'),
+    description: fd.get('description') ?? '',
+    status: fd.get('status') ?? 'ACTIVE',
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+
+  try {
+    const session = await getSession();
+    const row = await hrService.createMasterData(session, parsed.data);
+    revalidatePath(path);
+    if (parsed.data.type === 'departments') revalidatePath('/hr/recruitment');
+    return { success: true, id: row.id };
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    throw e;
+  }
+}
+
+export async function createHrWorkflowRecordAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const path = String(fd.get('path') ?? '/hr');
+  const parsed = hrWorkflowRecordCreateSchema.safeParse({
+    section: fd.get('section'),
+    branchId: fd.get('branchId') ?? '',
+    employeeId: fd.get('employeeId') ?? '',
+    title: fd.get('title'),
+    subject: fd.get('subject') ?? '',
+    status: fd.get('status') ?? 'OPEN',
+    priority: fd.get('priority') ?? 'NORMAL',
+    startDate: fd.get('startDate') ?? '',
+    endDate: fd.get('endDate') ?? '',
+    amount: fd.get('amount') ?? '',
+    owner: fd.get('owner') ?? '',
+    notes: fd.get('notes') ?? '',
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+
+  try {
+    const session = await getSession();
+    const row = await hrService.createWorkflowRecord(session, parsed.data);
+    revalidatePath(path);
+    return { success: true, id: row.id };
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    throw e;
+  }
 }

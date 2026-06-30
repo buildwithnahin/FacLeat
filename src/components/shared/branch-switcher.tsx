@@ -1,11 +1,10 @@
 import { Building2, ChevronDown } from 'lucide-react';
-import { getSession } from '@/server/auth/session';
+import type { AppSession } from '@/server/auth/session';
 import { branchService } from '@/server/services/branch.service';
 import { setActiveBranchAction } from '@/server/actions/branches';
 
-export async function BranchSwitcher() {
-  const session = await getSession();
-  if (!session) return null;
+export async function BranchSwitcher({ session }: { session: AppSession }) {
+  if (!session.permissions.includes('branches:read')) return null;
 
   let branches: Awaited<ReturnType<typeof branchService.listActive>> = [];
   try {

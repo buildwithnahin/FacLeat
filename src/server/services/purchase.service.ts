@@ -272,6 +272,7 @@ export const purchaseService = {
         discountTotal = discountTotal.plus(totals.discount);
         return {
           productId: it.productId,
+          accountCategory: it.accountCategory,
           size,
           description: it.description || null,
           unit: it.unit,

@@ -186,7 +186,7 @@ export function ProductForm({ mode, initial, categories, brands }: ProductFormPr
         <CardContent className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           <MoneyField label="Cost price" name="costPrice" defaultValue={initial?.costPrice ?? '0'} error={E('costPrice')} />
           <MoneyField label="Sell price" name="sellPrice" defaultValue={initial?.sellPrice ?? '0'} error={E('sellPrice')} />
-          <MoneyField label="Tax rate (%)" name="taxRate" defaultValue={initial?.taxRate ?? '0'} error={E('taxRate')} />
+          <MoneyField label="Tax rate (%)" name="taxRate" defaultValue={initial?.taxRate ?? '15'} error={E('taxRate')} />
           <MoneyField label="Reorder level" name="reorderLevel" defaultValue={initial?.reorderLevel ?? '0'} />
           <MoneyField label="Reorder quantity" name="reorderQty" defaultValue={initial?.reorderQty ?? '0'} />
           <div className="space-y-2">

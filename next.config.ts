@@ -37,6 +37,11 @@ const nextConfig: NextConfig = {
     };
     return config;
   },
+  turbopack: {
+    resolveAlias: {
+      '@prisma/client': './src/generated/prisma',
+    },
+  },
 };
 
 export default nextConfig;

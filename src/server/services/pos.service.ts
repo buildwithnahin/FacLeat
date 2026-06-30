@@ -10,9 +10,9 @@ import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/errors';
 import { nextDocumentNumber } from '@/lib/document-number';
 import {
   POS_DISCOUNT_APPROVAL_THRESHOLD,
+  type CreateSaleInput,
   type OpenSessionInput,
   type CloseSessionInput,
-  type CreateSaleInput,
   type RefundSaleInput,
 } from '@/server/validators/pos';
 
@@ -24,13 +24,28 @@ function computeLine(item: {
   unitPrice: number;
   discountRate: number;
   taxRate: number;
-}) {
+}, vatMode: CreateSaleInput['vatMode']) {
   const qty = D(item.quantity);
   const price = D(item.unitPrice);
   const gross = qty.mul(price);
   const discount = gross.mul(D(item.discountRate)).div(100);
-  const net = gross.minus(discount);
-  const tax = net.mul(D(item.taxRate)).div(100);
+  const afterDiscount = gross.minus(discount);
+  const taxRate = vatMode === 'C' ? ZERO : D(item.taxRate);
+
+  let net: Prisma.Decimal;
+  let tax: Prisma.Decimal;
+
+  if (vatMode === 'A') {
+    net = afterDiscount;
+    tax = net.mul(taxRate).div(100);
+  } else if (vatMode === 'B') {
+    net = taxRate.gt(ZERO) ? afterDiscount.mul(100).div(D(100).plus(taxRate)) : afterDiscount;
+    tax = afterDiscount.minus(net);
+  } else {
+    net = afterDiscount;
+    tax = ZERO;
+  }
+
   return { gross, discount, net, tax, lineTotal: net.plus(tax) };
 }
 
@@ -210,8 +225,8 @@ export const posService = {
     let taxTotal = ZERO;
     let grandTotal = ZERO;
     const computed = input.items.map((it) => {
-      const c = computeLine(it);
-      subtotal = subtotal.plus(c.gross);
+      const c = computeLine(it, input.vatMode);
+      subtotal = subtotal.plus(c.net);
       discountTotal = discountTotal.plus(c.discount);
       taxTotal = taxTotal.plus(c.tax);
       grandTotal = grandTotal.plus(c.lineTotal);

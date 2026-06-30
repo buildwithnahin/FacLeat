@@ -11,19 +11,9 @@ export const metadata = { title: 'Stock transfer' };
 export default async function TransferPage() {
   const session = await getSession();
   const branchId = session?.activeBranchId;
-  if (!branchId) {
-    return (
-      <div>
-        <PageHeader title="Stock transfer" />
-        <Card className="p-6 text-sm text-muted-foreground">
-          Select an active branch from the topbar first.
-        </Card>
-      </div>
-    );
-  }
 
   const [warehouses, products] = await Promise.all([
-    warehouseService.listActiveForBranch(session, branchId),
+    warehouseService.listActiveShowrooms(session),
     prisma.product.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
@@ -39,12 +29,14 @@ export default async function TransferPage() {
     }),
   ]);
 
-  if (warehouses.length < 2) {
+  const uniqueBranchCount = new Set(warehouses.map((warehouse) => warehouse.branchId)).size;
+
+  if (warehouses.length < 2 || uniqueBranchCount < 2) {
     return (
       <div>
         <PageHeader title="Stock transfer" />
         <Card className="p-6 text-sm text-muted-foreground">
-          You need at least two warehouses on this branch to transfer stock.
+          You need active showroom warehouses in at least two different branches to transfer stock.
         </Card>
       </div>
     );
@@ -54,12 +46,18 @@ export default async function TransferPage() {
     <div>
       <PageHeader
         title="Stock transfer"
-        description="Move stock between two warehouses in this branch."
+        description="Move stock between showroom warehouses in different branches."
       />
       <StockMovementForm
         mode="transfer"
-        branchId={branchId}
-        warehouses={warehouses.map((w) => ({ id: w.id, name: w.name, code: w.code }))}
+        branchId={branchId ?? session?.defaultBranchId ?? warehouses[0]!.branchId}
+        warehouses={warehouses.map((w) => ({
+          id: w.id,
+          name: w.name,
+          code: w.code,
+          branchName: w.branch.name,
+          branchCode: w.branch.code,
+        }))}
         products={products.map((p) => ({
           id: p.id,
           sku: p.sku,

@@ -9,6 +9,7 @@ import type { UserCreateInput, UserUpdateInput } from '@/server/validators/users
 import { NotFoundError, ValidationError } from '@/lib/errors';
 
 const USER_INCLUDE = {
+  employee: { select: { id: true, code: true, firstName: true, lastName: true, designation: true, department: true } },
   defaultBranch: { select: { id: true, name: true, code: true } },
   roles: { include: { role: { select: { id: true, name: true } } } },
 } as const;
@@ -34,20 +35,27 @@ export const userService = {
 
     const exists = await prisma.user.findUnique({ where: { email: input.email } });
     if (exists) throw new ValidationError('Email already in use');
+    const employee = await prisma.employee.findUnique({
+      where: { id: input.employeeId },
+      include: { user: true },
+    });
+    if (!employee) throw new ValidationError('Employee not found');
+    if (employee.user) throw new ValidationError('Employee already has a user account');
 
     const passwordHash = await bcrypt.hash(input.password, 10);
 
     const user = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          name: input.name,
+          name: `${employee.firstName} ${employee.lastName}`,
+          employeeId: input.employeeId,
           email: input.email,
-          phone: input.phone || null,
+          phone: employee.phone,
           passwordHash,
           status: input.status,
-          defaultBranchId: input.defaultBranchId || null,
+          defaultBranchId: input.defaultBranchId || employee.branchId,
           roles: {
-            create: input.roleIds.map((roleId) => ({ roleId })),
+            create: [{ roleId: input.roleId }],
           },
         },
         include: USER_INCLUDE,
@@ -65,7 +73,9 @@ export const userService = {
             email: user.email,
             name: user.name,
             status: user.status,
-            roleIds: input.roleIds,
+            employeeId: input.employeeId,
+            designation: employee.designation,
+            roleId: input.roleId,
           },
         },
         tx,
@@ -89,11 +99,20 @@ export const userService = {
       const dup = await prisma.user.findUnique({ where: { email: input.email } });
       if (dup) throw new ValidationError('Email already in use');
     }
+    const employee = await prisma.employee.findUnique({
+      where: { id: input.employeeId },
+      include: { user: true },
+    });
+    if (!employee) throw new ValidationError('Employee not found');
+    if (input.employeeId !== existing.employeeId && employee.user) {
+      throw new ValidationError('Employee already has a user account');
+    }
 
     const updated = await prisma.$transaction(async (tx) => {
       await tx.userRole.deleteMany({ where: { userId: input.id } });
 
       const data: {
+        employeeId: string;
         name: string;
         email: string;
         phone: string | null;
@@ -102,12 +121,13 @@ export const userService = {
         passwordHash?: string;
         roles: { create: { roleId: string }[] };
       } = {
-        name: input.name,
+        employeeId: input.employeeId,
+        name: `${employee.firstName} ${employee.lastName}`,
         email: input.email,
-        phone: input.phone || null,
+        phone: employee.phone,
         status: input.status,
-        defaultBranchId: input.defaultBranchId || null,
-        roles: { create: input.roleIds.map((roleId) => ({ roleId })) },
+        defaultBranchId: input.defaultBranchId || employee.branchId,
+        roles: { create: [{ roleId: input.roleId }] },
       };
       if (input.password) data.passwordHash = await bcrypt.hash(input.password, 10);
 
@@ -129,13 +149,16 @@ export const userService = {
             email: existing.email,
             name: existing.name,
             status: existing.status,
+            employeeId: existing.employeeId,
             roleIds: existing.roles.map((r) => r.role.id),
           },
           after: {
             email: updated.email,
             name: updated.name,
             status: updated.status,
-            roleIds: input.roleIds,
+            employeeId: input.employeeId,
+            designation: employee.designation,
+            roleId: input.roleId,
           },
         },
         tx,

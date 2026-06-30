@@ -26,6 +26,8 @@ export interface WarehouseOption {
   id: string;
   name: string;
   code: string;
+  branchName?: string;
+  branchCode?: string;
 }
 
 interface Row {
@@ -147,6 +149,11 @@ export function StockMovementForm({
     })),
   );
 
+  const warehouseLabel = (warehouse: WarehouseOption) =>
+    warehouse.branchCode || warehouse.branchName
+      ? `${warehouse.name} (${warehouse.code}) - ${warehouse.branchName ?? ''}${warehouse.branchCode ? ` [${warehouse.branchCode}]` : ''}`
+      : `${warehouse.name} (${warehouse.code})`;
+
   return (
     <form action={formAction} className="space-y-6">
       <input type="hidden" name="branchId" value={branchId} />
@@ -166,7 +173,7 @@ export function StockMovementForm({
                 >
                   {warehouses.map((w) => (
                     <option key={w.id} value={w.id}>
-                      {w.name} ({w.code})
+                      {warehouseLabel(w)}
                     </option>
                   ))}
                 </select>
@@ -181,7 +188,7 @@ export function StockMovementForm({
                 >
                   {warehouses.map((w) => (
                     <option key={w.id} value={w.id}>
-                      {w.name} ({w.code})
+                      {warehouseLabel(w)}
                     </option>
                   ))}
                 </select>
@@ -203,7 +210,7 @@ export function StockMovementForm({
                 >
                   {warehouses.map((w) => (
                     <option key={w.id} value={w.id}>
-                      {w.name} ({w.code})
+                      {warehouseLabel(w)}
                     </option>
                   ))}
                 </select>

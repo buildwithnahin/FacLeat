@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Plus, Pencil } from 'lucide-react';
+import { Eye, Pencil, Plus } from 'lucide-react';
 import { getSession } from '@/server/auth/session';
 import { hrService } from '@/server/services/hr.service';
 import { PageHeader } from '@/components/shared/page-header';
@@ -42,6 +42,7 @@ export default async function EmployeesPage() {
                 <th className="text-left font-semibold px-4 py-3">Name</th>
                 <th className="text-left font-semibold px-4 py-3">Designation</th>
                 <th className="text-left font-semibold px-4 py-3">Department</th>
+                <th className="text-left font-semibold px-4 py-3">Role</th>
                 <th className="text-left font-semibold px-4 py-3">Branch</th>
                 <th className="text-right font-semibold px-4 py-3 tabular-nums">Basic</th>
                 <th className="text-left font-semibold px-4 py-3">Status</th>
@@ -51,7 +52,7 @@ export default async function EmployeesPage() {
             <tbody className="divide-y">
               {employees.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
                     No employees yet.
                   </td>
                 </tr>
@@ -59,20 +60,32 @@ export default async function EmployeesPage() {
               {employees.map((e) => (
                 <tr key={e.id} className="hover:bg-muted/30">
                   <td className="px-4 py-3 font-mono text-xs">{e.code}</td>
-                  <td className="px-4 py-3 font-medium">{e.firstName} {e.lastName}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <Link href={`/hr/employees/${e.id}`} className="hover:text-primary hover:underline">
+                      {e.firstName} {e.lastName}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">{e.designation ?? '—'}</td>
                   <td className="px-4 py-3 text-muted-foreground">{e.department ?? '—'}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{e.systemRole?.name ?? '—'}</td>
                   <td className="px-4 py-3"><Badge variant="outline">{e.branch.code}</Badge></td>
                   <td className="px-4 py-3 text-right tabular-nums">{e.basicSalary.toString()}</td>
                   <td className="px-4 py-3"><Badge variant={STATUS_VARIANT[e.status] ?? 'outline'}>{e.status}</Badge></td>
                   <td className="px-4 py-3 text-right">
-                    {canWrite && (
+                    <div className="flex items-center justify-end gap-1">
                       <Button size="sm" variant="ghost" asChild>
                         <Link href={`/hr/employees/${e.id}`}>
-                          <Pencil className="h-3.5 w-3.5" />
+                          <Eye className="h-3.5 w-3.5" />
                         </Link>
                       </Button>
-                    )}
+                      {canWrite && (
+                        <Button size="sm" variant="ghost" asChild>
+                          <Link href={`/hr/employees/${e.id}/edit`}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

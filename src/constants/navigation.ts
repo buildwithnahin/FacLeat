@@ -1,8 +1,9 @@
 export interface NavItem {
   label: string;
-  href: string;
+  href?: string;
   iconName?: string;
   permission?: string;
+  items?: NavItem[];
 }
 
 export interface NavModule {
@@ -61,7 +62,9 @@ export const MODULES: NavModule[] = [
     items: [
       { label: 'Overview', href: '/warehouse', permission: 'warehouse:read' },
       { label: 'Receive', href: '/warehouse/receive', permission: 'warehouse:receive' },
-      { label: 'Faulty/Return Product', href: '/warehouse/issue', permission: 'warehouse:issue' },
+      { label: 'Issue / adjust out', href: '/warehouse/issue', permission: 'warehouse:issue' },
+      { label: 'Customer returns', href: '/warehouse/returns', permission: 'inventory:return' },
+      { label: 'Faulty stock', href: '/warehouse/faulty', permission: 'inventory:damage' },
       { label: 'Transfer', href: '/warehouse/transfer', permission: 'warehouse:transfer' },
       { label: 'Physical count', href: '/warehouse/count', permission: 'warehouse:count' },
     ],
@@ -195,6 +198,7 @@ export const MODULES: NavModule[] = [
       { label: 'New journal', href: '/accounts/journals/new', permission: 'accounts:post' },
       { label: 'Account ledger', href: '/accounts/ledger', permission: 'accounts:read' },
       { label: 'Trial balance', href: '/accounts/trial-balance', permission: 'accounts:read' },
+      { label: 'Recruitment Budget Approval', href: '/hr/recruitment', permission: 'accounts:read' },
       { label: 'Balance sheet', href: '/accounts/balance-sheet', permission: 'accounts:read' },
       { label: 'Income statement', href: '/accounts/income-statement', permission: 'accounts:read' },
       { label: 'Cash flow statement', href: '/accounts/cash-flow', permission: 'accounts:read' },
@@ -255,12 +259,112 @@ export const MODULES: NavModule[] = [
     permission: 'hr:read',
     section: 'HR',
     items: [
-      { label: 'Overview', href: '/hr', permission: 'hr:read' },
-      { label: 'Employees', href: '/hr/employees', permission: 'hr:read' },
-      { label: 'New employee', href: '/hr/employees/new', permission: 'hr:write' },
-      { label: 'Attendance', href: '/hr/attendance', permission: 'hr:read' },
-      { label: 'Leaves', href: '/hr/leaves', permission: 'hr:read' },
-      { label: 'Payroll', href: '/hr/payroll', permission: 'hr:read' },
+      { label: 'Dashboard', href: '/hr', permission: 'hr:read' },
+      {
+        label: 'Recruitment',
+        permission: 'hr:read',
+        items: [
+          { label: 'Recruitment Requests', href: '/hr/recruitment', permission: 'hr:write' },
+          { label: 'Candidates', href: '/hr/candidates', permission: 'hr:read' },
+          { label: 'Interviews', href: '/hr/interviews', permission: 'hr:read' },
+          { label: 'Job Offers', href: '/hr/job-offers', permission: 'hr:write' },
+          { label: 'Joining', href: '/hr/joining', permission: 'hr:write' },
+        ],
+      },
+      {
+        label: 'Employee Management',
+        permission: 'hr:read',
+        items: [
+          { label: 'Employees', href: '/hr/employees', permission: 'hr:read' },
+          { label: 'Departments', href: '/hr/departments', permission: 'hr:read' },
+          { label: 'Designations', href: '/hr/designations', permission: 'hr:read' },
+          { label: 'Employment Types', href: '/hr/employment-types', permission: 'hr:read' },
+          { label: 'Shifts', href: '/hr/shifts', permission: 'hr:read' },
+          { label: 'Holiday Calendar', href: '/hr/holiday-calendar', permission: 'hr:read' },
+          { label: 'Contracts', href: '/hr/contracts', permission: 'hr:write' },
+        ],
+      },
+      {
+        label: 'Employee Lifecycle',
+        permission: 'hr:read',
+        items: [
+          { label: 'Transfer', href: '/hr/transfers', permission: 'hr:write' },
+          { label: 'Promotion', href: '/hr/promotions', permission: 'hr:write' },
+          { label: 'Increment', href: '/hr/increments', permission: 'hr:write' },
+          { label: 'Confirmation', href: '/hr/confirmations', permission: 'hr:write' },
+          { label: 'Resignation', href: '/hr/resignations', permission: 'hr:read' },
+          { label: 'Exit Clearance', href: '/hr/exit-clearance', permission: 'hr:read' },
+          { label: 'Final Settlement', href: '/hr/final-settlement', permission: 'hr:read' },
+        ],
+      },
+      {
+        label: 'Attendance',
+        permission: 'hr:read',
+        items: [
+          { label: 'Daily Attendance', href: '/hr/attendance', permission: 'hr:read' },
+          { label: 'Attendance Adjustment', href: '/hr/attendance-adjustment', permission: 'hr:attendance' },
+          { label: 'Late / Early Report', href: '/hr/late-early-report', permission: 'hr:read' },
+          { label: 'Overtime', href: '/hr/overtime', permission: 'hr:read' },
+          { label: 'Attendance Summary', href: '/hr/attendance-summary', permission: 'hr:read' },
+        ],
+      },
+      {
+        label: 'Leave Management',
+        permission: 'hr:read',
+        items: [
+          { label: 'Leave Application', href: '/hr/leaves', permission: 'hr:read' },
+          { label: 'Leave Approval', href: '/hr/leave-approval', permission: 'hr:leave-approve' },
+          { label: 'Leave Balance', href: '/hr/leave-balance', permission: 'hr:read' },
+          { label: 'Leave Policy', href: '/hr/leave-policy', permission: 'hr:read' },
+        ],
+      },
+      {
+        label: 'Performance',
+        permission: 'hr:read',
+        items: [
+          { label: 'KPI', href: '/hr/kpi', permission: 'hr:read' },
+          { label: 'Performance Review', href: '/hr/performance-review', permission: 'hr:read' },
+          { label: 'Appraisal', href: '/hr/appraisal', permission: 'hr:read' },
+        ],
+      },
+      {
+        label: 'Training',
+        permission: 'hr:read',
+        items: [
+          { label: 'Training Schedule', href: '/hr/training-schedule', permission: 'hr:read' },
+          { label: 'Training History', href: '/hr/training-history', permission: 'hr:read' },
+        ],
+      },
+      {
+        label: 'Disciplinary',
+        permission: 'hr:read',
+        items: [
+          { label: 'Warning', href: '/hr/warnings', permission: 'hr:read' },
+          { label: 'Suspension', href: '/hr/suspensions', permission: 'hr:read' },
+          { label: 'Notice', href: '/hr/notices', permission: 'hr:read' },
+        ],
+      },
+      {
+        label: 'Payroll',
+        permission: 'hr:read',
+        items: [
+          { label: 'Salary Structure', href: '/hr/salary-structure', permission: 'hr:read' },
+          { label: 'Payroll Run', href: '/hr/payroll', permission: 'hr:read' },
+          { label: 'Payslip', href: '/hr/payslip', permission: 'hr:read' },
+          { label: 'Bonus', href: '/hr/bonus', permission: 'hr:read' },
+        ],
+      },
+      {
+        label: 'Reports',
+        permission: 'hr:read',
+        items: [
+          { label: 'Employee Report', href: '/hr/reports/employee', permission: 'hr:read' },
+          { label: 'Attendance Report', href: '/hr/reports/attendance', permission: 'hr:read' },
+          { label: 'Leave Report', href: '/hr/reports/leave', permission: 'hr:read' },
+          { label: 'Payroll Report', href: '/hr/reports/payroll', permission: 'hr:read' },
+          { label: 'Performance Report', href: '/hr/reports/performance', permission: 'hr:read' },
+        ],
+      },
     ],
   },
   {
