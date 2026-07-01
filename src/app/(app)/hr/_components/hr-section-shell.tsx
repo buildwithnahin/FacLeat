@@ -20,12 +20,12 @@ export interface HrSectionShellProps {
   branches: SelectOption[];
   employees: SelectOption[];
   links?: { label: string; href: string }[];
-  editId?: string | null;
   editMasterRow?: {
     id: string;
     branchId: string | null;
     code: string | null;
     name: string;
+    department?: string | null;
     description: string | null;
     status: string;
   } | null;
@@ -48,6 +48,7 @@ export interface HrSectionShellProps {
     branchId?: string | null;
     code: string | null;
     name: string;
+    department?: string | null;
     description: string | null;
     status: string;
     branch?: { code: string; name: string } | null;
@@ -70,6 +71,7 @@ export interface HrSectionShellProps {
     employee?: { code: string; firstName: string; lastName: string } | null;
     updatedAt: Date;
   }>;
+  departments?: string[];
 }
 
 export function HrSectionShell({
@@ -81,7 +83,7 @@ export function HrSectionShell({
   canWrite,
   branches,
   employees,
-  editId,
+  departments = [],
   editMasterRow,
   editWorkflowRow,
   masterRows = [],
@@ -101,7 +103,14 @@ export function HrSectionShell({
               {isEditing ? `Edit ${kind === 'master' ? 'Setup Record' : 'Workflow Record'}` : `New ${kind === 'master' ? 'Setup Record' : 'Workflow Record'}`}
             </div>
             {kind === 'master' ? (
-              <HrMasterDataForm mode={isEditing ? 'edit' : 'create'} type={slug} path={path} branches={branches} initial={editMasterRow ?? undefined} />
+              <HrMasterDataForm
+                mode={isEditing ? 'edit' : 'create'}
+                type={slug}
+                path={path}
+                branches={branches}
+                departments={departments}
+                initial={editMasterRow ?? undefined}
+              />
             ) : (
               <HrWorkflowRecordForm
                 mode={isEditing ? 'edit' : 'create'}
@@ -163,6 +172,7 @@ function MasterTable({
               <td className="px-4 py-3">
                 <div className="font-medium">{row.name}</div>
                 {row.description && <div className="text-xs text-muted-foreground">{row.description}</div>}
+                {row.department && <div className="text-xs text-muted-foreground">Department: {row.department}</div>}
               </td>
               <td className="px-4 py-3 font-mono text-xs">{row.code ?? '-'}</td>
               <td className="px-4 py-3">{row.branch?.code ?? 'All'}</td>

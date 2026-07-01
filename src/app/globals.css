@@ -122,6 +122,7 @@
   .sidebar-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: rgb(59 130 246 / 0.7) rgb(255 255 255 / 0.06);
+    scrollbar-gutter: stable;
   }
 
   .sidebar-scrollbar::-webkit-scrollbar {

@@ -1,39 +1,78 @@
 'use client';
 
-import { useActionState, useEffect, useRef } from 'react';
+import { useActionState, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import type { DesignationOption } from '@/lib/hr-master-data';
 import { createRecruitmentRequestAction, type ActionState } from '@/server/actions/hr-recruitment';
 
 const FALLBACK_DEPARTMENTS = ['Production', 'HR', 'Accounts'];
 
-export function NewRequestForm({ departments }: { departments: string[] }) {
+export function NewRequestForm({
+  departments,
+  designationOptions,
+}: {
+  departments: string[];
+  designationOptions: DesignationOption[];
+}) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     createRecruitmentRequestAction,
     {}
   );
   const departmentOptions = Array.from(new Set((departments.length ? departments : FALLBACK_DEPARTMENTS).filter(Boolean)));
+  const [selectedDepartment, setSelectedDepartment] = useState(departmentOptions[0] ?? '');
+  const [selectedPosition, setSelectedPosition] = useState('');
 
   const formRef = useRef<HTMLFormElement>(null);
+  const filteredDesignationOptions = useMemo(() => {
+    const matches = designationOptions.filter(
+      (option) => !option.department || !selectedDepartment || option.department === selectedDepartment,
+    );
+    const values = matches.length ? matches : designationOptions;
+    const names = new Set<string>();
+    return values.filter((option) => {
+      if (names.has(option.name)) return false;
+      names.add(option.name);
+      return true;
+    });
+  }, [designationOptions, selectedDepartment]);
 
   useEffect(() => {
     if (state?.success && formRef.current) {
       formRef.current.reset();
+      setSelectedDepartment(departmentOptions[0] ?? '');
+      setSelectedPosition('');
     }
-  }, [state]);
+  }, [departmentOptions, state]);
+
+  useEffect(() => {
+    if (!selectedPosition) return;
+    if (!filteredDesignationOptions.some((option) => option.name === selectedPosition)) {
+      setSelectedPosition('');
+    }
+  }, [filteredDesignationOptions, selectedPosition]);
 
   return (
     <form ref={formRef} action={formAction} className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="position">Position Title *</Label>
-          <Input
+          <Label htmlFor="position">Designation *</Label>
+          <select
             id="position"
             name="position"
-            placeholder="e.g. Production Supervisor"
             required
-          />
+            value={selectedPosition}
+            onChange={(event) => setSelectedPosition(event.target.value)}
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+          >
+            <option value="">Select designation</option>
+            {filteredDesignationOptions.map((designation) => (
+              <option key={`${designation.name}-${designation.department ?? 'shared'}`} value={designation.name}>
+                {designation.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="space-y-2">
@@ -42,6 +81,8 @@ export function NewRequestForm({ departments }: { departments: string[] }) {
             id="department"
             name="department"
             required
+            value={selectedDepartment}
+            onChange={(event) => setSelectedDepartment(event.target.value)}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
           >
             {departmentOptions.map((department) => (

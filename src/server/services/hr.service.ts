@@ -254,6 +254,12 @@ export const hrService = {
             name: input.name,
             description: input.description || null,
             status: input.status || 'ACTIVE',
+            metadata:
+              input.type === 'designations'
+                ? {
+                    department: input.department || null,
+                  }
+                : null,
             createdById: actor.userId,
             updatedById: actor.userId,
           },
@@ -296,6 +302,12 @@ export const hrService = {
             name: input.name,
             description: input.description || null,
             status: input.status || 'ACTIVE',
+            metadata:
+              input.type === 'designations'
+                ? {
+                    department: input.department || null,
+                  }
+                : existing.metadata ?? null,
             updatedById: actor.userId,
           },
         });

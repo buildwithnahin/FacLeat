@@ -13,12 +13,21 @@ import Link from 'next/link';
 
 export const metadata = { title: 'Candidate Talent Pool' };
 
+type CandidateMetadata = Record<string, unknown>;
+
 const STATUS_VARIANT: Record<string, 'default' | 'outline' | 'success' | 'warning' | 'destructive'> = {
   Applied: 'default',
   Shortlisted: 'warning',
+  'Interview Scheduled': 'outline',
+  'Interview Completed': 'outline',
+  Passed: 'success',
   Selected: 'success',
-  Offered: 'success',
+  Hold: 'outline',
+  'Job Offer Sent': 'success',
+  'Offer Accepted': 'success',
+  'Contract Signed': 'warning',
   Joined: 'outline',
+  'Employee Created': 'outline',
   Rejected: 'destructive',
 };
 
@@ -50,14 +59,14 @@ export default async function CandidatesPage({
   // Client-side/in-memory filtering helper for request ID (since it's inside metadata JSON)
   const filteredCandidates = candidates.filter((cand) => {
     if (!filterReqId) return true;
-    const meta = (cand.metadata as Record<string, any>) || {};
+    const meta = (cand.metadata as CandidateMetadata | null) || {};
     return meta.recruitmentRequestId === filterReqId;
   });
 
   // Count candidates by status
   const totalCount = candidates.length;
   const shortlistedCount = candidates.filter((c) => c.status === 'Shortlisted').length;
-  const selectedCount = candidates.filter((c) => c.status === 'Selected').length;
+  const selectedCount = candidates.filter((c) => c.status === 'Passed').length;
   const rejectedCount = candidates.filter((c) => c.status === 'Rejected').length;
 
   return (
@@ -155,7 +164,7 @@ export default async function CandidatesPage({
                 All ({candidates.length})
               </Badge>
             </Link>
-            {['Applied', 'Shortlisted', 'Selected', 'Offered', 'Joined', 'Rejected'].map((st) => {
+            {['Applied', 'Shortlisted', 'Interview Scheduled', 'Interview Completed', 'Passed', 'Selected', 'Job Offer Sent', 'Offer Accepted', 'Contract Signed', 'Joined', 'Employee Created', 'Hold', 'Rejected'].map((st) => {
               const count = candidates.filter((c) => c.status === st).length;
               return (
                 <Link key={st} href={`/hr/candidates?status=${st}${filterReqId ? `&reqId=${filterReqId}` : ''}`}>
@@ -191,7 +200,7 @@ export default async function CandidatesPage({
           </Card>
         ) : (
           filteredCandidates.map((cand) => {
-            const meta = (cand.metadata as Record<string, any>) || {};
+            const meta = (cand.metadata as CandidateMetadata | null) || {};
             return (
               <Card key={cand.id} className="relative hover:shadow-md transition-shadow">
                 <CardHeader className="pb-3 flex flex-row items-start justify-between">
@@ -265,6 +274,9 @@ export default async function CandidatesPage({
                       {cand.status === 'Applied' && (
                         <DecideCandidateForm id={cand.id} status="Shortlisted" label="Shortlist" />
                       )}
+                      {cand.status === 'Passed' && (
+                        <DecideCandidateForm id={cand.id} status="Selected" label="Select" />
+                      )}
                       {['Applied', 'Shortlisted'].includes(cand.status) && (
                         <DecideCandidateForm id={cand.id} status="Rejected" label="Reject" danger />
                       )}
@@ -280,7 +292,7 @@ export default async function CandidatesPage({
   );
 }
 
-function DecideCandidateForm({ id, status, label, danger }: { id: string; status: 'Shortlisted' | 'Rejected'; label: string; danger?: boolean }) {
+function DecideCandidateForm({ id, status, label, danger }: { id: string; status: 'Shortlisted' | 'Selected' | 'Rejected'; label: string; danger?: boolean }) {
   async function action() {
     'use server';
     await decideCandidateAction(id, status);

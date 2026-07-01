@@ -25,7 +25,15 @@ function hasWorkflowDelegates(client: PrismaClient | undefined): client is Prism
     'hrMasterData' in client &&
     typeof client.hrMasterData === 'object' &&
     'hrWorkflowRecord' in client &&
-    typeof client.hrWorkflowRecord === 'object'
+    typeof client.hrWorkflowRecord === 'object' &&
+    'employeePromotion' in client &&
+    typeof client.employeePromotion === 'object' &&
+    'employeeIncrement' in client &&
+    typeof client.employeeIncrement === 'object' &&
+    'employeeSalaryHistory' in client &&
+    typeof client.employeeSalaryHistory === 'object' &&
+    'employeeTransfer' in client &&
+    typeof client.employeeTransfer === 'object'
   );
 }
 

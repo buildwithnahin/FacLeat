@@ -7,14 +7,16 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { NewOfferForm } from './_components/new-offer-form';
 import { decideJobOfferAction } from '@/server/actions/hr-recruitment';
-import { MailOpen, FileCheck, CheckCircle2, XCircle, AlertCircle, Calendar, DollarSign } from 'lucide-react';
+import { MailOpen, FileCheck, CheckCircle2, XCircle, AlertCircle, Calendar } from 'lucide-react';
 import { formatCurrency } from '@/lib/money';
 
 export const metadata = { title: 'Job Offers Management' };
 
+type OfferMetadata = Record<string, unknown>;
+
 const STATUS_VARIANT: Record<string, 'default' | 'outline' | 'success' | 'warning' | 'destructive'> = {
-  Pending: 'warning',
-  Accepted: 'success',
+  'Job Offer Sent': 'warning',
+  'Offer Accepted': 'success',
   Rejected: 'destructive',
   Joined: 'outline',
 };
@@ -30,15 +32,18 @@ export default async function JobOffersPage() {
     orderBy: { createdAt: 'desc' },
   });
 
-  // Fetch candidates who passed the interview and are ready to be offered
+  // Fetch candidates who are ready to move into the offer stage.
   const selectedCandidates = await prisma.hrWorkflowRecord.findMany({
-    where: { section: 'candidates', status: 'Selected' },
+    where: {
+      section: 'candidates',
+      status: { in: ['Selected', 'Passed'] },
+    },
     orderBy: { createdAt: 'desc' },
   });
 
   const totalOffersCount = offers.length;
-  const pendingOffersCount = offers.filter((o) => o.status === 'Pending').length;
-  const acceptedOffersCount = offers.filter((o) => o.status === 'Accepted').length;
+  const pendingOffersCount = offers.filter((o) => o.status === 'Job Offer Sent').length;
+  const acceptedOffersCount = offers.filter((o) => o.status === 'Offer Accepted').length;
   const rejectedOffersCount = offers.filter((o) => o.status === 'Rejected').length;
 
   return (
@@ -65,7 +70,7 @@ export default async function JobOffersPage() {
         <Card>
           <CardContent className="p-5 flex items-center justify-between">
             <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Pending Decisions</p>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Job Offer Sent</p>
               <p className="mt-2 text-2xl font-bold text-amber-600">{pendingOffersCount}</p>
             </div>
             <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-600">
@@ -77,7 +82,7 @@ export default async function JobOffersPage() {
         <Card>
           <CardContent className="p-5 flex items-center justify-between">
             <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Accepted Offers</p>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Offer Accepted</p>
               <p className="mt-2 text-2xl font-bold text-emerald-600">{acceptedOffersCount}</p>
             </div>
             <div className="h-10 w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600">
@@ -111,7 +116,7 @@ export default async function JobOffersPage() {
             {selectedCandidates.length === 0 ? (
               <div className="text-xs text-amber-600 bg-amber-50 p-4 rounded-lg flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 shrink-0" />
-                No selected candidates (who passed interviews) are waiting for job offers. Perform interview evaluations and select a candidate first.
+                No passed or selected candidates are waiting for job offers.
               </div>
             ) : (
               <NewOfferForm
@@ -155,7 +160,7 @@ export default async function JobOffersPage() {
                 </tr>
               ) : (
                 offers.map((offer) => {
-                  const meta = (offer.metadata as Record<string, any>) || {};
+                  const meta = (offer.metadata as OfferMetadata | null) || {};
                   return (
                     <tr key={offer.id} className="hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3 font-mono font-semibold text-primary">
@@ -185,9 +190,9 @@ export default async function JobOffersPage() {
                       </td>
                       {canWrite && (
                         <td className="px-4 py-3">
-                          {offer.status === 'Pending' ? (
+                          {offer.status === 'Job Offer Sent' ? (
                             <div className="flex items-center justify-end gap-2">
-                              <DecideOfferForm id={offer.id} status="Accepted" label="Accept" />
+                              <DecideOfferForm id={offer.id} status="Offer Accepted" label="Accept" />
                               <DecideOfferForm id={offer.id} status="Rejected" label="Decline" danger />
                             </div>
                           ) : (
@@ -209,7 +214,7 @@ export default async function JobOffersPage() {
   );
 }
 
-function DecideOfferForm({ id, status, label, danger }: { id: string; status: 'Accepted' | 'Rejected'; label: string; danger?: boolean }) {
+function DecideOfferForm({ id, status, label, danger }: { id: string; status: 'Offer Accepted' | 'Rejected'; label: string; danger?: boolean }) {
   async function action() {
     'use server';
     await decideJobOfferAction(id, status);

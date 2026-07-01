@@ -89,6 +89,7 @@ export const hrMasterDataCreateSchema = z.object({
   branchId: z.string().cuid().optional().or(z.literal('')),
   code: z.string().trim().max(32).optional().or(z.literal('')),
   name: z.string().trim().min(1).max(120),
+  department: z.string().trim().max(120).optional().or(z.literal('')),
   description: z.string().trim().max(500).optional().or(z.literal('')),
   status: z.string().trim().min(1).max(40).default('ACTIVE'),
 });

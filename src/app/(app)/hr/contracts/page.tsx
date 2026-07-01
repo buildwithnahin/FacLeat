@@ -21,8 +21,8 @@ const CONTRACT_TYPE_BADGES: Record<string, 'default' | 'secondary' | 'outline' |
 };
 
 const STATUS_BADGES: Record<string, 'default' | 'success' | 'destructive' | 'outline' | 'warning'> = {
-  DRAFT: 'outline',
   ACTIVE: 'success',
+  EXPIRING: 'warning',
   EXPIRED: 'destructive',
   RENEWED: 'default',
   TERMINATED: 'warning',
@@ -41,6 +41,7 @@ export default async function ContractsPage({
     branchId: params.branchId || null,
     status: params.status,
     search: params.search,
+    scope: 'employee',
   });
 
   const branches = await prisma.branch.findMany({
@@ -156,8 +157,8 @@ export default async function ContractsPage({
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <option value="">All Statuses</option>
-                <option value="DRAFT">DRAFT</option>
                 <option value="ACTIVE">ACTIVE</option>
+                <option value="EXPIRING">EXPIRING</option>
                 <option value="EXPIRED">EXPIRED</option>
                 <option value="RENEWED">RENEWED</option>
                 <option value="TERMINATED">TERMINATED</option>
@@ -196,9 +197,9 @@ export default async function ContractsPage({
                       </td>
                       <td className="px-4 py-3">
                         <div className="font-semibold">
-                          {contract.employee.firstName} {contract.employee.lastName}
+                          {contract.employee ? `${contract.employee.firstName} ${contract.employee.lastName}` : 'Unassigned employee'}
                         </div>
-                        <div className="text-xs text-muted-foreground">ID: {contract.employee.code}</div>
+                        <div className="text-xs text-muted-foreground">ID: {contract.employee?.code || '—'}</div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-xs font-medium">

@@ -49,6 +49,49 @@ async function notifyRole(
   }
 }
 
+async function syncEmployeeTransferApprovalState(args: {
+  approvalStatus: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'CANCELLED';
+  transferId: string;
+  actorUserId: string;
+  note?: string | null;
+}) {
+  const now = new Date();
+
+  if (args.approvalStatus === 'APPROVED') {
+    await prisma.employeeTransfer.update({
+      where: { id: args.transferId },
+      data: {
+        status: 'APPROVED',
+        approvedAt: now,
+        approvedById: args.actorUserId,
+        rejectionReason: null,
+      },
+    });
+    return;
+  }
+
+  if (args.approvalStatus === 'REJECTED') {
+    await prisma.employeeTransfer.update({
+      where: { id: args.transferId },
+      data: {
+        status: 'REJECTED',
+        rejectedAt: now,
+        rejectedById: args.actorUserId,
+        rejectionReason: args.note || null,
+      },
+    });
+    return;
+  }
+
+  await prisma.employeeTransfer.update({
+    where: { id: args.transferId },
+    data: {
+      status: 'DRAFT',
+      updatedById: args.actorUserId,
+    },
+  });
+}
+
 export const approvalService = {
   async listRules(session: AppSession | null) {
     await authorize(session, 'approvals:read');
@@ -262,6 +305,19 @@ export const approvalService = {
       entityId: req.id,
       after: { status: updated.status },
     });
+    if (
+      updated.module === 'hr' &&
+      updated.action === 'employee-transfer' &&
+      updated.entityType === 'EmployeeTransfer' &&
+      updated.entityId
+    ) {
+      await syncEmployeeTransferApprovalState({
+        approvalStatus: 'CANCELLED',
+        transferId: updated.entityId,
+        actorUserId: actor.userId,
+        note: input.note,
+      });
+    }
     return updated;
   },
 
@@ -359,6 +415,7 @@ export const approvalService = {
       );
 
       return {
+        actorUserId: actor.userId,
         updated,
         notifyNextRole,
         notifyRequester: true,
@@ -391,6 +448,20 @@ export const approvalService = {
           title: `Approval ${result.updated.status.toLowerCase()}: ${result.title}`,
           body: input.note || undefined,
           href: `/approvals/${result.updated.id}`,
+        });
+      }
+      if (
+        ['APPROVED', 'REJECTED', 'CHANGES_REQUESTED'].includes(result.updated.status) &&
+        result.module === 'hr' &&
+        result.action === 'employee-transfer' &&
+        result.entityType === 'EmployeeTransfer' &&
+        result.entityId
+      ) {
+        await syncEmployeeTransferApprovalState({
+          approvalStatus: result.updated.status as 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED',
+          transferId: result.entityId,
+          actorUserId: result.actorUserId,
+          note: input.note,
         });
       }
       if (

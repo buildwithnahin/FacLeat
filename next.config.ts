@@ -19,6 +19,11 @@ const csp = [
 const nextConfig: NextConfig = {
   distDir: isDev ? '.next-dev' : '.next',
   reactStrictMode: true,
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '6mb',
+    },
+  },
   async headers() {
     return [
       {

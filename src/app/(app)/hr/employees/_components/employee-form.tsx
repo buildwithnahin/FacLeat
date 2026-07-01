@@ -1,12 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { createEmployeeAction, updateEmployeeAction, type FormState } from '@/server/actions/hr';
+import type { DesignationOption } from '@/lib/hr-master-data';
 import {
   DEFAULT_DEPARTMENTS,
   DEFAULT_DESIGNATIONS,
@@ -44,7 +45,7 @@ export interface EmployeeFormProps {
     bankAccount: string | null;
   };
   departments?: string[];
-  designations?: string[];
+  designationOptions?: DesignationOption[];
   employmentTypes?: string[];
   shifts?: { id: string; label: string }[];
   managers?: { id: string; label: string }[];
@@ -56,7 +57,7 @@ export function EmployeeForm({
   branches,
   initial,
   departments = [...DEFAULT_DEPARTMENTS],
-  designations = [...DEFAULT_DESIGNATIONS],
+  designationOptions = DEFAULT_DESIGNATIONS.map((name) => ({ name, department: null })),
   employmentTypes = [...DEFAULT_EMPLOYMENT_TYPES],
   shifts = [],
   managers = [],
@@ -64,6 +65,28 @@ export function EmployeeForm({
 }: EmployeeFormProps) {
   const action = mode === 'create' ? createEmployeeAction : updateEmployeeAction;
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, undefined);
+  const [selectedDepartment, setSelectedDepartment] = useState(initial?.department ?? '');
+  const [selectedDesignation, setSelectedDesignation] = useState(initial?.designation ?? '');
+
+  const filteredDesignationOptions = useMemo(() => {
+    const matches = designationOptions.filter(
+      (option) => !option.department || !selectedDepartment || option.department === selectedDepartment,
+    );
+    const values = matches.length ? matches : designationOptions;
+    const names = new Set<string>();
+    return values.filter((option) => {
+      if (names.has(option.name)) return false;
+      names.add(option.name);
+      return true;
+    });
+  }, [designationOptions, selectedDepartment]);
+
+  useEffect(() => {
+    if (!selectedDesignation) return;
+    if (!filteredDesignationOptions.some((option) => option.name === selectedDesignation)) {
+      setSelectedDesignation('');
+    }
+  }, [filteredDesignationOptions, selectedDesignation]);
 
   return (
     <form action={formAction} className="space-y-6">
@@ -88,8 +111,22 @@ export function EmployeeForm({
           <Field label="Last name" name="lastName" required defaultValue={initial?.lastName} />
           <Field label="Email" name="email" type="email" defaultValue={initial?.email ?? ''} />
           <Field label="Phone" name="phone" defaultValue={initial?.phone ?? ''} />
-          <SelectField label="Department" name="department" required defaultValue={initial?.department ?? ''} options={departments} />
-          <SelectField label="Designation" name="designation" required defaultValue={initial?.designation ?? ''} options={designations} />
+          <SelectField
+            label="Department"
+            name="department"
+            required
+            value={selectedDepartment}
+            onChange={setSelectedDepartment}
+            options={departments}
+          />
+          <SelectField
+            label="Designation"
+            name="designation"
+            required
+            value={selectedDesignation}
+            onChange={setSelectedDesignation}
+            options={filteredDesignationOptions.map((option) => option.name)}
+          />
           <SelectField label="Employment Type" name="employmentType" required defaultValue={initial?.employmentType ?? 'PERMANENT'} options={employmentTypes} />
           <div className="space-y-2">
             <Label htmlFor="shiftId">Shift</Label>
@@ -189,16 +226,18 @@ function SelectField({
   label,
   name,
   required,
-  defaultValue,
+  value,
+  onChange,
   options,
 }: {
   label: string;
   name: string;
   required?: boolean;
-  defaultValue?: string;
+  value?: string;
+  onChange?: (value: string) => void;
   options: string[];
 }) {
-  const values = Array.from(new Set([defaultValue, ...options].filter(Boolean)));
+  const values = Array.from(new Set([value, ...options].filter(Boolean)));
   return (
     <div className="space-y-2">
       <Label htmlFor={name}>
@@ -209,7 +248,8 @@ function SelectField({
         id={name}
         name={name}
         required={required}
-        defaultValue={defaultValue}
+        value={value ?? ''}
+        onChange={(event) => onChange?.(event.target.value)}
         className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
       >
         <option value="">Select {label.toLowerCase()}</option>

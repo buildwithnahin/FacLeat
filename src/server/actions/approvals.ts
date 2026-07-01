@@ -102,6 +102,7 @@ async function decisionAction(
   }
   revalidatePath(`/approvals/${parsed.data.requestId}`);
   revalidatePath('/approvals');
+  revalidatePath('/hr/transfers');
   return { success: true };
 }
 

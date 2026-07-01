@@ -11,16 +11,38 @@ import Link from 'next/link';
 
 export const metadata = { title: 'Employee Onboarding & Joining' };
 
+type JoiningMetadata = Record<string, unknown>;
+
 export default async function JoiningPage() {
   const session = await getSession();
   await authorize(session, 'hr:read');
   const canWrite = session?.permissions.includes('hr:write') ?? false;
 
-  // Fetch accepted job offers that are pending onboarding
-  const acceptedOffers = await prisma.hrWorkflowRecord.findMany({
-    where: { section: 'job-offers', status: 'Accepted' },
-    orderBy: { createdAt: 'desc' },
-  });
+  const [offers, readyContracts] = await Promise.all([
+    prisma.hrWorkflowRecord.findMany({
+      where: { section: 'job-offers', status: 'Offer Accepted' },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.contract.findMany({
+      where: {
+        offerId: { not: null },
+        status: { in: ['SIGNED', 'WAITING_FOR_JOINING'] },
+      },
+      select: {
+        offerId: true,
+        contractType: true,
+        department: true,
+        designation: true,
+      },
+    }),
+  ]);
+
+  const readyContractsByOfferId = new Map(
+    readyContracts
+      .filter((contract): contract is typeof contract & { offerId: string } => Boolean(contract.offerId))
+      .map((contract) => [contract.offerId, contract])
+  );
+  const acceptedOffers = offers.filter((offer) => readyContractsByOfferId.has(offer.id));
 
   // Fetch completed joining records
   const joiningRecords = await prisma.hrWorkflowRecord.findMany({
@@ -49,13 +71,23 @@ export default async function JoiningPage() {
     },
   });
 
-  const serializedAcceptedOffers = acceptedOffers.map((o) => ({
-    id: o.id,
-    title: o.title,
-    subject: o.subject,
-    amount: o.amount ? Number(o.amount) : null,
-    metadata: o.metadata,
-  }));
+  const serializedAcceptedOffers = acceptedOffers.map((o) => {
+    const linkedContract = readyContractsByOfferId.get(o.id);
+    const offerMetadata = (o.metadata as Record<string, unknown> | null) || null;
+
+    return {
+      id: o.id,
+      title: o.title,
+      subject: o.subject,
+      amount: o.amount ? Number(o.amount) : null,
+      metadata: {
+        ...offerMetadata,
+        contractType: linkedContract?.contractType || null,
+        department: linkedContract?.department || offerMetadata?.department || null,
+        designation: linkedContract?.designation || o.subject || null,
+      },
+    };
+  });
 
   const totalJoined = joiningRecords.length;
   const pendingOnboarding = acceptedOffers.length;
@@ -84,7 +116,7 @@ export default async function JoiningPage() {
         <Card>
           <CardContent className="p-5 flex items-center justify-between">
             <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Pending Joining (Accepted Offers)</p>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Pending Joining (Signed Contracts)</p>
               <p className="mt-2 text-2xl font-bold text-amber-600">{pendingOnboarding}</p>
             </div>
             <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-600">
@@ -105,7 +137,7 @@ export default async function JoiningPage() {
           <CardContent>
             {acceptedOffers.length === 0 ? (
               <div className="text-xs text-amber-600 bg-amber-50 p-4 rounded-lg flex items-center gap-2">
-                <span>No accepted job offers are currently pending onboarding. Job offers must be Accepted by candidates first.</span>
+                <span>No signed offer contracts are currently pending onboarding. An offer must be accepted and the contract must be signed first.</span>
               </div>
             ) : (
               <CompleteJoiningForm
@@ -153,7 +185,7 @@ export default async function JoiningPage() {
                   </tr>
                 ) : (
                   joiningRecords.map((record) => {
-                    const meta = (record.metadata as Record<string, any>) || {};
+                    const meta = (record.metadata as JoiningMetadata | null) || {};
                     return (
                       <tr key={record.id} className="hover:bg-muted/20 transition-colors">
                         <td className="px-4 py-3 font-mono font-semibold text-primary">

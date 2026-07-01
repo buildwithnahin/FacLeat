@@ -71,6 +71,7 @@ export default async function NewContractPage() {
       />
       <ContractForm
         mode="create"
+        scope="employee"
         branches={branches}
         shifts={shifts}
         employees={mappedEmployees}

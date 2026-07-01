@@ -80,8 +80,10 @@ export function EvaluateInterviewForm({ interviewId, candidateName, interviewTyp
           required
           className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
         >
-          <option value="Selected">Select / Pass Interview</option>
-          <option value="Rejected">Reject Candidate</option>
+          <option value="Selected">Selected</option>
+          <option value="Passed">Pass Interview</option>
+          <option value="Hold">Hold</option>
+          <option value="Rejected">Reject</option>
         </select>
       </div>
 

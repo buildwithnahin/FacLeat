@@ -14,6 +14,10 @@ export type ContractFormState =
   | { error?: string; fieldErrors?: Record<string, string[]>; success?: boolean }
   | undefined;
 
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 const UPLOAD_ROOT = path.resolve(process.cwd(), 'server/upload');
 const ALLOWED_EXTENSIONS = new Set(['.pdf', '.doc', '.docx', '.png', '.jpg', '.jpeg', '.webp', '.svg']);
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB limit
@@ -45,6 +49,9 @@ function parseContractForm(formData: FormData, attachmentUrl?: string | null) {
   return {
     contractNo: formData.get('contractNo'),
     employeeId: formData.get('employeeId'),
+    candidateId: formData.get('candidateId') || null,
+    offerId: formData.get('offerId') || null,
+    candidateName: formData.get('candidateName') || null,
     branchId: formData.get('branchId') || null,
     department: formData.get('department') || null,
     designation: formData.get('designation') || null,
@@ -62,6 +69,7 @@ function parseContractForm(formData: FormData, attachmentUrl?: string | null) {
 }
 
 export async function createContractAction(_prev: ContractFormState, formData: FormData): Promise<ContractFormState> {
+  const scope = String(formData.get('scope') || 'employee');
   const file = formData.get('attachmentFile');
   const contractNo = String(formData.get('contractNo') || '').trim();
 
@@ -69,8 +77,8 @@ export async function createContractAction(_prev: ContractFormState, formData: F
   if (file instanceof File && file.size > 0) {
     try {
       attachmentUrl = await storeContractAttachment(file, contractNo);
-    } catch (e: any) {
-      return { error: e.message || 'Failed to upload attachment file' };
+    } catch (error: unknown) {
+      return { error: errorMessage(error, 'Failed to upload attachment file') };
     }
   }
 
@@ -94,11 +102,12 @@ export async function createContractAction(_prev: ContractFormState, formData: F
   }
 
   revalidatePath('/hr/contracts');
-  redirect('/hr/contracts');
+  revalidatePath('/hr/offer-contracts');
+  redirect(scope === 'offer' ? '/hr/offer-contracts' : '/hr/contracts');
 }
 
 export async function updateContractAction(_prev: ContractFormState, formData: FormData): Promise<ContractFormState> {
-  const id = formData.get('id');
+  const scope = String(formData.get('scope') || 'employee');
   const file = formData.get('attachmentFile');
   const contractNo = String(formData.get('contractNo') || '').trim();
   const existingAttachmentUrl = formData.get('existingAttachmentUrl');
@@ -110,8 +119,8 @@ export async function updateContractAction(_prev: ContractFormState, formData: F
     try {
       attachmentUrl = await storeContractAttachment(file, contractNo);
       isNewUpload = true;
-    } catch (e: any) {
-      return { error: e.message || 'Failed to upload attachment file' };
+    } catch (error: unknown) {
+      return { error: errorMessage(error, 'Failed to upload attachment file') };
     }
   }
 
@@ -142,7 +151,8 @@ export async function updateContractAction(_prev: ContractFormState, formData: F
   }
 
   revalidatePath('/hr/contracts');
-  redirect('/hr/contracts');
+  revalidatePath('/hr/offer-contracts');
+  redirect(scope === 'offer' ? '/hr/offer-contracts' : '/hr/contracts');
 }
 
 export async function deleteContractAction(id: string): Promise<{ error?: string } | undefined> {
@@ -153,6 +163,7 @@ export async function deleteContractAction(id: string): Promise<{ error?: string
       await unlink(path.resolve(process.cwd(), deleted.attachmentUrl)).catch(() => {});
     }
     revalidatePath('/hr/contracts');
+    revalidatePath('/hr/offer-contracts');
   } catch (error) {
     if (error instanceof ApiError) return { error: error.message };
     throw error;

@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { createContractAction, updateContractAction, type ContractFormState } from '@/server/actions/contracts';
-import { CONTRACT_STATUSES, CONTRACT_TYPES } from '@/server/validators/contracts';
+import { CONTRACT_TYPES, EMPLOYMENT_CONTRACT_STATUSES, PRE_JOIN_CONTRACT_STATUSES } from '@/server/validators/contracts';
 
 export interface FormEmployee {
   id: string;
@@ -27,13 +27,17 @@ export interface FormEmployee {
 
 export interface ContractFormProps {
   mode: 'create' | 'edit';
+  scope?: 'employee' | 'offer';
   branches: { id: string; name: string; code: string }[];
   shifts: { id: string; name: string; code: string }[];
   employees: FormEmployee[];
   initial?: {
     id: string;
     contractNo: string;
-    employeeId: string;
+    employeeId: string | null;
+    candidateId: string | null;
+    offerId: string | null;
+    candidateName: string | null;
     branchId: string | null;
     department: string | null;
     designation: string | null;
@@ -50,10 +54,16 @@ export interface ContractFormProps {
   };
 }
 
-export function ContractForm({ mode, branches, shifts, employees, initial }: ContractFormProps) {
+export function ContractForm({ mode, scope = 'employee', branches, shifts, employees, initial }: ContractFormProps) {
   const action = mode === 'create' ? createContractAction : updateContractAction;
   const [state, formAction, pending] = useActionState<ContractFormState, FormData>(action, undefined);
   const E = (field: string) => state?.fieldErrors?.[field]?.[0];
+  const isOfferContract = scope === 'offer';
+  const initialStartDate = initial?.startDate || '';
+  const initialEndDate =
+    initial?.endDate && initialStartDate && initial.endDate < initialStartDate
+      ? initialStartDate
+      : initial?.endDate || '';
 
   const [selectedEmpId, setSelectedEmpId] = useState(initial?.employeeId || '');
   const [department, setDepartment] = useState(initial?.department || '');
@@ -63,6 +73,11 @@ export function ContractForm({ mode, branches, shifts, employees, initial }: Con
   const [basicSalary, setBasicSalary] = useState(initial?.basicSalary || '0');
   const [allowances, setAllowances] = useState(initial?.allowances || '0');
   const [contractType, setContractType] = useState(initial?.contractType || 'CONTRACT');
+  const [startDate, setStartDate] = useState(initialStartDate);
+  const [endDate, setEndDate] = useState(initialEndDate);
+  const [status, setStatus] = useState(initial?.status || (isOfferContract ? 'DRAFT' : 'ACTIVE'));
+  const statusOptions = isOfferContract ? PRE_JOIN_CONTRACT_STATUSES : EMPLOYMENT_CONTRACT_STATUSES;
+  const requiresSignedAttachment = status === 'SIGNED' && !initial?.attachmentUrl;
 
   const handleEmployeeChange = (empId: string) => {
     setSelectedEmpId(empId);
@@ -78,8 +93,12 @@ export function ContractForm({ mode, branches, shifts, employees, initial }: Con
   };
 
   return (
-    <form action={formAction} className="space-y-6" encType="multipart/form-data">
+    <form action={formAction} className="space-y-6">
       {mode === 'edit' && <input type="hidden" name="id" value={initial?.id} />}
+      <input type="hidden" name="scope" value={scope} />
+      <input type="hidden" name="candidateId" value={initial?.candidateId || ''} />
+      <input type="hidden" name="offerId" value={initial?.offerId || ''} />
+      <input type="hidden" name="candidateName" value={initial?.candidateName || ''} />
 
       <Card>
         <CardContent className="grid grid-cols-1 gap-6 p-6 md:grid-cols-2 lg:grid-cols-3">
@@ -93,29 +112,43 @@ export function ContractForm({ mode, branches, shifts, employees, initial }: Con
           </div>
 
           {/* Employee */}
-          <div className="space-y-2">
-            <Label htmlFor="employeeId">
-              Employee <span className="text-destructive">*</span>
-            </Label>
-            <select
-              id="employeeId"
-              name="employeeId"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              required
-              value={selectedEmpId}
-              onChange={(e) => handleEmployeeChange(e.target.value)}
-              disabled={mode === 'edit'}
-            >
-              <option value="">Select Employee...</option>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.code} · {emp.firstName} {emp.lastName}
-                </option>
-              ))}
-            </select>
-            {mode === 'edit' && <input type="hidden" name="employeeId" value={selectedEmpId} />}
-            {E('employeeId') && <p className="text-xs text-destructive">{E('employeeId')}</p>}
-          </div>
+          {isOfferContract ? (
+            <div className="space-y-2">
+              <Label>Candidate / Offer Link</Label>
+              <div className="rounded-md border border-input bg-muted/20 px-3 py-2 text-sm">
+                <div className="font-medium">{initial?.candidateName || 'Candidate pending'}</div>
+                <div className="text-xs text-muted-foreground">
+                  {initial?.offerId ? `Offer Ref: ${initial.offerId}` : 'Not linked to an offer yet'}
+                </div>
+              </div>
+              <input type="hidden" name="employeeId" value="" />
+              {E('employeeId') && <p className="text-xs text-destructive">{E('employeeId')}</p>}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="employeeId">
+                Employee <span className="text-destructive">*</span>
+              </Label>
+              <select
+                id="employeeId"
+                name="employeeId"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                required
+                value={selectedEmpId}
+                onChange={(e) => handleEmployeeChange(e.target.value)}
+                disabled={mode === 'edit'}
+              >
+                <option value="">Select Employee...</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.code} · {emp.firstName} {emp.lastName}
+                  </option>
+                ))}
+              </select>
+              {mode === 'edit' && <input type="hidden" name="employeeId" value={selectedEmpId} />}
+              {E('employeeId') && <p className="text-xs text-destructive">{E('employeeId')}</p>}
+            </div>
+          )}
 
           {/* Branch */}
           <div className="space-y-2">
@@ -178,7 +211,13 @@ export function ContractForm({ mode, branches, shifts, employees, initial }: Con
             <Label htmlFor="startDate">
               Start Date <span className="text-destructive">*</span>
             </Label>
-            <Input id="startDate" name="startDate" type="date" required defaultValue={initial?.startDate} />
+            <Input id="startDate" name="startDate" type="date" required value={startDate} onChange={(e) => {
+              const nextStartDate = e.target.value;
+              setStartDate(nextStartDate);
+              if (endDate && nextStartDate && endDate < nextStartDate) {
+                setEndDate(nextStartDate);
+              }
+            }} />
             {E('startDate') && <p className="text-xs text-destructive">{E('startDate')}</p>}
           </div>
 
@@ -187,7 +226,15 @@ export function ContractForm({ mode, branches, shifts, employees, initial }: Con
             <Label htmlFor="endDate">
               End Date {contractType !== 'PERMANENT' && <span className="text-destructive">*</span>}
             </Label>
-            <Input id="endDate" name="endDate" type="date" required={contractType !== 'PERMANENT'} defaultValue={initial?.endDate || ''} />
+            <Input
+              id="endDate"
+              name="endDate"
+              type="date"
+              required={contractType !== 'PERMANENT'}
+              min={startDate || undefined}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
             {E('endDate') && <p className="text-xs text-destructive">{E('endDate')}</p>}
           </div>
 
@@ -241,9 +288,10 @@ export function ContractForm({ mode, branches, shifts, employees, initial }: Con
               id="status"
               name="status"
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              defaultValue={initial?.status || 'DRAFT'}
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
             >
-              {CONTRACT_STATUSES.map((s) => (
+              {statusOptions.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
@@ -254,11 +302,15 @@ export function ContractForm({ mode, branches, shifts, employees, initial }: Con
 
           {/* Attachment */}
           <div className="space-y-2 lg:col-span-2">
-            <Label htmlFor="attachmentFile">Signed Contract Attachment (Image or File)</Label>
+            <Label htmlFor="attachmentFile">
+              Signed Contract Attachment (Image or File)
+              {status === 'SIGNED' && <span className="text-destructive"> *</span>}
+            </Label>
             <Input
               id="attachmentFile"
               name="attachmentFile"
               type="file"
+              required={requiresSignedAttachment}
               accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv"
             />
             {initial?.attachmentUrl && (
@@ -274,6 +326,11 @@ export function ContractForm({ mode, branches, shifts, employees, initial }: Con
                   View current file
                 </a>
               </div>
+            )}
+            {requiresSignedAttachment && (
+              <p className="text-xs text-amber-600">
+                Upload the signed contract file before saving a contract with `SIGNED` status.
+              </p>
             )}
             {E('attachmentUrl') && <p className="text-xs text-destructive">{E('attachmentUrl')}</p>}
           </div>
@@ -291,10 +348,10 @@ export function ContractForm({ mode, branches, shifts, employees, initial }: Con
 
       <div className="flex gap-4">
         <Button type="submit" disabled={pending}>
-          {pending ? 'Saving…' : mode === 'create' ? 'Create Contract' : 'Save Changes'}
+          {pending ? 'Saving…' : mode === 'create' ? (isOfferContract ? 'Create Offer Contract' : 'Create Contract') : 'Save Changes'}
         </Button>
         <Button type="button" variant="outline" asChild>
-          <Link href="/hr/contracts">Cancel</Link>
+          <Link href={isOfferContract ? '/hr/offer-contracts' : '/hr/contracts'}>Cancel</Link>
         </Button>
       </div>
     </form>

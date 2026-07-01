@@ -268,6 +268,7 @@ export const MODULES: NavModule[] = [
           { label: 'Candidates', href: '/hr/candidates', permission: 'hr:read' },
           { label: 'Interviews', href: '/hr/interviews', permission: 'hr:read' },
           { label: 'Job Offers', href: '/hr/job-offers', permission: 'hr:write' },
+          { label: 'Offer Contracts', href: '/hr/offer-contracts', permission: 'hr:write' },
           { label: 'Joining', href: '/hr/joining', permission: 'hr:write' },
         ],
       },

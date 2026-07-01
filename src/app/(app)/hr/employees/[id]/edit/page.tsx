@@ -3,12 +3,12 @@ import { getSession } from '@/server/auth/session';
 import { authorize } from '@/server/auth/authorize';
 import { hrService } from '@/server/services/hr.service';
 import { prisma } from '@/server/db';
+import { buildDesignationOptions } from '@/lib/hr-master-data';
 import { NotFoundError } from '@/lib/errors';
 import { PageHeader } from '@/components/shared/page-header';
 import { EmployeeForm } from '../../_components/employee-form';
 import {
   DEFAULT_DEPARTMENTS,
-  DEFAULT_DESIGNATIONS,
   DEFAULT_EMPLOYMENT_TYPES,
   ERP_ROLE_NAMES,
 } from '@/server/validators/hr';
@@ -37,7 +37,7 @@ export default async function EditEmployeePage({ params }: { params: Promise<{ i
     prisma.hrMasterData.findMany({
       where: { type: { in: ['departments', 'designations'] }, status: 'ACTIVE' },
       orderBy: { name: 'asc' },
-      select: { type: true, name: true },
+      select: { type: true, name: true, metadata: true },
     }),
     prisma.employee.findMany({
       where: { status: 'ACTIVE', id: { not: id } },
@@ -96,7 +96,9 @@ export default async function EditEmployeePage({ params }: { params: Promise<{ i
           bankAccount: employee.bankAccount,
         }}
         departments={valuesFor('departments', DEFAULT_DEPARTMENTS)}
-        designations={valuesFor('designations', DEFAULT_DESIGNATIONS)}
+        designationOptions={buildDesignationOptions(
+          masterRows.filter((row) => row.type === 'designations').map((row) => ({ name: row.name, metadata: row.metadata })),
+        )}
         employmentTypes={[...DEFAULT_EMPLOYMENT_TYPES]}
         shifts={shifts.map((shift) => ({
           id: shift.id,

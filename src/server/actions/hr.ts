@@ -179,6 +179,7 @@ export async function createHrMasterDataAction(_prev: FormState, fd: FormData): 
     branchId: fd.get('branchId') ?? '',
     code: fd.get('code') ?? '',
     name: fd.get('name'),
+    department: fd.get('department') ?? '',
     description: fd.get('description') ?? '',
     status: fd.get('status') ?? 'ACTIVE',
   });
@@ -189,6 +190,11 @@ export async function createHrMasterDataAction(_prev: FormState, fd: FormData): 
     const row = await hrService.createMasterData(session, parsed.data);
     revalidatePath(path);
     if (parsed.data.type === 'departments') revalidatePath('/hr/recruitment');
+    if (parsed.data.type === 'designations') {
+      revalidatePath('/hr/employees/new');
+      revalidatePath('/hr/promotions');
+      revalidatePath('/hr/recruitment');
+    }
     return { success: true, id: row.id };
   } catch (e) {
     if (e instanceof ApiError) return { error: e.message };
@@ -233,6 +239,7 @@ export async function updateHrMasterDataAction(_prev: FormState, fd: FormData): 
     branchId: fd.get('branchId') ?? '',
     code: fd.get('code') ?? '',
     name: fd.get('name'),
+    department: fd.get('department') ?? '',
     description: fd.get('description') ?? '',
     status: fd.get('status') ?? 'ACTIVE',
   });
@@ -243,6 +250,11 @@ export async function updateHrMasterDataAction(_prev: FormState, fd: FormData): 
     await hrService.updateMasterData(session, parsed.data);
     revalidatePath(path);
     if (parsed.data.type === 'departments') revalidatePath('/hr/recruitment');
+    if (parsed.data.type === 'designations') {
+      revalidatePath('/hr/employees/new');
+      revalidatePath('/hr/promotions');
+      revalidatePath('/hr/recruitment');
+    }
     redirect(path);
   } catch (e) {
     if (e instanceof ApiError) return { error: e.message };

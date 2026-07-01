@@ -205,6 +205,26 @@ pnpm prisma db seed            # seed super admin, default roles, Main Branch, f
 pnpm prisma studio             # inspect the database
 ```
 
+If you already have an older local database that was created outside Prisma migration history and `prisma migrate dev` reports drift, run this one-time adoption flow instead:
+
+```bash
+npm run db:adopt-existing
+```
+
+What it does:
+
+- runs `prisma db push` to bring your existing local schema up to the current `schema.prisma`
+- marks the repo's migration folders as applied in `_prisma_migrations`
+- regenerates the Prisma client
+
+After that one-time adoption, go back to the normal workflow:
+
+```bash
+npm run db:migrate
+```
+
+Use `db:adopt-existing` only for an already-existing local development database. For clean databases and normal team development, keep using migrations.
+
 Seed output includes:
 
 - Super admin user

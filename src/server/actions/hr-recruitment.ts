@@ -38,6 +38,14 @@ const CV_UPLOAD_ROOT = path.resolve(process.cwd(), 'backend/upload/CV');
 const ALLOWED_CV_EXTENSIONS = new Set(['.pdf', '.doc', '.docx']);
 const MAX_CV_SIZE_BYTES = 5 * 1024 * 1024;
 
+function employmentTypeFromContractType(contractType: string | null | undefined) {
+  if (contractType === 'INTERNSHIP') return 'INTERN';
+  if (contractType === 'PERMANENT' || contractType === 'PROBATION' || contractType === 'CONTRACT') {
+    return contractType;
+  }
+  return 'CONTRACT';
+}
+
 function sanitizeFilenameSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 }
@@ -247,6 +255,7 @@ export async function createCandidateAction(_prev: ActionState, fd: FormData): P
       where: { id: recruitmentRequestId },
     });
     if (!req) return { error: 'Recruitment request not found' };
+    const requestDepartment = req.subject || '';
 
     const count = await prisma.hrWorkflowRecord.count({
       where: { section: 'candidates' },
@@ -268,6 +277,7 @@ export async function createCandidateAction(_prev: ActionState, fd: FormData): P
           metadata: {
             candidateId,
             recruitmentRequestId,
+            department: requestDepartment,
             phone,
             email,
             experience,
@@ -306,7 +316,7 @@ export async function createCandidateAction(_prev: ActionState, fd: FormData): P
   }
 }
 
-export async function decideCandidateAction(id: string, status: 'Applied' | 'Shortlisted' | 'Selected' | 'Rejected' | 'Joined'): Promise<ActionState> {
+export async function decideCandidateAction(id: string, status: 'Applied' | 'Shortlisted' | 'Passed' | 'Selected' | 'Rejected' | 'Joined' | 'Employee Created'): Promise<ActionState> {
   try {
     const session = await getSession();
     const actor = await authorize(session, 'hr:write');
@@ -388,10 +398,10 @@ export async function scheduleInterviewAction(_prev: ActionState, fd: FormData):
         },
       });
 
-      // Update candidate status to Interview Scheduled
+      // Move the candidate out of the shortlist queue once an interview is booked.
       await tx.hrWorkflowRecord.update({
         where: { id: candidateId },
-        data: { status: 'Shortlisted' },
+        data: { status: 'Interview Scheduled' },
       });
 
       await recordAudit(
@@ -425,7 +435,7 @@ export async function evaluateInterviewAction(_prev: ActionState, fd: FormData):
     const communication = Number(fd.get('communication') || 0);
     const technicalSkill = Number(fd.get('technicalSkill') || 0);
     const remarks = String(fd.get('remarks') || '').trim();
-    const recommendation = String(fd.get('recommendation') || 'Selected'); // Selected / Rejected
+    const recommendation = String(fd.get('recommendation') || 'Passed'); // Passed / Hold / Rejected
 
     if (!interviewId) return { error: 'Interview ID is required' };
 
@@ -441,11 +451,12 @@ export async function evaluateInterviewAction(_prev: ActionState, fd: FormData):
       await tx.hrWorkflowRecord.update({
         where: { id: interviewId },
         data: {
-          status: recommendation,
+          status: 'Interview Completed',
           notes: remarks,
           amount: (communication + technicalSkill) / 2, // Store average score in amount
           metadata: {
             ...meta,
+            recommendation,
             scores: {
               communication,
               technicalSkill,
@@ -455,7 +466,7 @@ export async function evaluateInterviewAction(_prev: ActionState, fd: FormData):
         },
       });
 
-      // If recommendation is Selected, update the candidate status
+      // Keep the candidate pipeline aligned with the interview outcome.
       if (candidateId) {
         await tx.hrWorkflowRecord.update({
           where: { id: candidateId },
@@ -508,6 +519,24 @@ export async function createJobOfferAction(_prev: ActionState, fd: FormData): Pr
     }
 
     const candidateMeta = (candidate.metadata as Record<string, any>) || {};
+    const requestDepartment =
+      typeof candidateMeta.department === 'string' && candidateMeta.department.trim()
+        ? candidateMeta.department.trim()
+        : (() => {
+            const recruitmentRequestId = typeof candidateMeta.recruitmentRequestId === 'string'
+              ? candidateMeta.recruitmentRequestId
+              : '';
+            return recruitmentRequestId;
+          })();
+
+    let resolvedDepartment = typeof candidateMeta.department === 'string' ? candidateMeta.department.trim() : '';
+    if (!resolvedDepartment && typeof requestDepartment === 'string' && requestDepartment) {
+      const recruitmentRequest = await prisma.hrWorkflowRecord.findUnique({
+        where: { id: requestDepartment },
+        select: { subject: true },
+      });
+      resolvedDepartment = recruitmentRequest?.subject?.trim() || '';
+    }
 
     const count = await prisma.hrWorkflowRecord.count({ where: { section: 'job-offers' } });
     const offerNo = `OFF-${new Date().getFullYear()}-${String(count + 1).padStart(4, '0')}`;
@@ -518,7 +547,7 @@ export async function createJobOfferAction(_prev: ActionState, fd: FormData): Pr
           section: 'job-offers',
           title: offerNo,
           subject: candidate.subject, // Position
-          status: 'Pending',
+          status: 'Job Offer Sent',
           startDate: new Date(joiningDateStr),
           endDate: new Date(expiryDateStr),
           amount: offeredSalary,
@@ -527,7 +556,7 @@ export async function createJobOfferAction(_prev: ActionState, fd: FormData): Pr
             candidateId,
             candidateName: candidate.title,
             recruitmentRequestId: candidateMeta.recruitmentRequestId,
-            department: candidateMeta.department || 'Production',
+            department: resolvedDepartment,
             phone: candidateMeta.phone,
             email: candidateMeta.email,
             offerNo,
@@ -537,10 +566,10 @@ export async function createJobOfferAction(_prev: ActionState, fd: FormData): Pr
         },
       });
 
-      // Update candidate status to Offered
+      // Advance the candidate into the offer stage once the offer is issued.
       await tx.hrWorkflowRecord.update({
         where: { id: candidateId },
-        data: { status: 'Offered' },
+        data: { status: 'Job Offer Sent' },
       });
 
       await recordAudit(
@@ -565,7 +594,7 @@ export async function createJobOfferAction(_prev: ActionState, fd: FormData): Pr
   }
 }
 
-export async function decideJobOfferAction(id: string, status: 'Accepted' | 'Rejected' | 'Pending'): Promise<ActionState> {
+export async function decideJobOfferAction(id: string, status: 'Offer Accepted' | 'Rejected' | 'Job Offer Sent'): Promise<ActionState> {
   try {
     const session = await getSession();
     const actor = await authorize(session, 'hr:write');
@@ -587,11 +616,49 @@ export async function decideJobOfferAction(id: string, status: 'Accepted' | 'Rej
         },
       });
 
-      // If accepted/rejected, update candidate status as well
+      if (status === 'Offer Accepted') {
+        const existingContract = await tx.contract.findFirst({
+          where: { offerId: id },
+          select: { id: true },
+        });
+
+        if (!existingContract) {
+          const contractCount = await tx.contract.count();
+          const startDate = offer.startDate ?? new Date();
+          const fallbackEndDate = new Date(startDate);
+          fallbackEndDate.setFullYear(fallbackEndDate.getFullYear() + 1);
+          const endDate = offer.endDate && offer.endDate >= startDate ? offer.endDate : fallbackEndDate;
+
+          await tx.contract.create({
+            data: {
+              contractNo: `CNT-${new Date().getFullYear()}-${String(contractCount + 1).padStart(4, '0')}`,
+              employeeId: null,
+              candidateId: candidateId || null,
+              offerId: id,
+              candidateName: (meta.candidateName as string | undefined) || offer.title,
+              branchId: offer.branchId || actor.activeBranchId || null,
+              department: (meta.department as string | undefined) || null,
+              designation: offer.subject || null,
+              contractType: 'CONTRACT',
+              startDate,
+              endDate,
+              basicSalary: offer.amount ?? 0,
+              allowances: 0,
+              weeklyOff: 'Friday',
+              status: 'DRAFT',
+              notes: `Auto-created from accepted job offer ${meta.offerNo || offer.title}.`,
+              createdById: actor.userId,
+              updatedById: actor.userId,
+            },
+          });
+        }
+      }
+
+      // Keep the candidate workflow aligned with the offer outcome.
       if (candidateId) {
         await tx.hrWorkflowRecord.update({
           where: { id: candidateId },
-          data: { status: status === 'Accepted' ? 'Accepted' : 'Applied' },
+          data: { status: status === 'Offer Accepted' ? 'Offer Accepted' : 'Passed' },
         });
       }
 
@@ -612,6 +679,7 @@ export async function decideJobOfferAction(id: string, status: 'Accepted' | 'Rej
 
     revalidatePath('/hr/job-offers');
     revalidatePath('/hr/candidates');
+    revalidatePath('/hr/offer-contracts');
     return { success: true };
   } catch (e: any) {
     return { error: e.message || 'Failed to update job offer status' };
@@ -630,12 +698,32 @@ export async function completeJoiningAction(_prev: ActionState, fd: FormData): P
     const designation = String(fd.get('designation') || '').trim();
     const department = String(fd.get('department') || '').trim();
     const shiftId = String(fd.get('shiftId') || '');
-    const employmentType = String(fd.get('employmentType') || 'PERMANENT');
-
+    const basicSalary = Number(fd.get('basicSalary') || 0);
+    const houseAllowance = Number(fd.get('houseAllowance') || 0);
+    const transportAllowance = Number(fd.get('transportAllowance') || 0);
+    const medicalAllowance = Number(fd.get('medicalAllowance') || 0);
+    const otherAllowance = Number(fd.get('otherAllowance') || 0);
+    const providentFund = Number(fd.get('providentFund') || 0);
+    const taxDeduction = Number(fd.get('taxDeduction') || 0);
     if (!offerId) return { error: 'Job offer reference is required' };
     if (!employeeCode) return { error: 'Employee ID code is required' };
     if (!branchId) return { error: 'Branch assignment is required' };
     if (!shiftId) return { error: 'Shift assignment is required' };
+    if (!Number.isFinite(basicSalary) || basicSalary <= 0) return { error: 'Basic salary is required' };
+
+    const salaryFields = {
+      basicSalary,
+      houseAllowance,
+      transportAllowance,
+      medicalAllowance,
+      otherAllowance,
+      providentFund,
+      taxDeduction,
+    };
+    const invalidSalaryField = Object.entries(salaryFields).find(([, value]) => !Number.isFinite(value) || value < 0);
+    if (invalidSalaryField) {
+      return { error: `${invalidSalaryField[0]} must be a valid non-negative number` };
+    }
 
     const offer = await prisma.hrWorkflowRecord.findUnique({ where: { id: offerId } });
     if (!offer || offer.section !== 'job-offers') {
@@ -665,7 +753,19 @@ export async function completeJoiningAction(_prev: ActionState, fd: FormData): P
     if (!shift) return { error: 'Selected shift was not found' };
     if (shift.branchId !== branchId) return { error: 'Selected shift does not belong to the chosen branch' };
 
-    const salary = Number(offer.amount || 0);
+    const offerContract = await prisma.contract.findFirst({
+      where: { offerId },
+      select: { id: true, status: true, contractType: true, department: true, designation: true },
+    });
+
+    if (!offerContract) {
+      return { error: 'A signed offer contract is required before joining can be completed' };
+    }
+    if (!['SIGNED', 'WAITING_FOR_JOINING'].includes(offerContract.status)) {
+      return { error: 'Offer contract must be signed before joining can be completed' };
+    }
+
+    const employmentType = employmentTypeFromContractType(offerContract.contractType);
 
     const employeeData = {
       branchId,
@@ -674,19 +774,19 @@ export async function completeJoiningAction(_prev: ActionState, fd: FormData): P
       lastName,
       email: candidateMeta.email || `${employeeCode.toLowerCase()}@annex.local`,
       phone: candidateMeta.phone || '',
-      designation: designation || candidate.subject || '',
-      department: department || candidateMeta.department || 'Production',
+      designation: designation || offerContract.designation || candidate.subject || '',
+      department: department || offerContract.department || candidateMeta.department || '',
       employmentType,
       shiftId: shift.id,
       joinedAt: offer.startDate || new Date(),
       status: 'ACTIVE' as const,
-      basicSalary: salary,
-      houseAllowance: salary * 0.4, // Standard default allowances
-      transportAllowance: salary * 0.1,
-      medicalAllowance: salary * 0.1,
-      otherAllowance: 0,
-      providentFund: salary * 0.05,
-      taxDeduction: 0,
+      basicSalary,
+      houseAllowance,
+      transportAllowance,
+      medicalAllowance,
+      otherAllowance,
+      providentFund,
+      taxDeduction,
       bankName: '',
       bankAccount: '',
     };
@@ -702,16 +802,33 @@ export async function completeJoiningAction(_prev: ActionState, fd: FormData): P
         },
       });
 
+      await tx.contract.update({
+        where: { id: offerContract.id },
+        data: {
+          employeeId: emp.id,
+          branchId,
+          department: department || offerContract.department || candidateMeta.department || '',
+          designation: designation || offerContract.designation || candidate.subject || '',
+          contractType: employmentType === 'PERMANENT' ? 'PERMANENT' : 'CONTRACT',
+          startDate: offer.startDate || new Date(),
+          endDate: employmentType === 'PERMANENT' ? null : offer.endDate || null,
+          basicSalary,
+          shiftId: shift.id,
+          status: 'ACTIVE',
+          updatedById: actor.userId,
+        },
+      });
+
       // 2. Create joining record in workflow
-      const joiningRow = await tx.hrWorkflowRecord.create({
+      await tx.hrWorkflowRecord.create({
         data: {
           section: 'joining',
           title: `Joining - ${candidate.title}`,
           subject: designation,
-          status: 'Completed',
+          status: 'Employee Created',
           startDate: offer.startDate,
-          amount: salary,
-          notes: `Joined as ${designation} in ${department}. Employment Type: ${employmentType}. Shift: ${shift.name} (${shift.code})`,
+          amount: basicSalary,
+          notes: `Joined as ${designation || offerContract.designation || candidate.subject || ''} in ${department || offerContract.department || candidateMeta.department || ''}. Employment Type: ${employmentType}. Shift: ${shift.name} (${shift.code})`,
           metadata: {
             candidateId,
             offerId,
@@ -720,6 +837,15 @@ export async function completeJoiningAction(_prev: ActionState, fd: FormData): P
             employmentType,
             shiftId: shift.id,
             shiftName: shift.name,
+            salaryStructure: {
+              basicSalary,
+              houseAllowance,
+              transportAllowance,
+              medicalAllowance,
+              otherAllowance,
+              providentFund,
+              taxDeduction,
+            },
             checklist: {
               documentsUploaded: true,
               accountCreated: true,
@@ -731,10 +857,10 @@ export async function completeJoiningAction(_prev: ActionState, fd: FormData): P
         },
       });
 
-      // 3. Mark candidate as Joined (it will now be filtered out of recruitment lists)
+      // 3. Mark candidate as completed in the recruitment workflow.
       await tx.hrWorkflowRecord.update({
         where: { id: candidateId },
-        data: { status: 'Joined' },
+        data: { status: 'Employee Created' },
       });
 
       // 4. Mark offer as Joined
@@ -762,6 +888,8 @@ export async function completeJoiningAction(_prev: ActionState, fd: FormData): P
     revalidatePath('/hr/job-offers');
     revalidatePath('/hr/candidates');
     revalidatePath('/hr/employees');
+    revalidatePath('/hr/contracts');
+    revalidatePath('/hr/offer-contracts');
     return { success: true };
   } catch (e: any) {
     return { error: e.message || 'Failed to complete joining workflow' };

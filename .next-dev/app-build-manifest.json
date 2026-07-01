@@ -1,5 +1,10 @@
 {
   "pages": {
+    "/api/sse/notifications/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/sse/notifications/route.js"
+    ],
     "/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
@@ -11,40 +16,30 @@
       "static/chunks/main-app.js",
       "static/chunks/app/not-found.js"
     ],
-    "/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
-    ],
     "/(app)/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/(app)/layout.js"
     ],
-    "/(app)/dashboard/loading": [
+    "/(app)/hr/promotions/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(app)/dashboard/loading.js"
+      "static/chunks/app/(app)/hr/promotions/page.js"
     ],
-    "/(app)/dashboard/page": [
+    "/(app)/hr/[...slug]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(app)/dashboard/page.js"
+      "static/chunks/app/(app)/hr/[...slug]/page.js"
     ],
-    "/api/sse/notifications/route": [
+    "/(app)/hr/increments/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/sse/notifications/route.js"
+      "static/chunks/app/(app)/hr/increments/page.js"
     ],
-    "/(app)/hr/contracts/page": [
+    "/(app)/notifications/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(app)/hr/contracts/page.js"
-    ],
-    "/(app)/hr/contracts/[id]/edit/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(app)/hr/contracts/[id]/edit/page.js"
+      "static/chunks/app/(app)/notifications/page.js"
     ]
   }
 }

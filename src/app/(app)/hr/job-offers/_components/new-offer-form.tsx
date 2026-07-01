@@ -11,7 +11,7 @@ interface Props {
     id: string;
     title: string;
     subject: string;
-    metadata: any;
+    metadata: Record<string, unknown> | null;
   }>;
 }
 
@@ -67,7 +67,7 @@ export function NewOfferForm({ selectedCandidates }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <div className="space-y-2">
           <Label htmlFor="expiryDate">Offer Letter Expiry Date *</Label>
           <Input id="expiryDate" name="expiryDate" type="date" required />
@@ -75,10 +75,12 @@ export function NewOfferForm({ selectedCandidates }: Props) {
 
         <div className="space-y-2">
           <Label htmlFor="notes">Offer Remarks / Special Allowances</Label>
-          <Input
+          <textarea
             id="notes"
             name="notes"
+            rows={3}
             placeholder="e.g. 3-month probation, festival bonus eligibility"
+            className="flex w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
         </div>
       </div>

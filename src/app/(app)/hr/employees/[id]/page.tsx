@@ -5,8 +5,13 @@ import { getSession } from '@/server/auth/session';
 import { authorize } from '@/server/auth/authorize';
 import { hrService } from '@/server/services/hr.service';
 import { prisma } from '@/server/db';
+import { isEmployeeIncrementTableMissingError, isIncrementTableAvailable } from '@/server/services/increments.service';
+import { isEmployeePromotionTableMissingError, isPromotionTableAvailable } from '@/server/services/promotions.service';
 import { NotFoundError } from '@/lib/errors';
 import { formatCurrency } from '@/lib/money';
+import { INCREMENT_STATUS_LABELS, INCREMENT_TYPE_LABELS } from '@/server/validators/increments';
+import { PROMOTION_STATUS_LABELS, PROMOTION_TYPE_LABELS } from '@/server/validators/promotions';
+import { TRANSFER_STATUS_LABELS, TRANSFER_TYPE_LABELS } from '@/server/validators/transfers';
 import { PageHeader } from '@/components/shared/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -42,8 +47,10 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
     if (error instanceof NotFoundError) notFound();
     throw error;
   }
+  const promotionsAvailable = await isPromotionTableAvailable();
+  const incrementsAvailable = await isIncrementTableAvailable();
 
-  const [attendance, leaves, payrollRuns, documents, audits, workflowRecords] = await Promise.all([
+  const [attendance, leaves, payrollRuns, documents, audits, workflowRecords, transfers, promotions, increments] = await Promise.all([
     hrService.listAttendance(session, { employeeId: id }),
     hrService.listLeaves(session, { employeeId: id }),
     prisma.payslip.findMany({
@@ -64,6 +71,41 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
       take: 10,
     }),
     hrService.listWorkflowRecords(session, { employeeId: id }),
+    prisma.employeeTransfer.findMany({
+      where: { employeeId: id },
+      include: {
+        newBranch: { select: { name: true } },
+        tempBranch: { select: { name: true } },
+        newShift: { select: { name: true } },
+        tempShift: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+    }),
+    promotionsAvailable
+      ? prisma.employeePromotion
+          .findMany({
+            where: { employeeId: id },
+            orderBy: { createdAt: 'desc' },
+            take: 8,
+          })
+          .catch((error) => {
+            if (isEmployeePromotionTableMissingError(error)) return [];
+            throw error;
+          })
+      : Promise.resolve([]),
+    incrementsAvailable
+      ? prisma.employeeIncrement
+          .findMany({
+            where: { employeeId: id },
+            orderBy: { createdAt: 'desc' },
+            take: 8,
+          })
+          .catch((error) => {
+            if (isEmployeeIncrementTableMissingError(error)) return [];
+            throw error;
+          })
+      : Promise.resolve([]),
   ]);
 
   const canWrite = session?.permissions.includes('hr:write') ?? false;
@@ -270,13 +312,13 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
           <WorkflowList records={workflowRecords.filter((record) => ['performance-review', 'appraisal', 'kpi'].includes(record.section))} />
         </SectionCard>
         <SectionCard title="Promotion History">
-          <WorkflowList records={workflowRecords.filter((record) => record.section === 'promotions')} />
+          <PromotionHistoryList records={promotions} />
         </SectionCard>
         <SectionCard title="Transfer History">
-          <WorkflowList records={workflowRecords.filter((record) => record.section === 'transfers')} />
+          <TransferHistoryList records={transfers} />
         </SectionCard>
         <SectionCard title="Increment History">
-          <WorkflowList records={workflowRecords.filter((record) => record.section === 'increments')} />
+          <IncrementHistoryList records={increments} />
         </SectionCard>
         <SectionCard title="Warnings">
           <WorkflowList records={workflowRecords.filter((record) => ['warnings', 'suspensions', 'notices'].includes(record.section))} />
@@ -416,6 +458,203 @@ function WorkflowList({
             {' · '}
             {record.priority}
           </p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function getTransferDestination(record: {
+  transferType: string;
+  newBranch: { name: string } | null;
+  tempBranch: { name: string } | null;
+  newDepartment: string | null;
+  tempDepartment: string | null;
+  newShift: { name: string } | null;
+  tempShift: { name: string } | null;
+}) {
+  switch (record.transferType) {
+    case 'BRANCH':
+      return record.newBranch?.name ?? '—';
+    case 'DEPARTMENT':
+      return record.newDepartment ?? '—';
+    case 'SHIFT':
+      return record.newShift?.name ?? '—';
+    case 'TEMPORARY': {
+      const parts = [record.tempBranch?.name, record.tempDepartment, record.tempShift?.name].filter(Boolean);
+      return parts.length > 0 ? parts.join(', ') : '—';
+    }
+    case 'PERMANENT': {
+      const parts = [record.newBranch?.name, record.newDepartment, record.newShift?.name].filter(Boolean);
+      return parts.length > 0 ? parts.join(', ') : '—';
+    }
+    default:
+      return '—';
+  }
+}
+
+function getTransferDateLabel(record: {
+  transferType: string;
+  effectiveDate: Date | null;
+  startDate: Date | null;
+  endDate: Date | null;
+  createdAt: Date;
+}) {
+  if (record.transferType === 'TEMPORARY') {
+    const start = record.startDate?.toISOString().slice(0, 10) ?? record.createdAt.toISOString().slice(0, 10);
+    const end = record.endDate?.toISOString().slice(0, 10) ?? '—';
+    return `${start} to ${end}`;
+  }
+  return record.effectiveDate?.toISOString().slice(0, 10) ?? record.createdAt.toISOString().slice(0, 10);
+}
+
+function TransferHistoryList({
+  records,
+}: {
+  records: Array<{
+    id: string;
+    transferNumber: string;
+    transferType: string;
+    status: string;
+    effectiveDate: Date | null;
+    startDate: Date | null;
+    endDate: Date | null;
+    newDepartment: string | null;
+    tempDepartment: string | null;
+    createdAt: Date;
+    newBranch: { name: string } | null;
+    tempBranch: { name: string } | null;
+    newShift: { name: string } | null;
+    tempShift: { name: string } | null;
+  }>;
+}) {
+  if (records.length === 0) return <EmptyState text="No transfer history saved for this employee yet." />;
+
+  return (
+    <ul className="space-y-3">
+      {records.map((record) => (
+        <li key={record.id} className="rounded-lg border p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">
+                {TRANSFER_TYPE_LABELS[record.transferType] ?? record.transferType}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {record.transferNumber} · {getTransferDestination(record)}
+              </p>
+            </div>
+            <Badge
+              variant={
+                record.status === 'COMPLETED' || record.status === 'APPROVED'
+                  ? 'success'
+                  : record.status === 'REJECTED' || record.status === 'CANCELLED'
+                    ? 'destructive'
+                    : record.status === 'PENDING_APPROVAL' || record.status === 'SUBMITTED'
+                      ? 'warning'
+                      : 'outline'
+              }
+            >
+              {TRANSFER_STATUS_LABELS[record.status] ?? record.status}
+            </Badge>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">{getTransferDateLabel(record)}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function PromotionHistoryList({
+  records,
+}: {
+  records: Array<{
+    id: string;
+    promotionNumber: string;
+    promotionType: string;
+    status: string;
+    newDesignation: string;
+    newSalary: { toString(): string } | string;
+    effectiveDate: Date;
+  }>;
+}) {
+  if (records.length === 0) return <EmptyState text="No promotion history saved for this employee yet." />;
+
+  return (
+    <ul className="space-y-3">
+      {records.map((record) => (
+        <li key={record.id} className="rounded-lg border p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">
+                {PROMOTION_TYPE_LABELS[record.promotionType] ?? record.promotionType}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {record.promotionNumber} · {record.newDesignation} · {formatCurrency(record.newSalary.toString())}
+              </p>
+            </div>
+            <Badge
+              variant={
+                record.status === 'COMPLETED' || record.status === 'APPROVED'
+                  ? 'success'
+                  : record.status === 'REJECTED_BY_MANAGER' || record.status === 'REJECTED_BY_HR'
+                    ? 'destructive'
+                    : record.status === 'PENDING_MANAGER_APPROVAL' || record.status === 'PENDING_HR_APPROVAL'
+                      ? 'warning'
+                      : 'outline'
+              }
+            >
+              {PROMOTION_STATUS_LABELS[record.status] ?? record.status}
+            </Badge>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">{record.effectiveDate.toISOString().slice(0, 10)}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function IncrementHistoryList({
+  records,
+}: {
+  records: Array<{
+    id: string;
+    incrementNumber: string;
+    incrementType: string;
+    status: string;
+    newBasicSalary: { toString(): string } | string;
+    effectiveDate: Date;
+  }>;
+}) {
+  if (records.length === 0) return <EmptyState text="No increment history saved for this employee yet." />;
+
+  return (
+    <ul className="space-y-3">
+      {records.map((record) => (
+        <li key={record.id} className="rounded-lg border p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">
+                {INCREMENT_TYPE_LABELS[record.incrementType] ?? record.incrementType}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {record.incrementNumber} · {formatCurrency(record.newBasicSalary.toString())}
+              </p>
+            </div>
+            <Badge
+              variant={
+                record.status === 'APPLIED' || record.status === 'APPROVED'
+                  ? 'success'
+                  : record.status === 'REJECTED'
+                    ? 'destructive'
+                    : record.status.includes('PENDING')
+                      ? 'warning'
+                      : 'outline'
+              }
+            >
+              {INCREMENT_STATUS_LABELS[record.status] ?? record.status}
+            </Badge>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">{record.effectiveDate.toISOString().slice(0, 10)}</p>
         </li>
       ))}
     </ul>

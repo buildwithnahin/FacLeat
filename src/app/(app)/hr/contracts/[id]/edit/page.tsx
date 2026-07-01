@@ -81,6 +81,9 @@ export default async function EditContractPage({
     id: contract.id,
     contractNo: contract.contractNo,
     employeeId: contract.employeeId,
+    candidateId: contract.candidateId,
+    offerId: contract.offerId,
+    candidateName: contract.candidateName,
     branchId: contract.branchId,
     department: contract.department,
     designation: contract.designation,
@@ -100,10 +103,11 @@ export default async function EditContractPage({
     <div className="space-y-6">
       <PageHeader
         title="Edit Employee Contract"
-        description={`Update terms for Contract ${contract.contractNo} associated with ${contract.employee.firstName} ${contract.employee.lastName}.`}
+        description={`Update terms for Contract ${contract.contractNo} associated with ${contract.employee ? `${contract.employee.firstName} ${contract.employee.lastName}` : 'the assigned employee'}.`}
       />
       <ContractForm
         mode="edit"
+        scope="employee"
         branches={branches}
         shifts={shifts}
         employees={mappedEmployees}

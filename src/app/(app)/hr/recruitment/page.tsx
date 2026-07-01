@@ -1,5 +1,6 @@
 import { getSession } from '@/server/auth/session';
 import { prisma } from '@/server/db';
+import { buildDesignationOptions } from '@/lib/hr-master-data';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -53,7 +54,7 @@ export default async function RecruitmentRequestsPage() {
     ['HR', 'Accounts', 'Management', 'Admin', 'Super Admin'].includes(role),
   );
 
-  const [requests, departments] = await Promise.all([
+  const [requests, departments, designations] = await Promise.all([
     prisma.hrWorkflowRecord.findMany({
       where: { section: 'recruitment' },
       orderBy: { createdAt: 'desc' },
@@ -62,6 +63,11 @@ export default async function RecruitmentRequestsPage() {
       where: { type: 'departments', status: 'ACTIVE' },
       orderBy: { name: 'asc' },
       select: { id: true, name: true },
+    }),
+    prisma.hrMasterData.findMany({
+      where: { type: 'designations', status: 'ACTIVE' },
+      orderBy: { name: 'asc' },
+      select: { name: true, metadata: true },
     }),
   ]);
 
@@ -122,7 +128,10 @@ export default async function RecruitmentRequestsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <NewRequestForm departments={departments.map((department) => department.name)} />
+            <NewRequestForm
+              departments={departments.map((department) => department.name)}
+              designationOptions={buildDesignationOptions(designations)}
+            />
           </CardContent>
         </Card>
       )}
@@ -155,7 +164,7 @@ export default async function RecruitmentRequestsPage() {
                 </tr>
               ) : (
                 requests.map((r) => {
-                  const meta = (r.metadata as Record<string, any>) || {};
+                  const meta = (r.metadata as Record<string, unknown> | null) ?? {};
                   const step = RECRUITMENT_APPROVAL_STEPS[r.status];
                   const canApprove = canApproveStep(session?.roles ?? [], r.status);
                   return (

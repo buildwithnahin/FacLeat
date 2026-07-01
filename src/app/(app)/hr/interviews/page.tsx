@@ -23,6 +23,19 @@ export default async function InterviewsPage() {
     orderBy: { createdAt: 'desc' },
   });
 
+  const scheduledCandidateIds = new Set(
+    interviews
+      .filter((item) => item.status === 'Scheduled')
+      .map((item) => {
+        const meta = item.metadata as Record<string, unknown> | null;
+        const candidateId = meta?.candidateId;
+        return typeof candidateId === 'string' ? candidateId : null;
+      })
+      .filter((candidateId): candidateId is string => Boolean(candidateId))
+  );
+
+  const eligibleCandidates = shortlistedCandidates.filter((candidate) => !scheduledCandidateIds.has(candidate.id));
+
   const serializedInterviews = interviews.map((item) => ({
     id: item.id,
     title: item.title,
@@ -46,7 +59,7 @@ export default async function InterviewsPage() {
       
       <InterviewList
         interviews={serializedInterviews}
-        shortlistedCandidates={shortlistedCandidates.map((c) => ({
+        shortlistedCandidates={eligibleCandidates.map((c) => ({
           id: c.id,
           title: c.title,
           subject: c.subject || '',

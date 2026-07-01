@@ -3,6 +3,7 @@ import { getSession } from '@/server/auth/session';
 import { authorize } from '@/server/auth/authorize';
 import { hrService } from '@/server/services/hr.service';
 import { prisma } from '@/server/db';
+import { getDesignationDepartment } from '@/lib/hr-master-data';
 import { HrSectionShell } from '../_components/hr-section-shell';
 
 export const metadata = { title: 'HR Section' };
@@ -72,14 +73,6 @@ const SECTION_CONFIG: Record<
     description: 'Publish official holidays to align attendance, leave, and payroll calculations.',
     category: 'Organization',
     highlights: ['Public and company holidays', 'Shift-aware holiday rules', 'Payroll calculation support'],
-  },
-  transfers: {
-    title: 'Transfer',
-    description: 'Track employee transfers across branch, department, and reporting structure.',
-    category: 'Employee Management',
-    workflow: ['Transfer Request', 'Approval', 'Effective Date', 'Employee Record Update'],
-    highlights: ['Department and branch movement', 'Transfer reason tracking', 'History preservation'],
-    links: [{ label: 'Employees', href: '/hr/employees' }],
   },
   promotions: {
     title: 'Promotion',
@@ -323,6 +316,14 @@ export default async function HrSectionPage({
     redirect('/hr/holidays');
   }
 
+  if (key === 'transfers') {
+    redirect('/hr/transfers');
+  }
+
+  if (key === 'increments') {
+    redirect('/hr/increments');
+  }
+
   const config = SECTION_CONFIG[key];
 
   if (!config) notFound();
@@ -333,7 +334,7 @@ export default async function HrSectionPage({
   const canWrite = session?.permissions.includes('hr:write') ?? false;
   const path = `/hr/${key}`;
 
-  const [branches, employees, masterRows, workflowRows] = await Promise.all([
+  const [branches, employees, masterRows, workflowRows, departmentRows] = await Promise.all([
     prisma.branch.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
@@ -342,6 +343,9 @@ export default async function HrSectionPage({
     hrService.listEmployees(session, { status: 'ACTIVE' }),
     kind === 'master' ? hrService.listMasterData(session, { type: key, branchId: session?.activeBranchId ?? undefined }) : Promise.resolve([]),
     kind === 'workflow' ? hrService.listWorkflowRecords(session, { section: key, branchId: session?.activeBranchId ?? undefined }) : Promise.resolve([]),
+    key === 'designations'
+      ? hrService.listMasterData(session, { type: 'departments', branchId: session?.activeBranchId ?? undefined, status: 'ACTIVE' })
+      : Promise.resolve([]),
   ]);
 
   const editMasterRow = kind === 'master' && edit ? masterRows.find((row) => row.id === edit) ?? null : null;
@@ -359,7 +363,6 @@ export default async function HrSectionPage({
         id: employee.id,
         label: `${employee.code} · ${employee.firstName} ${employee.lastName}`,
       }))}
-      editId={editMasterRow?.id ?? editWorkflowRow?.id ?? null}
       editMasterRow={
         editMasterRow
           ? {
@@ -367,6 +370,7 @@ export default async function HrSectionPage({
               branchId: editMasterRow.branchId,
               code: editMasterRow.code,
               name: editMasterRow.name,
+              department: getDesignationDepartment(editMasterRow.metadata),
               description: editMasterRow.description,
               status: editMasterRow.status,
             }
@@ -390,7 +394,11 @@ export default async function HrSectionPage({
             }
           : null
       }
-      masterRows={masterRows}
+      departments={departmentRows.map((row) => row.name)}
+      masterRows={masterRows.map((row) => ({
+        ...row,
+        department: getDesignationDepartment(row.metadata),
+      }))}
       workflowRows={workflowRows}
     />
   );

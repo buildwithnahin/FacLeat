@@ -550,6 +550,12 @@ model Branch {
   cashTransfersReceived CashTransfer[]        @relation("CashTransferTo")
   cashEntries           CashEntry[]
   openingBalanceEntries OpeningBalanceEntry[]
+  employeePromotions           EmployeePromotion[]
+  employeeIncrements           EmployeeIncrement[]
+  employeeSalaryHistory        EmployeeSalaryHistory[]
+  employeeTransfers             EmployeeTransfer[]
+  employeeTransfersToNewBranch  EmployeeTransfer[] @relation("TransferNewBranch")
+  employeeTransfersToTempBranch EmployeeTransfer[] @relation("TransferTempBranch")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2705,6 +2711,13 @@ model Employee {
   payslips   Payslip[]
   hrWorkflowRecords HrWorkflowRecord[]
   contracts          Contract[]
+  promotions         EmployeePromotion[]
+  promotionApprovals EmployeePromotion[] @relation("PromotionReportingManager")
+  increments         EmployeeIncrement[]
+  incrementApprovals EmployeeIncrement[] @relation("IncrementReportingManager")
+  salaryHistory      EmployeeSalaryHistory[]
+  transfers              EmployeeTransfer[]
+  transferReportingManager EmployeeTransfer[] @relation("TransferReportingManager")
 
   createdById String?
   updatedById String?
@@ -2746,6 +2759,9 @@ model Shift {
 
   employees             Employee[]
   contracts             Contract[]
+  transfersCurrent      EmployeeTransfer[] @relation("TransferCurrentShift")
+  transfersNew          EmployeeTransfer[] @relation("TransferNewShift")
+  transfersTemp         EmployeeTransfer[] @relation("TransferTempShift")
 
   createdById           String?
   updatedById           String?
@@ -2830,11 +2846,293 @@ model HrWorkflowRecord {
   @@index([startDate])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Employee Transfer
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum TransferType {
+  BRANCH
+  DEPARTMENT
+  SHIFT
+  TEMPORARY
+  PERMANENT
+}
+
+enum TransferStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+enum PromotionType {
+  REGULAR
+  ADJUSTMENT
+  UPGRADE
+  ACTING
+}
+
+enum PromotionStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_MANAGER_APPROVAL
+  PENDING_HR_APPROVAL
+  APPROVED
+  COMPLETED
+  REJECTED_BY_MANAGER
+  REJECTED_BY_HR
+}
+
+enum PromotionApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum IncrementType {
+  ANNUAL
+  PERFORMANCE
+  MERIT
+  ADJUSTMENT
+  SPECIAL
+}
+
+enum IncrementStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_HR_APPROVAL
+  PENDING_ACCOUNTS_APPROVAL
+  PENDING_MANAGER_APPROVAL
+  APPROVED
+  APPLIED
+  REJECTED
+}
+
+enum IncrementMethod {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum IncrementApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SalaryHistorySourceType {
+  INCREMENT
+}
+
+model EmployeePromotion {
+  id                   String                  @id @default(cuid())
+  promotionNumber      String                  @unique
+  branchId             String
+  branch               Branch                  @relation(fields: [branchId], references: [id])
+  employeeId           String
+  employee             Employee                @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  promotionType        PromotionType
+  status               PromotionStatus         @default(DRAFT)
+
+  currentBranch        String?
+  currentDepartment    String?
+  currentDesignation   String?
+  currentSalary        Decimal?                @db.Decimal(18, 2)
+  reportingManagerId   String?
+  reportingManager     Employee?               @relation("PromotionReportingManager", fields: [reportingManagerId], references: [id], onDelete: SetNull)
+
+  newDesignation       String
+  newSalary            Decimal                 @db.Decimal(18, 2)
+  effectiveDate        DateTime                @db.Date
+  reason               String
+  remarks              String?
+
+  managerApprovalStatus PromotionApprovalStatus @default(PENDING)
+  managerApprovalDate   DateTime?
+  managerRemarks        String?
+
+  hrApprovalStatus      PromotionApprovalStatus @default(PENDING)
+  hrApprovalDate        DateTime?
+  hrRemarks             String?
+
+  approvedAt           DateTime?
+  completedAt          DateTime?
+
+  createdById          String?
+  updatedById          String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  @@index([branchId, status])
+  @@index([employeeId, status])
+  @@index([promotionType, status])
+  @@index([effectiveDate])
+  @@index([createdAt])
+}
+
+model EmployeeIncrement {
+  id                    String                  @id @default(cuid())
+  incrementNumber       String                  @unique
+  branchId              String
+  branch                Branch                  @relation(fields: [branchId], references: [id])
+  employeeId            String
+  employee              Employee                @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  incrementType         IncrementType
+  status                IncrementStatus         @default(DRAFT)
+  incrementMethod       IncrementMethod
+
+  currentBranch         String?
+  currentDepartment     String?
+  currentDesignation    String?
+  currentEmploymentType String?
+  currentBasicSalary    Decimal                 @db.Decimal(18, 2)
+  currentGrossSalary    Decimal                 @db.Decimal(18, 2)
+  reportingManagerId    String?
+  reportingManager      Employee?               @relation("IncrementReportingManager", fields: [reportingManagerId], references: [id], onDelete: SetNull)
+
+  incrementValue        Decimal                 @db.Decimal(18, 2)
+  newBasicSalary        Decimal                 @db.Decimal(18, 2)
+  newGrossSalary        Decimal                 @db.Decimal(18, 2)
+  effectiveDate         DateTime                @db.Date
+  reason                String
+  performanceSummary    String?
+  remarks               String?
+
+  hrApprovalStatus       IncrementApprovalStatus @default(PENDING)
+  hrApprovalDate         DateTime?
+  hrRemarks              String?
+
+  accountsApprovalStatus IncrementApprovalStatus @default(PENDING)
+  accountsApprovalDate   DateTime?
+  budgetVerified         Boolean?
+  accountsRemarks        String?
+
+  managerApprovalStatus  IncrementApprovalStatus @default(PENDING)
+  managerApprovalDate    DateTime?
+  managerRemarks         String?
+
+  approvedAt            DateTime?
+  letterGeneratedAt     DateTime?
+  appliedAt             DateTime?
+
+  createdById           String?
+  updatedById           String?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  @@index([branchId, status])
+  @@index([employeeId, status])
+  @@index([incrementType, status])
+  @@index([effectiveDate])
+  @@index([createdAt])
+}
+
+model EmployeeSalaryHistory {
+  id               String                  @id @default(cuid())
+  branchId         String
+  branch           Branch                  @relation(fields: [branchId], references: [id])
+  employeeId       String
+  employee         Employee                @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  sourceType       SalaryHistorySourceType
+  sourceId         String?
+  effectiveDate    DateTime                @db.Date
+  oldBasicSalary   Decimal                 @db.Decimal(18, 2)
+  newBasicSalary   Decimal                 @db.Decimal(18, 2)
+  oldGrossSalary   Decimal                 @db.Decimal(18, 2)
+  newGrossSalary   Decimal                 @db.Decimal(18, 2)
+  remarks          String?
+  appliedAt        DateTime                @default(now())
+
+  createdById      String?
+  updatedById      String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  @@index([branchId, effectiveDate])
+  @@index([employeeId, effectiveDate])
+  @@index([sourceType, sourceId])
+}
+
+model EmployeeTransfer {
+  id              String         @id @default(cuid())
+  transferNumber  String         @unique
+  branchId        String
+  branch          Branch         @relation(fields: [branchId], references: [id])
+  employeeId      String
+  employee        Employee       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  transferType    TransferType
+  status          TransferStatus @default(DRAFT)
+
+  // Snapshot of employee state at time of request
+  currentBranch      String?
+  currentDepartment  String?
+  currentDesignation String?
+  currentShiftId     String?
+  currentShift       Shift?  @relation("TransferCurrentShift", fields: [currentShiftId], references: [id], onDelete: SetNull)
+
+  // Branch Transfer fields
+  newBranchId        String?
+  newBranch          Branch? @relation("TransferNewBranch", fields: [newBranchId], references: [id], onDelete: SetNull)
+
+  // Department Transfer fields
+  newDepartment      String?
+
+  // Shift Transfer fields
+  newShiftId         String?
+  newShift           Shift?  @relation("TransferNewShift", fields: [newShiftId], references: [id], onDelete: SetNull)
+
+  // Temporary Transfer fields
+  tempBranchId       String?
+  tempBranch         Branch? @relation("TransferTempBranch", fields: [tempBranchId], references: [id], onDelete: SetNull)
+  tempDepartment     String?
+  tempShiftId        String?
+  tempShift          Shift?  @relation("TransferTempShift", fields: [tempShiftId], references: [id], onDelete: SetNull)
+  startDate          DateTime? @db.Date
+  endDate            DateTime? @db.Date
+
+  // Date fields
+  effectiveDate      DateTime? @db.Date
+
+  // Common fields
+  reason             String
+  newReportingManagerId String?
+  newReportingManager   Employee? @relation("TransferReportingManager", fields: [newReportingManagerId], references: [id], onDelete: SetNull)
+  remarks            String?
+
+  // Approval tracking
+  submittedAt        DateTime?
+  submittedById      String?
+  approvedAt         DateTime?
+  approvedById       String?
+  rejectedAt         DateTime?
+  rejectedById       String?
+  rejectionReason    String?
+  completedAt        DateTime?
+  completedById      String?
+
+  createdById        String?
+  updatedById        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([branchId, status])
+  @@index([employeeId, status])
+  @@index([transferType, status])
+  @@index([effectiveDate])
+  @@index([startDate, endDate])
+  @@index([createdAt])
+}
+
 model Contract {
   id             String    @id @default(cuid())
   contractNo     String    @unique
-  employeeId     String
-  employee       Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId     String?
+  employee       Employee? @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  candidateId    String?
+  offerId        String?
+  candidateName  String?
   branchId       String?
   branch         Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
   department     String?
@@ -2857,6 +3155,8 @@ model Contract {
   updatedAt      DateTime  @updatedAt
 
   @@index([employeeId])
+  @@index([candidateId])
+  @@index([offerId])
   @@index([branchId])
   @@index([status])
   @@index([endDate])

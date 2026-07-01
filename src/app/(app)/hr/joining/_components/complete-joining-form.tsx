@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { completeJoiningAction, type ActionState } from '@/server/actions/hr-recruitment';
-import { DEFAULT_EMPLOYMENT_TYPES } from '@/server/validators/hr';
 import { CheckSquare } from 'lucide-react';
 
 interface BranchOption {
@@ -18,8 +17,8 @@ interface AcceptedOffer {
   id: string;
   title: string;
   subject: string | null;
-  amount: any;
-  metadata: any;
+  amount: number | null;
+  metadata: Record<string, unknown> | null;
 }
 
 interface ShiftOption {
@@ -48,6 +47,16 @@ function formatTime(value: string) {
   const suffix = hour >= 12 ? 'PM' : 'AM';
   const normalizedHour = hour % 12 || 12;
   return `${String(normalizedHour).padStart(2, '0')}:${minute} ${suffix}`;
+}
+
+function employmentTypeFromContractType(value: unknown) {
+  if (value === 'INTERNSHIP') return 'INTERN';
+  if (typeof value === 'string' && value.length > 0) return value;
+  return 'CONTRACT';
+}
+
+function toMoneyInput(value: number) {
+  return Number.isFinite(value) ? value.toFixed(2) : '0.00';
 }
 
 export function CompleteJoiningForm({ acceptedOffers, branches, shifts }: Props) {
@@ -80,7 +89,13 @@ export function CompleteJoiningForm({ acceptedOffers, branches, shifts }: Props)
   // Find selected offer details
   const selectedOffer = acceptedOffers.find((o) => o.id === selectedOfferId);
   const metadata = selectedOffer?.metadata || {};
+  const employmentType = employmentTypeFromContractType(metadata.contractType);
   const availableShifts = selectedBranchId ? shifts.filter((shift) => shift.branchId === selectedBranchId) : shifts;
+  const shiftPlaceholder = selectedBranchId
+    ? 'Select shift...'
+    : shifts.length > 0
+      ? 'Select branch first...'
+      : 'No active shifts available';
 
   useEffect(() => {
     if (state?.success && formRef.current) {
@@ -153,12 +168,15 @@ export function CompleteJoiningForm({ acceptedOffers, branches, shifts }: Props)
       </div>
 
       {selectedOffer && (
-        <div className="bg-muted/30 p-4 rounded-lg border border-dashed grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+        <div
+          key={selectedOfferId}
+          className="bg-muted/30 p-4 rounded-lg border border-dashed grid grid-cols-1 md:grid-cols-4 gap-4 text-xs"
+        >
           <div>
             <span className="font-semibold text-muted-foreground block">Designation</span>
             <Input
               name="designation"
-              defaultValue={selectedOffer.subject || ''}
+              defaultValue={(typeof metadata.designation === 'string' && metadata.designation) || selectedOffer.subject || ''}
               className="h-8 mt-1 text-xs"
               required
             />
@@ -167,7 +185,7 @@ export function CompleteJoiningForm({ acceptedOffers, branches, shifts }: Props)
             <span className="font-semibold text-muted-foreground block">Department</span>
             <Input
               name="department"
-              defaultValue={metadata.department || 'Production'}
+              defaultValue={(typeof metadata.department === 'string' && metadata.department) || ''}
               className="h-8 mt-1 text-xs"
               required
             />
@@ -180,17 +198,12 @@ export function CompleteJoiningForm({ acceptedOffers, branches, shifts }: Props)
           </div>
           <div>
             <span className="font-semibold text-muted-foreground block">Employment Type</span>
-            <select
-              name="employmentType"
-              defaultValue="PERMANENT"
-              className="flex h-8 w-full mt-1 rounded-md border border-input bg-transparent px-2 text-xs"
-            >
-              {DEFAULT_EMPLOYMENT_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type.replaceAll('_', ' ')}
-                </option>
-              ))}
-            </select>
+            <Input
+              value={employmentType}
+              readOnly
+              className="h-8 mt-1 text-xs"
+            />
+            <input type="hidden" name="employmentType" value={employmentType} />
           </div>
           <div className="md:col-span-4">
             <span className="font-semibold text-muted-foreground block">Shift Assignment</span>
@@ -198,15 +211,116 @@ export function CompleteJoiningForm({ acceptedOffers, branches, shifts }: Props)
               name="shiftId"
               required
               defaultValue=""
+              disabled={!selectedBranchId || availableShifts.length === 0}
               className="flex h-8 w-full mt-1 rounded-md border border-input bg-transparent px-2 text-xs"
             >
-              <option value="">Select a shift...</option>
+              <option value="">{shiftPlaceholder}</option>
               {availableShifts.map((shift) => (
                 <option key={shift.id} value={shift.id}>
                   {shift.code} · {shift.name} · {formatTime(shift.startTime)}-{formatTime(shift.endTime)} · {shift.branch.code}
                 </option>
               ))}
             </select>
+            {!selectedBranchId ? (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Choose a branch first to see its shifts.
+              </p>
+            ) : availableShifts.length === 0 ? (
+              <p className="mt-1 text-[11px] text-amber-600">
+                No active shifts are configured for this branch yet. Create or activate a shift in HR {`>`} Shifts.
+              </p>
+            ) : null}
+          </div>
+
+          <div className="md:col-span-4 mt-2 border-t pt-4">
+            <span className="font-semibold text-muted-foreground block mb-3">Salary Structure</span>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <Label htmlFor="basicSalary" className="text-xs">Basic Salary *</Label>
+                <Input
+                  id="basicSalary"
+                  name="basicSalary"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  required
+                  defaultValue={toMoneyInput(Number(selectedOffer.amount || 0))}
+                  className="h-8 mt-1 text-xs"
+                />
+              </div>
+              <div>
+                <Label htmlFor="houseAllowance" className="text-xs">House Allowance</Label>
+                <Input
+                  id="houseAllowance"
+                  name="houseAllowance"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  defaultValue={toMoneyInput(Number(selectedOffer.amount || 0) * 0.4)}
+                  className="h-8 mt-1 text-xs"
+                />
+              </div>
+              <div>
+                <Label htmlFor="transportAllowance" className="text-xs">Transport Allowance</Label>
+                <Input
+                  id="transportAllowance"
+                  name="transportAllowance"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  defaultValue={toMoneyInput(Number(selectedOffer.amount || 0) * 0.1)}
+                  className="h-8 mt-1 text-xs"
+                />
+              </div>
+              <div>
+                <Label htmlFor="medicalAllowance" className="text-xs">Medical Allowance</Label>
+                <Input
+                  id="medicalAllowance"
+                  name="medicalAllowance"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  defaultValue={toMoneyInput(Number(selectedOffer.amount || 0) * 0.1)}
+                  className="h-8 mt-1 text-xs"
+                />
+              </div>
+              <div>
+                <Label htmlFor="otherAllowance" className="text-xs">Other Allowance</Label>
+                <Input
+                  id="otherAllowance"
+                  name="otherAllowance"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  defaultValue="0.00"
+                  className="h-8 mt-1 text-xs"
+                />
+              </div>
+              <div>
+                <Label htmlFor="providentFund" className="text-xs">Provident Fund</Label>
+                <Input
+                  id="providentFund"
+                  name="providentFund"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  defaultValue={toMoneyInput(Number(selectedOffer.amount || 0) * 0.05)}
+                  className="h-8 mt-1 text-xs"
+                />
+              </div>
+              <div>
+                <Label htmlFor="taxDeduction" className="text-xs">Tax Deduction</Label>
+                <Input
+                  id="taxDeduction"
+                  name="taxDeduction"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  defaultValue="0.00"
+                  className="h-8 mt-1 text-xs"
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}

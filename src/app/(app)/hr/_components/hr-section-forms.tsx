@@ -26,23 +26,27 @@ export function HrMasterDataForm({
   type,
   path,
   branches,
+  departments,
   initial,
 }: {
   mode: 'create' | 'edit';
   type: string;
   path: string;
   branches: SelectOption[];
+  departments?: string[];
   initial?: {
     id: string;
     branchId: string | null;
     code: string | null;
     name: string;
+    department?: string | null;
     description: string | null;
     status: string;
   };
 }) {
   const action = mode === 'create' ? createHrMasterDataAction : updateHrMasterDataAction;
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, undefined);
+  const isDesignationSection = type === 'designations';
 
   return (
     <form action={formAction} className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -68,6 +72,30 @@ export function HrMasterDataForm({
           <option value="DRAFT">DRAFT</option>
         </select>
       </div>
+      {isDesignationSection && (
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="department">
+            Department <span className="text-destructive">*</span>
+          </Label>
+          <select
+            id="department"
+            name="department"
+            required
+            defaultValue={initial?.department ?? ''}
+            className={selectClass}
+          >
+            <option value="">Select department</option>
+            {(departments ?? []).map((department) => (
+              <option key={department} value={department}>
+                {department}
+              </option>
+            ))}
+          </select>
+          {state?.fieldErrors?.department && (
+            <p className="text-xs text-destructive">{state.fieldErrors.department[0]}</p>
+          )}
+        </div>
+      )}
       <div className="space-y-2 md:col-span-2">
         <Label htmlFor="description">Description</Label>
         <textarea

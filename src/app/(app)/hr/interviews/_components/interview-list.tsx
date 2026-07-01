@@ -4,15 +4,17 @@ import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar, User, Star, ClipboardCheck, Clock, CheckCircle2, XCircle, ChevronRight } from 'lucide-react';
+import { Calendar, Star, ClipboardCheck, Clock, CheckCircle2, ChevronRight } from 'lucide-react';
 import { ScheduleInterviewForm } from './schedule-interview-form';
 import { EvaluateInterviewForm } from './evaluate-interview-form';
+
+type InterviewMetadata = Record<string, unknown>;
 
 interface Candidate {
   id: string;
   title: string;
   subject: string;
-  metadata: any;
+  metadata: InterviewMetadata | null;
 }
 
 interface Interview {
@@ -23,10 +25,10 @@ interface Interview {
   priority: string;
   startDate: Date | null;
   endDate: Date | null;
-  amount: any;
+  amount: number | null;
   owner: string | null;
   notes: string | null;
-  metadata: any;
+  metadata: InterviewMetadata | null;
 }
 
 interface Props {
@@ -37,7 +39,10 @@ interface Props {
 
 const STATUS_VARIANT: Record<string, 'default' | 'outline' | 'success' | 'warning' | 'destructive'> = {
   Scheduled: 'warning',
+  'Interview Completed': 'success',
+  Passed: 'success',
   Selected: 'success',
+  Hold: 'outline',
   Rejected: 'destructive',
 };
 
@@ -46,7 +51,10 @@ export function InterviewList({ interviews, shortlistedCandidates, canWrite }: P
 
   const totalCount = interviews.length;
   const scheduledCount = interviews.filter((i) => i.status === 'Scheduled').length;
-  const passedCount = interviews.filter((i) => i.status === 'Selected').length;
+  const passedCount = interviews.filter((i) => {
+    const meta = i.metadata as Record<string, unknown> | null;
+    return i.status === 'Interview Completed' && ['Passed', 'Selected'].includes(String(meta?.recommendation || ''));
+  }).length;
 
   return (
     <div className="space-y-6">
@@ -79,7 +87,7 @@ export function InterviewList({ interviews, shortlistedCandidates, canWrite }: P
         <Card>
           <CardContent className="p-5 flex items-center justify-between">
             <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Recommendations (Selected)</p>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Passed Interviews</p>
               <p className="mt-2 text-2xl font-bold text-emerald-600">{passedCount}</p>
             </div>
             <div className="h-10 w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600">
@@ -112,7 +120,11 @@ export function InterviewList({ interviews, shortlistedCandidates, canWrite }: P
                 <CardContent>
                   <EvaluateInterviewForm
                     interviewId={activeInterview.id}
-                    candidateName={activeInterview.metadata?.candidateName || activeInterview.title}
+                    candidateName={
+                      typeof activeInterview.metadata?.candidateName === 'string'
+                        ? activeInterview.metadata.candidateName
+                        : activeInterview.title
+                    }
                     interviewType={activeInterview.subject || 'Technical'}
                     onSuccess={() => setActiveInterview(null)}
                   />
@@ -173,6 +185,16 @@ export function InterviewList({ interviews, shortlistedCandidates, canWrite }: P
                     ) : (
                       interviews.map((item) => {
                         const meta = item.metadata || {};
+                        const candidateName =
+                          typeof meta.candidateName === 'string'
+                            ? meta.candidateName
+                            : item.title.replace('Interview - ', '');
+                        const displayStatus =
+                          item.status === 'Interview Completed'
+                            ? typeof meta.recommendation === 'string'
+                              ? meta.recommendation
+                              : item.status
+                            : item.status;
                         const dateFormatted = item.startDate
                           ? new Date(item.startDate).toLocaleString('en-US', {
                               month: 'short',
@@ -192,7 +214,7 @@ export function InterviewList({ interviews, shortlistedCandidates, canWrite }: P
                             }`}
                           >
                             <td className="px-4 py-3 font-semibold text-card-foreground">
-                              {meta.candidateName || item.title.replace('Interview - ', '')}
+                              {candidateName}
                             </td>
                             <td className="px-4 py-3">
                               <Badge variant="outline">{item.subject || 'Technical'}</Badge>
@@ -214,8 +236,8 @@ export function InterviewList({ interviews, shortlistedCandidates, canWrite }: P
                               )}
                             </td>
                             <td className="px-4 py-3">
-                              <Badge variant={STATUS_VARIANT[item.status] || 'outline'}>
-                                {item.status}
+                              <Badge variant={STATUS_VARIANT[displayStatus] || 'outline'}>
+                                {displayStatus}
                               </Badge>
                             </td>
                             {canWrite && (
