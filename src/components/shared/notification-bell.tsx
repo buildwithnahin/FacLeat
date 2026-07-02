@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { markNotificationReadAction } from '@/server/actions/notifications';
+import {
+  markAllNotificationsReadAction,
+  markNotificationReadAction,
+} from '@/server/actions/notifications';
 
 interface NotificationLite {
   id: string;
@@ -60,6 +63,15 @@ export function NotificationBell({
     await markNotificationReadAction(id);
   }
 
+  async function markAllRead() {
+    const seenAt = new Date().toISOString();
+    setItems((prev) =>
+      prev.map((item) => (item.readAt ? item : { ...item, readAt: seenAt })),
+    );
+    setUnread(0);
+    await markAllNotificationsReadAction();
+  }
+
   return (
     <div className="relative">
       <button
@@ -87,13 +99,24 @@ export function NotificationBell({
           <div className="absolute right-0 mt-2 w-80 rounded-md border bg-background shadow-lg z-20 overflow-hidden">
             <div className="px-3 py-2 border-b flex items-center justify-between">
               <span className="text-sm font-medium">Notifications</span>
-              <Link
-                href="/notifications"
-                className="text-xs text-blue-600 hover:underline"
-                onClick={() => setOpen(false)}
-              >
-                View all
-              </Link>
+              <div className="flex items-center gap-3">
+                {unread > 0 && (
+                  <button
+                    type="button"
+                    className="text-xs text-blue-600 hover:underline"
+                    onClick={() => void markAllRead()}
+                  >
+                    Mark all read
+                  </button>
+                )}
+                <Link
+                  href="/notifications"
+                  className="text-xs text-blue-600 hover:underline"
+                  onClick={() => setOpen(false)}
+                >
+                  View all
+                </Link>
+              </div>
             </div>
             <ul className="max-h-96 overflow-y-auto divide-y">
               {items.length === 0 ? (

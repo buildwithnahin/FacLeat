@@ -10,9 +10,19 @@ function createClient() {
   });
 }
 
+type RuntimeModelClient = PrismaClient & {
+  _runtimeDataModel?: {
+    models?: {
+      User?: {
+        fields?: Array<{ name?: string; kind?: string }>;
+      };
+    };
+  };
+};
+
 function hasWorkflowDelegates(client: PrismaClient | undefined): client is PrismaClient {
   if (!client) return false;
-  const userFields = (client as any)._runtimeDataModel?.models?.User?.fields;
+  const userFields = (client as RuntimeModelClient)._runtimeDataModel?.models?.User?.fields;
   const hasUserEmployeeRelation =
     Array.isArray(userFields) &&
     userFields.some((field: { name?: string; kind?: string }) => field.name === 'employee' && field.kind === 'object');
@@ -30,6 +40,20 @@ function hasWorkflowDelegates(client: PrismaClient | undefined): client is Prism
     typeof client.employeePromotion === 'object' &&
     'employeeIncrement' in client &&
     typeof client.employeeIncrement === 'object' &&
+    'employeeResignation' in client &&
+    typeof client.employeeResignation === 'object' &&
+    'employeeExitClearance' in client &&
+    typeof client.employeeExitClearance === 'object' &&
+    'attendanceAdjustment' in client &&
+    typeof client.attendanceAdjustment === 'object' &&
+    'leaveBalanceAdjustment' in client &&
+    typeof client.leaveBalanceAdjustment === 'object' &&
+    'leavePolicy' in client &&
+    typeof client.leavePolicy === 'object' &&
+    'leavePolicyRule' in client &&
+    typeof client.leavePolicyRule === 'object' &&
+    'employeeLeavePolicy' in client &&
+    typeof client.employeeLeavePolicy === 'object' &&
     'employeeSalaryHistory' in client &&
     typeof client.employeeSalaryHistory === 'object' &&
     'employeeTransfer' in client &&

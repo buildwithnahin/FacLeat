@@ -1,9 +1,39 @@
 import { z } from 'zod';
 
 export const EMPLOYMENT_STATUSES = ['ACTIVE', 'ON_LEAVE', 'TERMINATED', 'RESIGNED'] as const;
-export const ATTENDANCE_STATUSES = ['PRESENT', 'ABSENT', 'LATE', 'HALF_DAY', 'ON_LEAVE', 'HOLIDAY'] as const;
-export const LEAVE_TYPES = ['CASUAL', 'SICK', 'EARNED', 'UNPAID', 'MATERNITY', 'OTHER'] as const;
-export const LEAVE_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'] as const;
+export const ATTENDANCE_STATUSES = [
+  'PRESENT',
+  'ABSENT',
+  'LATE',
+  'HALF_DAY',
+  'ON_LEAVE',
+  'HOLIDAY',
+  'WEEKEND',
+  'OFFICIAL_DUTY',
+] as const;
+export const LEAVE_TYPES = [
+  'CASUAL',
+  'SICK',
+  'EARNED',
+  'ANNUAL',
+  'MATERNITY',
+  'PATERNITY',
+  'EMERGENCY',
+  'UNPAID',
+  'COMPENSATORY',
+  'SPECIAL',
+  'FESTIVAL',
+  'OTHER',
+] as const;
+export const LEAVE_STATUSES = [
+  'DRAFT',
+  'PENDING_MANAGER',
+  'PENDING_HR',
+  'APPROVED',
+  'REJECTED',
+  'CANCELLED',
+  'WITHDRAWN',
+] as const;
 export const DEFAULT_DEPARTMENTS = ['HR', 'Accounts', 'Production'] as const;
 export const DEFAULT_DESIGNATIONS = ['HR Manager', 'Accountant', 'Factory Manager'] as const;
 export const DEFAULT_EMPLOYMENT_TYPES = ['PERMANENT', 'PROBATION', 'CONTRACT', 'TEMPORARY', 'INTERN'] as const;

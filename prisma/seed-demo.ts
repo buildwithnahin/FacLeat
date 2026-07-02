@@ -453,6 +453,21 @@ async function main() {
   }
   console.log(`  ✓ ${notifications.length} notifications`);
 
+  // 12. Link users and employees
+  const allUsers = await prisma.user.findMany();
+  for (const user of allUsers) {
+    const employee = await prisma.employee.findFirst({
+      where: { email: user.email },
+    });
+    if (employee) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { employeeId: employee.id },
+      });
+    }
+  }
+  console.log('  ✓ Linked matching users and employees');
+
   console.log('✅ Demo seed complete');
 }
 

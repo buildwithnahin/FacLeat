@@ -151,11 +151,11 @@ const DASHBOARDS: Record<DashboardRole, DashboardDefinition> = {
       { key: 'newJoining', label: 'New Joining', href: '/hr/employees', icon: UserCog },
     ],
     tasks: [
-      { key: 'leave-approval', primary: 'Leave Approval', secondary: 'Review and approve pending leave requests', href: '/hr/leaves' },
-      { key: 'attendance-correction', primary: 'Attendance Correction', secondary: 'Fix late punch, absent, and mismatch records', href: '/hr/attendance' },
+      { key: 'leave-approval', primary: 'Leave Approval', secondary: 'Review and approve pending leave requests', href: '/hr/leave-approval' },
+      { key: 'attendance-correction', primary: 'Attendance Correction', secondary: 'Fix late punch, absent, and mismatch records', href: '/hr/attendance-adjustment' },
       { key: 'recruitment', primary: 'Recruitment', secondary: 'Start new hiring and employee onboarding entries', href: '/hr/employees/new' },
       { key: 'joining', primary: 'Joining Process', secondary: 'Create employee profiles and complete joining tasks', href: '/hr/employees/new' },
-      { key: 'final-settlement', primary: 'Final Settlement', secondary: 'Handle payroll and exit-related settlements', href: '/hr/payroll' },
+      { key: 'exit-clearance', primary: 'Exit Clearance', secondary: 'Handle final clearance, settlements, and separation tasks', href: '/hr/exit-clearance' },
     ],
     reports: [
       { key: 'attendance-report', primary: 'Attendance Report', secondary: 'Daily and monthly attendance summary', href: '/reports/hr' },
@@ -475,21 +475,9 @@ async function DashboardContent({
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <PanelCard title="Tasks" href={tasks[0]?.href ?? '/dashboard'} emptyText="No task shortcuts available." rows={tasks} />
         <PanelCard title="Reports" href={reports[0]?.href ?? '/dashboard'} emptyText="No report shortcuts available." rows={reports} />
-        <PanelCard
-          title="Unread Notifications"
-          href="/notifications"
-          emptyText="All clear for now."
-          rows={notifications.map((notification) => ({
-            key: notification.id,
-            primary: notification.title,
-            secondary: notification.body ?? notification.module,
-            href: notification.href ?? '/notifications',
-            right: <Badge variant={severityVariant(notification.severity)}>{notification.severity}</Badge>,
-          }))}
-        />
       </div>
 
       <PanelCard
@@ -533,15 +521,9 @@ function DashboardSkeleton({
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <PanelCard title="Tasks" href={tasks[0]?.href ?? '/dashboard'} emptyText="No task shortcuts available." rows={tasks} />
         <PanelCard title="Reports" href={reports[0]?.href ?? '/dashboard'} emptyText="No report shortcuts available." rows={reports} />
-        <PanelCard
-          title="Unread Notifications"
-          href="/notifications"
-          emptyText="Loading notifications..."
-          rows={[]}
-        />
       </div>
 
       <PanelCard
@@ -733,7 +715,7 @@ async function loadHrData(branchId?: string): Promise<DashboardData> {
       }),
       prisma.leaveRequest.count({
         where: {
-          status: 'PENDING',
+          status: { in: ['PENDING_MANAGER', 'PENDING_HR'] },
           employee: branchId ? { branchId } : undefined,
         },
       }),

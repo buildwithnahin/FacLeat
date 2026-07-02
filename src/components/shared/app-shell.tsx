@@ -10,12 +10,18 @@ import type { AppSession } from '@/server/auth/session';
 import type { NavItem } from '@/constants/navigation';
 
 async function renderBell(session: AppSession) {
-  if (!session.permissions.includes('notifications:read')) return null;
-  const unread = await notificationService.unreadCount(session);
+  const [unread, items] = await Promise.all([
+    notificationService.unreadCount(session),
+    notificationService.list(session, { limit: 20 }),
+  ]);
   return (
     <NotificationBell
       initialUnread={unread}
-      initialItems={[]}
+      initialItems={items.map((item) => ({
+        ...item,
+        readAt: item.readAt?.toISOString() ?? null,
+        createdAt: item.createdAt.toISOString(),
+      }))}
     />
   );
 }
@@ -71,13 +77,13 @@ export async function AppShell({
   return (
     <div className="min-h-screen bg-muted/30">
       <div className="flex">
-        <aside className="w-64 bg-sidebar text-sidebar-foreground min-h-screen sticky top-0 flex flex-col">
+        <aside className="sticky top-0 flex h-screen w-64 flex-col overflow-hidden bg-sidebar text-sidebar-foreground">
           <div className="px-5 py-5 border-b border-white/10">
             <p className="text-base font-semibold">Annex Leather</p>
             <p className="text-xs text-white/60 mt-0.5">Enterprise ERP</p>
           </div>
           <SidebarNav modules={visibleModules} />
-          <div className="border-t border-white/10 p-3 space-y-2">
+          <div className="shrink-0 border-t border-white/10 p-3 space-y-2">
             <div className="px-2 text-xs text-white/80">
               <p className="font-medium truncate">{session.name}</p>
               <p className="text-white/50 truncate">{session.email}</p>

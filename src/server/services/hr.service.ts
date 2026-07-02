@@ -1,10 +1,12 @@
 import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
-import { countChargeableLeaveDays } from '@/server/services/holidays.service';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import { approvalService } from '@/server/services/approval.service';
+import { syncConfirmationReportingManagerForEmployee } from '@/server/services/confirmations.service';
+import { syncIncrementReportingManagerForEmployee } from '@/server/services/increments.service';
+import { calculateRequestedLeaveDays, resolveLeavePolicyForEmployee } from '@/server/services/leave-policies.service';
 import type { AppSession } from '@/server/auth/session';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 import type {
@@ -151,6 +153,8 @@ export const hrService = {
     const actor = await authorize(session, 'hr:write');
     const existing = await prisma.employee.findUnique({ where: { id: input.id } });
     if (!existing) throw new NotFoundError('Employee not found');
+    const nextReportingManagerId = input.reportingManagerId || null;
+    const reportingManagerChanged = existing.reportingManagerId !== nextReportingManagerId;
     if (input.code !== existing.code) {
       const dup = await prisma.employee.findUnique({ where: { code: input.code } });
       if (dup && dup.id !== existing.id) throw new ValidationError('Employee code already exists');
@@ -160,7 +164,7 @@ export const hrService = {
       if (!shift) throw new ValidationError('Selected shift not found');
       if (shift.branchId !== input.branchId) throw new ValidationError('Selected shift must belong to the employee branch');
     }
-    return prisma.$transaction(async (tx) => {
+    const updatedEmployee = await prisma.$transaction(async (tx) => {
       const emp = await tx.employee.update({
         where: { id: input.id },
         data: {
@@ -174,7 +178,7 @@ export const hrService = {
           designation: input.designation || null,
           department: input.department || null,
           employmentType: input.employmentType || 'PERMANENT',
-          reportingManagerId: input.reportingManagerId || null,
+          reportingManagerId: nextReportingManagerId,
           systemRoleId: input.systemRoleId || null,
           joinedAt: input.joinedAt,
           status: input.status,
@@ -219,6 +223,12 @@ export const hrService = {
       );
       return emp;
     });
+
+    if (reportingManagerChanged && nextReportingManagerId) {
+      await syncConfirmationReportingManagerForEmployee(input.id, nextReportingManagerId);
+      await syncIncrementReportingManagerForEmployee(input.id, nextReportingManagerId);
+    }
+    return updatedEmployee;
   },
 
   // ─── HR master data and lifecycle workflow records ───────────────────────
@@ -504,7 +514,10 @@ export const hrService = {
     const actor = await authorize(session, 'hr:write');
     const emp = await prisma.employee.findUnique({ where: { id: input.employeeId } });
     if (!emp) throw new NotFoundError('Employee not found');
-    const days = await countChargeableLeaveDays(input.fromDate, input.toDate, emp.branchId);
+    const policy = await resolveLeavePolicyForEmployee(input.employeeId, input.fromDate);
+    const rule = policy.rules.find((item) => item.leaveType === input.type && item.status === 'ACTIVE');
+    if (!rule) throw new ValidationError(`No active policy rule found for ${input.type}.`);
+    const days = await calculateRequestedLeaveDays(input.employeeId, input.fromDate, input.toDate, rule);
 
     return prisma.$transaction(async (tx) => {
       const lr = await tx.leaveRequest.create({
@@ -657,6 +670,9 @@ export const hrService = {
     }
     const leaveDaysByEmp = new Map<string, number>();
     for (const l of leaves) {
+      const policy = await resolveLeavePolicyForEmployee(l.employeeId, l.fromDate);
+      const rule = policy.rules.find((item) => item.leaveType === l.type && item.status === 'ACTIVE');
+      if (rule && !rule.paidLeave) continue;
       const s = l.fromDate < start ? start : l.fromDate;
       const e = l.toDate > end ? end : l.toDate;
       
@@ -925,5 +941,255 @@ export const hrService = {
       );
       return updated;
     });
+  },
+
+  // ─── Late / Early Report ────────────────────────────────────────────────
+  async getLateEarlyReport(
+    session: AppSession | null,
+    filters: {
+      from: Date;
+      to: Date;
+      branchId?: string;
+      department?: string;
+      designation?: string;
+      shiftId?: string;
+      employeeId?: string;
+      status?: string;
+      lateThreshold?: number;
+      earlyThreshold?: number;
+    },
+  ) {
+    await authorize(session, 'hr:read');
+
+    const records = await prisma.attendanceRecord.findMany({
+      where: {
+        date: { gte: filters.from, lte: filters.to },
+        employeeId: filters.employeeId || undefined,
+        employee: {
+          branchId: filters.branchId || undefined,
+          department: filters.department || undefined,
+          designation: filters.designation || undefined,
+          shiftId: filters.shiftId || undefined,
+          status: 'ACTIVE',
+        },
+      },
+      include: {
+        employee: {
+          include: {
+            branch: true,
+            shift: true,
+          },
+        },
+      },
+      orderBy: [{ date: 'desc' }, { employee: { code: 'asc' } }],
+      take: 2000,
+    });
+
+    // Helper to parse "HH:MM" shift times into minutes from midnight
+    const parseTime = (hhmm: string): number => {
+      const parts = hhmm.split(':');
+      return Number(parts[0]) * 60 + Number(parts[1]);
+    };
+
+    // Helper to get minutes from midnight for a Date
+    const dateToMinutes = (d: Date): number => {
+      return d.getUTCHours() * 60 + d.getUTCMinutes();
+    };
+
+    // Format minutes to "HH:MM" display
+    const fmtMinutesToHHMM = (totalMin: number): string => {
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    };
+
+    type ReportRow = {
+      id: string;
+      employeeId: string;
+      employeeCode: string;
+      employeeName: string;
+      branch: string;
+      department: string;
+      designation: string;
+      shift: string;
+      shiftStart: string;
+      shiftEnd: string;
+      date: string;
+      checkIn: string;
+      checkOut: string;
+      lateMinutes: number;
+      earlyMinutes: number;
+      workedHours: string;
+      otHours: string;
+      status: string;
+    };
+
+    const rows: ReportRow[] = [];
+    // Track per-employee monthly stats
+    const monthlyMap = new Map<string, {
+      employeeId: string;
+      employeeName: string;
+      totalDays: number;
+      lateDays: number;
+      earlyDays: number;
+      totalLateMin: number;
+      totalEarlyMin: number;
+    }>();
+
+    for (const rec of records) {
+      const emp = rec.employee;
+      const shift = emp.shift;
+      if (!shift) continue;
+
+      const shiftStartMin = parseTime(shift.startTime);
+      const shiftEndMin = parseTime(shift.endTime);
+
+      // Calculate break duration in minutes
+      let breakMin = 0;
+      if (shift.breakStart && shift.breakEnd) {
+        breakMin = parseTime(shift.breakEnd) - parseTime(shift.breakStart);
+        if (breakMin < 0) breakMin = 0;
+      }
+
+      // Determine late minutes
+      let lateMinutes = 0;
+      if (rec.checkIn) {
+        const checkInMin = dateToMinutes(rec.checkIn);
+        const gracedStart = shiftStartMin + (shift.lateGraceMinutes ?? 0);
+        if (checkInMin > gracedStart) {
+          lateMinutes = checkInMin - shiftStartMin;
+        }
+      }
+
+      // Determine early exit minutes
+      let earlyMinutes = 0;
+      if (rec.checkOut) {
+        const checkOutMin = dateToMinutes(rec.checkOut);
+        const gracedEnd = shiftEndMin - (shift.earlyExitGraceMinutes ?? 0);
+        if (checkOutMin < gracedEnd) {
+          earlyMinutes = shiftEndMin - checkOutMin;
+        }
+      }
+
+      // Apply thresholds (only include rows that meet the threshold)
+      if (filters.lateThreshold && lateMinutes > 0 && lateMinutes < filters.lateThreshold) {
+        lateMinutes = 0;
+      }
+      if (filters.earlyThreshold && earlyMinutes > 0 && earlyMinutes < filters.earlyThreshold) {
+        earlyMinutes = 0;
+      }
+
+      // Determine worked hours
+      let workedMinutes = 0;
+      if (rec.checkIn && rec.checkOut) {
+        workedMinutes = Math.max(0, (rec.checkOut.getTime() - rec.checkIn.getTime()) / (1000 * 60) - breakMin);
+      }
+
+      // Determine OT
+      let otMinutes = 0;
+      if (shift.overtimeAllowed && rec.checkIn && rec.checkOut) {
+        const scheduledMin = shiftEndMin - shiftStartMin - breakMin;
+        if (workedMinutes > scheduledMin && workedMinutes - scheduledMin >= (shift.minOtMinutes ?? 0)) {
+          otMinutes = Math.min(workedMinutes - scheduledMin, shift.maxOtMinutesPerDay || 999);
+        }
+      }
+
+      // Derive display status
+      let derivedStatus = 'ON_TIME';
+      if (rec.status === 'ABSENT') derivedStatus = 'ABSENT';
+      else if (rec.status === 'ON_LEAVE') derivedStatus = 'LEAVE';
+      else if (rec.status === 'HOLIDAY') derivedStatus = 'HOLIDAY';
+      else if (rec.status === 'WEEKEND') derivedStatus = 'WEEKEND';
+      else if (lateMinutes > 0 && earlyMinutes > 0) derivedStatus = 'LATE_EARLY';
+      else if (lateMinutes > 0) derivedStatus = 'LATE';
+      else if (earlyMinutes > 0) derivedStatus = 'EARLY_EXIT';
+
+      // Apply status filter
+      if (filters.status && filters.status !== derivedStatus) continue;
+
+      // For status-filtered views, skip rows with neither late nor early unless showing all
+      const dateStr = rec.date.toISOString().slice(0, 10);
+
+      rows.push({
+        id: rec.id,
+        employeeId: emp.id,
+        employeeCode: emp.code,
+        employeeName: `${emp.firstName} ${emp.lastName}`,
+        branch: emp.branch?.name ?? '-',
+        department: emp.department ?? '-',
+        designation: emp.designation ?? '-',
+        shift: shift.name,
+        shiftStart: shift.startTime,
+        shiftEnd: shift.endTime,
+        date: dateStr,
+        checkIn: rec.checkIn ? rec.checkIn.toISOString().slice(11, 16) : '-',
+        checkOut: rec.checkOut ? rec.checkOut.toISOString().slice(11, 16) : '-',
+        lateMinutes,
+        earlyMinutes,
+        workedHours: fmtMinutesToHHMM(Math.round(workedMinutes)),
+        otHours: fmtMinutesToHHMM(otMinutes),
+        status: derivedStatus,
+      });
+
+      // Accumulate monthly stats
+      const existing = monthlyMap.get(emp.id);
+      if (existing) {
+        existing.totalDays += 1;
+        if (lateMinutes > 0) {
+          existing.lateDays += 1;
+          existing.totalLateMin += lateMinutes;
+        }
+        if (earlyMinutes > 0) {
+          existing.earlyDays += 1;
+          existing.totalEarlyMin += earlyMinutes;
+        }
+      } else {
+        monthlyMap.set(emp.id, {
+          employeeId: emp.id,
+          employeeName: `${emp.firstName} ${emp.lastName}`,
+          totalDays: 1,
+          lateDays: lateMinutes > 0 ? 1 : 0,
+          earlyDays: earlyMinutes > 0 ? 1 : 0,
+          totalLateMin: lateMinutes,
+          totalEarlyMin: earlyMinutes,
+        });
+      }
+    }
+
+    // Summary calculations
+    const uniqueEmployees = new Set(rows.map((r) => r.employeeId));
+    const lateEmployees = new Set(rows.filter((r) => r.lateMinutes > 0).map((r) => r.employeeId));
+    const earlyEmployees = new Set(rows.filter((r) => r.earlyMinutes > 0).map((r) => r.employeeId));
+    const lateAndEarlyEmployees = new Set(
+      rows.filter((r) => r.lateMinutes > 0 && r.earlyMinutes > 0).map((r) => r.employeeId),
+    );
+    const lateRows = rows.filter((r) => r.lateMinutes > 0);
+    const earlyRows = rows.filter((r) => r.earlyMinutes > 0);
+
+    const summary = {
+      totalEmployees: uniqueEmployees.size,
+      lateEmployees: lateEmployees.size,
+      earlyExit: earlyEmployees.size,
+      lateAndEarly: lateAndEarlyEmployees.size,
+      avgLateMinutes: lateRows.length > 0
+        ? Math.round(lateRows.reduce((s, r) => s + r.lateMinutes, 0) / lateRows.length)
+        : 0,
+      avgEarlyMinutes: earlyRows.length > 0
+        ? Math.round(earlyRows.reduce((s, r) => s + r.earlyMinutes, 0) / earlyRows.length)
+        : 0,
+    };
+
+    // Monthly statistics
+    const monthlyStats = Array.from(monthlyMap.values()).map((m) => ({
+      employeeId: m.employeeId,
+      employeeName: m.employeeName,
+      totalWorkingDays: m.totalDays,
+      lateDays: m.lateDays,
+      earlyExitDays: m.earlyDays,
+      avgLateMinutes: m.lateDays > 0 ? Math.round(m.totalLateMin / m.lateDays) : 0,
+      avgEarlyMinutes: m.earlyDays > 0 ? Math.round(m.totalEarlyMin / m.earlyDays) : 0,
+    }));
+
+    return { rows, summary, monthlyStats };
   },
 };

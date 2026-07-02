@@ -33,7 +33,7 @@ eval("__webpack_require__.r(__webpack_exports__);\n/* harmony export */ __webpac
 
 /***/ }),
 
-/***/ "../../server/app-render/action-async-storage.external":
+/***/ "../app-render/action-async-storage.external":
 /*!*******************************************************************************!*\
   !*** external "next/dist/server/app-render/action-async-storage.external.js" ***!
   \*******************************************************************************/
@@ -53,7 +53,7 @@ module.exports = require("next/dist/server/app-render/after-task-async-storage.e
 
 /***/ }),
 
-/***/ "../app-render/work-async-storage.external":
+/***/ "./work-async-storage.external":
 /*!*****************************************************************************!*\
   !*** external "next/dist/server/app-render/work-async-storage.external.js" ***!
   \*****************************************************************************/
@@ -63,7 +63,7 @@ module.exports = require("next/dist/server/app-render/work-async-storage.externa
 
 /***/ }),
 
-/***/ "../app-render/work-unit-async-storage.external":
+/***/ "./work-unit-async-storage.external":
 /*!**********************************************************************************!*\
   !*** external "next/dist/server/app-render/work-unit-async-storage.external.js" ***!
   \**********************************************************************************/

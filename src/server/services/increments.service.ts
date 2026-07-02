@@ -83,6 +83,14 @@ function incrementDetailText(record: {
     .slice(0, 10)}`;
 }
 
+const MANAGER_ROUTABLE_INCREMENT_STATUSES = [
+  'DRAFT',
+  'SUBMITTED',
+  'PENDING_HR_APPROVAL',
+  'PENDING_ACCOUNTS_APPROVAL',
+  'PENDING_MANAGER_APPROVAL',
+] as const;
+
 async function nextIncrementNumber(effectiveDate: Date) {
   const year = effectiveDate.getUTCFullYear();
   const prefix = `INC-${year}-`;
@@ -289,7 +297,7 @@ async function applyDueApprovedIncrements() {
         module: 'hr',
         title: 'Increment applied',
         body: incrementDetailText(record),
-        href: `/hr/employees/${record.employeeId}`,
+        href: '/hr/increments',
       });
     }
   }
@@ -683,7 +691,7 @@ export const incrementsService = {
           module: 'hr',
           title: result.status === 'APPLIED' ? 'Increment approved and applied' : 'Increment approved',
           body: incrementDetailText(increment),
-          href: `/hr/employees/${increment.employeeId}`,
+          href: '/hr/increments',
         });
       }
       if (increment.createdById) {
@@ -715,3 +723,42 @@ export const incrementsService = {
     return result;
   },
 };
+
+export async function syncIncrementReportingManagerForEmployee(employeeId: string, reportingManagerId: string) {
+  const manager = await prisma.employee.findUnique({
+    where: { id: reportingManagerId },
+    select: {
+      id: true,
+      user: { select: { id: true } },
+    },
+  });
+  if (!manager?.user?.id) return;
+
+  const increments = await prisma.employeeIncrement.findMany({
+    where: {
+      employeeId,
+      status: { in: [...MANAGER_ROUTABLE_INCREMENT_STATUSES] },
+      reportingManagerId: { not: reportingManagerId },
+    },
+    include: incrementIncludes,
+  });
+
+  if (increments.length === 0) return;
+
+  await prisma.employeeIncrement.updateMany({
+    where: { id: { in: increments.map((increment) => increment.id) } },
+    data: { reportingManagerId },
+  });
+
+  const pendingManagerApprovals = increments.filter((increment) => increment.status === 'PENDING_MANAGER_APPROVAL');
+  for (const increment of pendingManagerApprovals) {
+    await publishNotification({
+      recipientId: manager.user.id,
+      branchId: increment.branchId,
+      module: 'hr',
+      title: `Final increment approval needed: ${increment.employee.firstName} ${increment.employee.lastName}`,
+      body: incrementDetailText(increment),
+      href: '/hr/increments',
+    });
+  }
+}

@@ -294,7 +294,6 @@ export const MODULES: NavModule[] = [
           { label: 'Confirmation', href: '/hr/confirmations', permission: 'hr:write' },
           { label: 'Resignation', href: '/hr/resignations', permission: 'hr:read' },
           { label: 'Exit Clearance', href: '/hr/exit-clearance', permission: 'hr:read' },
-          { label: 'Final Settlement', href: '/hr/final-settlement', permission: 'hr:read' },
         ],
       },
       {

@@ -366,7 +366,7 @@ export const promotionsService = {
         module: 'hr',
         title: 'Promotion effective',
         body: promotionDetailText(promotion),
-        href: `/hr/employees/${promotion.employeeId}`,
+        href: '/hr/promotions',
       });
     }
 

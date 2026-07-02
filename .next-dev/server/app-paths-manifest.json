@@ -1,8 +1,6 @@
 {
-  "/icon.svg/route": "app/icon.svg/route.js",
-  "/api/sse/notifications/route": "app/api/sse/notifications/route.js",
-  "/(app)/hr/promotions/page": "app/(app)/hr/promotions/page.js",
+  "/(app)/dashboard/page": "app/(app)/dashboard/page.js",
+  "/(app)/hr/leave-policy/page": "app/(app)/hr/leave-policy/page.js",
   "/(app)/hr/[...slug]/page": "app/(app)/hr/[...slug]/page.js",
-  "/(app)/hr/increments/page": "app/(app)/hr/increments/page.js",
-  "/(app)/notifications/page": "app/(app)/notifications/page.js"
+  "/(app)/hr/payroll/page": "app/(app)/hr/payroll/page.js"
 }

@@ -552,10 +552,17 @@ model Branch {
   openingBalanceEntries OpeningBalanceEntry[]
   employeePromotions           EmployeePromotion[]
   employeeIncrements           EmployeeIncrement[]
+  employeeConfirmations        EmployeeConfirmation[]
+  employeeResignations         EmployeeResignation[]
+  employeeExitClearances       EmployeeExitClearance[]
+  attendanceAdjustments        AttendanceAdjustment[]
+  overtimeRecords              OvertimeRecord[]
+  attendanceSummaryRecords     AttendanceSummaryRecord[]
   employeeSalaryHistory        EmployeeSalaryHistory[]
   employeeTransfers             EmployeeTransfer[]
   employeeTransfersToNewBranch  EmployeeTransfer[] @relation("TransferNewBranch")
   employeeTransfersToTempBranch EmployeeTransfer[] @relation("TransferTempBranch")
+  leavePolicies                 LeavePolicy[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2645,22 +2652,33 @@ enum AttendanceStatus {
   HALF_DAY
   ON_LEAVE
   HOLIDAY
+  WEEKEND
+  OFFICIAL_DUTY
 }
 
 enum LeaveType {
   CASUAL
   SICK
   EARNED
-  UNPAID
+  ANNUAL
   MATERNITY
+  PATERNITY
+  EMERGENCY
+  UNPAID
+  COMPENSATORY
+  SPECIAL
+  FESTIVAL
   OTHER
 }
 
 enum LeaveStatus {
-  PENDING
+  DRAFT
+  PENDING_MANAGER
+  PENDING_HR
   APPROVED
   REJECTED
   CANCELLED
+  WITHDRAWN
 }
 
 enum PayrollRunStatus {
@@ -2669,6 +2687,128 @@ enum PayrollRunStatus {
   PAID
   LOCKED
   CANCELLED
+}
+
+enum AttendanceAdjustmentType {
+  MISSING_CHECK_IN
+  MISSING_CHECK_OUT
+  WRONG_PUNCH
+  MANUAL_ATTENDANCE
+  SHIFT_CHANGE
+  OFFICIAL_DUTY
+  FIELD_WORK
+  HOLIDAY_WORK
+  OT_CORRECTION
+}
+
+enum AttendanceAdjustmentStatus {
+  DRAFT
+  UPDATED
+  CANCELLED
+}
+
+enum OvertimeType {
+  REGULAR
+  HOLIDAY
+  WEEKEND
+  NIGHT
+  EMERGENCY
+  PRODUCTION
+}
+
+enum OvertimeSource {
+  ATTENDANCE_BASED
+  MANUAL_ENTRY
+  DEVICE_IMPORT
+}
+
+enum OvertimeRateType {
+  FIXED_RATE
+  BASIC_SALARY_BASED
+  GROSS_SALARY_BASED
+  MANUAL_RATE
+}
+
+enum OvertimeStatus {
+  DRAFT
+  PENDING_MANAGER
+  PENDING_HR
+  PENDING_ACCOUNTS
+  APPROVED
+  POSTED_TO_PAYROLL
+  REJECTED
+  CANCELLED
+}
+
+enum AttendanceSummaryStatus {
+  GENERATED
+  UNDER_REVIEW
+  ADJUSTMENT_REQUIRED
+  READY_FOR_PAYROLL
+  LOCKED
+  SENT_TO_PAYROLL
+  PAYROLL_PROCESSED
+  CANCELLED
+}
+
+enum ResignationType {
+  VOLUNTARY
+  MUTUAL
+  RETIREMENT
+}
+
+enum ResignationStatus {
+  DRAFT
+  PENDING_MANAGER_APPROVAL
+  PENDING_HR_APPROVAL
+  PENDING_ACCOUNTS_APPROVAL
+  PENDING_EXIT_CLEARANCE
+  COMPLETED
+  REJECTED
+  CANCELLED
+  WITHDRAWN
+}
+
+enum ResignationReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SENT_BACK
+  HOLD
+  CORRECTION_REQUESTED
+}
+
+enum ExitType {
+  RESIGNATION
+  TERMINATION
+  RETIREMENT
+  END_OF_CONTRACT
+  DEATH
+}
+
+enum ExitClearanceStatus {
+  DRAFT
+  PENDING_DEPARTMENT_CLEARANCE
+  PENDING_ACCOUNTS_APPROVAL
+  PENDING_HR_APPROVAL
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+enum ExitClearanceReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SENT_BACK
+  HOLD
+  NOT_REQUIRED
+}
+
+enum ExitAssetCondition {
+  GOOD
+  DAMAGED
+  LOST
 }
 
 model Employee {
@@ -2707,7 +2847,9 @@ model Employee {
   bankAccount String?
 
   attendance AttendanceRecord[]
-  leaves     LeaveRequest[]
+  attendanceAdjustments AttendanceAdjustment[]
+  leaves           LeaveRequest[] @relation("EmployeeLeaves")
+  handoverLeaves   LeaveRequest[] @relation("LeaveHandoverEmployee")
   payslips   Payslip[]
   hrWorkflowRecords HrWorkflowRecord[]
   contracts          Contract[]
@@ -2715,9 +2857,18 @@ model Employee {
   promotionApprovals EmployeePromotion[] @relation("PromotionReportingManager")
   increments         EmployeeIncrement[]
   incrementApprovals EmployeeIncrement[] @relation("IncrementReportingManager")
+  confirmations         EmployeeConfirmation[]
+  confirmationApprovals EmployeeConfirmation[] @relation("ConfirmationReportingManager")
+  resignations          EmployeeResignation[]
+  resignationApprovals  EmployeeResignation[] @relation("ResignationReportingManager")
+  resignationClearances EmployeeExitClearance[]
   salaryHistory      EmployeeSalaryHistory[]
   transfers              EmployeeTransfer[]
   transferReportingManager EmployeeTransfer[] @relation("TransferReportingManager")
+  overtimeRecords        OvertimeRecord[]
+  attendanceSummaryRecords AttendanceSummaryRecord[]
+  leaveBalanceAdjustments LeaveBalanceAdjustment[]
+  leavePolicies           EmployeeLeavePolicy[]
 
   createdById String?
   updatedById String?
@@ -2758,10 +2909,13 @@ model Shift {
   weeklyOffDays         Json?
 
   employees             Employee[]
+  attendanceAdjustmentsOld AttendanceAdjustment[] @relation("AttendanceAdjustmentOldShift")
+  attendanceAdjustmentsNew AttendanceAdjustment[] @relation("AttendanceAdjustmentNewShift")
   contracts             Contract[]
   transfersCurrent      EmployeeTransfer[] @relation("TransferCurrentShift")
   transfersNew          EmployeeTransfer[] @relation("TransferNewShift")
   transfersTemp         EmployeeTransfer[] @relation("TransferTempShift")
+  overtimeRecords       OvertimeRecord[]
 
   createdById           String?
   updatedById           String?
@@ -2922,8 +3076,35 @@ enum IncrementApprovalStatus {
   REJECTED
 }
 
+enum ConfirmationType {
+  PROBATION_TO_PERMANENT
+  INTERNSHIP_TO_PERMANENT
+}
+
+enum ConfirmationStatus {
+  DRAFT
+  PENDING_MANAGER_APPROVAL
+  PENDING_HR_APPROVAL
+  PENDING_ACCOUNTS_APPROVAL
+  CONFIRMED
+  EXTENDED
+  REJECTED
+  CANCELLED
+  SENT_BACK
+}
+
+enum ConfirmationReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SENT_BACK
+  EXTENDED
+  REVISION_REQUESTED
+}
+
 enum SalaryHistorySourceType {
   INCREMENT
+  CONFIRMATION
 }
 
 model EmployeePromotion {
@@ -3029,6 +3210,64 @@ model EmployeeIncrement {
   @@index([createdAt])
 }
 
+model EmployeeConfirmation {
+  id                     String                   @id @default(cuid())
+  confirmationNumber     String                   @unique
+  branchId               String
+  branch                 Branch                   @relation(fields: [branchId], references: [id])
+  employeeId             String
+  employee               Employee                 @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  confirmationType       ConfirmationType
+  status                 ConfirmationStatus       @default(DRAFT)
+
+  currentBranch          String?
+  currentDepartment      String?
+  currentDesignation     String?
+  currentEmploymentType  String?
+  currentBasicSalary     Decimal                  @db.Decimal(18, 2)
+  currentGrossSalary     Decimal                  @db.Decimal(18, 2)
+  reportingManagerId     String?
+  reportingManager       Employee?                @relation("ConfirmationReportingManager", fields: [reportingManagerId], references: [id], onDelete: SetNull)
+
+  probationEndDate       DateTime?                @db.Date
+  effectiveDate          DateTime                 @db.Date
+  salaryRevisionRequired Boolean                  @default(false)
+  incrementAmount        Decimal?                 @db.Decimal(18, 2)
+  newBasicSalary         Decimal                  @db.Decimal(18, 2)
+  newGrossSalary         Decimal                  @db.Decimal(18, 2)
+  benefitsRevision       String?
+  reason                 String
+  performanceSummary     String?
+  remarks                String?
+
+  managerReviewStatus    ConfirmationReviewStatus @default(PENDING)
+  managerReviewDate      DateTime?
+  managerRemarks         String?
+
+  hrReviewStatus         ConfirmationReviewStatus @default(PENDING)
+  hrReviewDate           DateTime?
+  hrRemarks              String?
+
+  accountsReviewStatus   ConfirmationReviewStatus @default(PENDING)
+  accountsReviewDate     DateTime?
+  accountsRemarks        String?
+
+  confirmedAt            DateTime?
+  completedAt            DateTime?
+  letterGeneratedAt      DateTime?
+
+  createdById            String?
+  updatedById            String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+
+  @@index([branchId, status])
+  @@index([employeeId, status])
+  @@index([confirmationType, status])
+  @@index([effectiveDate])
+  @@index([createdAt])
+}
+
 model EmployeeSalaryHistory {
   id               String                  @id @default(cuid())
   branchId         String
@@ -3125,6 +3364,228 @@ model EmployeeTransfer {
   @@index([createdAt])
 }
 
+model EmployeeResignation {
+  id                    String                   @id @default(cuid())
+  resignationNumber     String                   @unique
+  branchId              String
+  branch                Branch                   @relation(fields: [branchId], references: [id])
+  employeeId            String
+  employee              Employee                 @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  reportingManagerId    String?
+  reportingManager      Employee?                @relation("ResignationReportingManager", fields: [reportingManagerId], references: [id], onDelete: SetNull)
+  resignationType       ResignationType
+  status                ResignationStatus        @default(DRAFT)
+
+  currentDepartment     String?
+  currentDesignation    String?
+  currentEmploymentType String?
+  currentEmployeeStatus String?
+  joiningDate           DateTime?                @db.Date
+  confirmationDate      DateTime?                @db.Date
+
+  resignationDate       DateTime                 @db.Date
+  lastWorkingDate       DateTime                 @db.Date
+  noticeRequired        Boolean                  @default(true)
+  noticePeriodDays      Int                      @default(0)
+  noticeServedDays      Int                      @default(0)
+  noticeWaived          Boolean                  @default(false)
+  buyoutAmount          Decimal?                 @db.Decimal(18, 2)
+
+  reason                String
+  employeeRemarks       String?
+  attachmentUrl         String?
+
+  managerPerformance    String?
+  currentProjects       String?
+  handoverStatus        String?
+  replacementNeeded     Boolean?
+  assetsReturned        Boolean?
+  managerRecommendation String?
+
+  attendanceVerified    Boolean?                 @default(false)
+  leaveBalanceVerified  Boolean?                 @default(false)
+  noticePeriodVerified  Boolean?                 @default(false)
+  documentsVerified     Boolean?                 @default(false)
+  policyVerified        Boolean?                 @default(false)
+
+  pendingSalary         Decimal                  @default(0) @db.Decimal(18, 2)
+  leaveEncashment       Decimal                  @default(0) @db.Decimal(18, 2)
+  bonus                 Decimal                  @default(0) @db.Decimal(18, 2)
+  overtime              Decimal                  @default(0) @db.Decimal(18, 2)
+  loanDeduction         Decimal                  @default(0) @db.Decimal(18, 2)
+  advanceDeduction      Decimal                  @default(0) @db.Decimal(18, 2)
+  taxDeduction          Decimal                  @default(0) @db.Decimal(18, 2)
+  gratuity              Decimal                  @default(0) @db.Decimal(18, 2)
+  finalPayable          Decimal                  @default(0) @db.Decimal(18, 2)
+  settlementRequired    Boolean                  @default(false)
+
+  managerReviewStatus   ResignationReviewStatus  @default(PENDING)
+  managerReviewDate     DateTime?
+  managerRemarks        String?
+
+  hrReviewStatus        ResignationReviewStatus  @default(PENDING)
+  hrReviewDate          DateTime?
+  hrRemarks             String?
+
+  accountsReviewStatus  ResignationReviewStatus  @default(PENDING)
+  accountsReviewDate    DateTime?
+  accountsRemarks       String?
+
+  acceptanceLetterGeneratedAt DateTime?
+  experienceLetterGeneratedAt DateTime?
+  relievingLetterGeneratedAt  DateTime?
+  completedAt           DateTime?
+  archivedAt            DateTime?
+
+  exitClearance         EmployeeExitClearance?
+
+  createdById           String?
+  updatedById           String?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  @@index([branchId, status])
+  @@index([employeeId, status])
+  @@index([resignationType, status])
+  @@index([lastWorkingDate])
+  @@index([createdAt])
+}
+
+model EmployeeExitClearance {
+  id                        String                        @id @default(cuid())
+  clearanceNumber           String                        @unique
+  resignationId             String                        @unique
+  resignation               EmployeeResignation          @relation(fields: [resignationId], references: [id], onDelete: Cascade)
+  branchId                  String
+  branch                    Branch                        @relation(fields: [branchId], references: [id])
+  employeeId                String
+  employee                  Employee                      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  exitType                  ExitType                      @default(RESIGNATION)
+  status                    ExitClearanceStatus           @default(DRAFT)
+  lastWorkingDate           DateTime                      @db.Date
+  reasonForExit             String?
+  noticePeriodServed        Boolean                       @default(false)
+  handoverCompleted         Boolean                       @default(false)
+  replacementAssigned       Boolean                       @default(false)
+  exitInterviewCompleted    Boolean                       @default(false)
+  hrRemarks                 String?
+  departmentClearedAt       DateTime?
+  accountsApprovedAt        DateTime?
+  hrApprovedAt              DateTime?
+  completedAt               DateTime?
+  cancelledAt               DateTime?
+  clearanceCertificateGeneratedAt DateTime?
+  relievingLetterGeneratedAt      DateTime?
+  experienceLetterGeneratedAt     DateTime?
+  noDueCertificateGeneratedAt     DateTime?
+  fullAndFinalGeneratedAt         DateTime?
+  serviceCertificateGeneratedAt   DateTime?
+
+  departments               EmployeeExitDepartmentClearance[]
+  assets                    EmployeeExitAssetReturn[]
+  systemAccess              EmployeeExitSystemAccess?
+  settlement                EmployeeExitAccountsSettlement?
+  interview                 EmployeeExitInterview?
+
+  createdById               String?
+  updatedById               String?
+  createdAt                 DateTime                      @default(now())
+  updatedAt                 DateTime                      @updatedAt
+
+  @@index([branchId, status])
+  @@index([employeeId, status])
+  @@index([lastWorkingDate, status])
+}
+
+model EmployeeExitDepartmentClearance {
+  id                String                    @id @default(cuid())
+  clearanceId       String
+  clearance         EmployeeExitClearance     @relation(fields: [clearanceId], references: [id], onDelete: Cascade)
+  departmentKey     String
+  departmentName    String
+  responsiblePerson String?
+  approverId        String?
+  status            ExitClearanceReviewStatus @default(PENDING)
+  remarks           String?
+  approvedAt        DateTime?
+  sortOrder         Int                       @default(0)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  @@unique([clearanceId, departmentKey])
+  @@index([clearanceId, status])
+}
+
+model EmployeeExitAssetReturn {
+  id              String               @id @default(cuid())
+  clearanceId     String
+  clearance       EmployeeExitClearance @relation(fields: [clearanceId], references: [id], onDelete: Cascade)
+  assetKey        String
+  assetName       String
+  returned        Boolean              @default(false)
+  condition       ExitAssetCondition   @default(GOOD)
+  deductionAmount Decimal              @default(0) @db.Decimal(18, 2)
+  remarks         String?
+  sortOrder       Int                  @default(0)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@unique([clearanceId, assetKey])
+  @@index([clearanceId])
+}
+
+model EmployeeExitSystemAccess {
+  id                       String                @id @default(cuid())
+  clearanceId              String                @unique
+  clearance                EmployeeExitClearance @relation(fields: [clearanceId], references: [id], onDelete: Cascade)
+  erpAccountDisabled       Boolean               @default(false)
+  emailDisabled            Boolean               @default(false)
+  attendanceDeviceDisabled Boolean               @default(false)
+  vpnDisabled              Boolean               @default(false)
+  fingerprintRemoved       Boolean               @default(false)
+  doorAccessRemoved        Boolean               @default(false)
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+}
+
+model EmployeeExitAccountsSettlement {
+  id                  String                    @id @default(cuid())
+  clearanceId         String                    @unique
+  clearance           EmployeeExitClearance     @relation(fields: [clearanceId], references: [id], onDelete: Cascade)
+  status              ExitClearanceReviewStatus @default(PENDING)
+  pendingSalary       Decimal                   @default(0) @db.Decimal(18, 2)
+  leaveEncashment     Decimal                   @default(0) @db.Decimal(18, 2)
+  bonus               Decimal                   @default(0) @db.Decimal(18, 2)
+  overtime            Decimal                   @default(0) @db.Decimal(18, 2)
+  loanRecovery        Decimal                   @default(0) @db.Decimal(18, 2)
+  advanceRecovery     Decimal                   @default(0) @db.Decimal(18, 2)
+  assetDamageRecovery Decimal                   @default(0) @db.Decimal(18, 2)
+  noticePay           Decimal                   @default(0) @db.Decimal(18, 2)
+  gratuity            Decimal                   @default(0) @db.Decimal(18, 2)
+  taxDeduction        Decimal                   @default(0) @db.Decimal(18, 2)
+  otherDeduction      Decimal                   @default(0) @db.Decimal(18, 2)
+  netPayable          Decimal                   @default(0) @db.Decimal(18, 2)
+  approvedById        String?
+  approvedAt          DateTime?
+  remarks             String?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+}
+
+model EmployeeExitInterview {
+  id                  String                @id @default(cuid())
+  clearanceId         String                @unique
+  clearance           EmployeeExitClearance @relation(fields: [clearanceId], references: [id], onDelete: Cascade)
+  reasonForLeaving    String?
+  companyRating       Int?
+  managerRating       Int?
+  suggestions         String?
+  rehireEligible      Boolean?
+  interviewConductedBy String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+}
+
 model Contract {
   id             String    @id @default(cuid())
   contractNo     String    @unique
@@ -3180,16 +3641,159 @@ model AttendanceRecord {
   @@index([date])
 }
 
+model OvertimeRecord {
+  id              String           @id @default(cuid())
+  otNumber        String           @unique
+  branchId        String
+  branch          Branch           @relation(fields: [branchId], references: [id])
+  employeeId      String
+  employee        Employee         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  shiftId         String?
+  shift           Shift?           @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+
+  otDate          DateTime         @db.Date
+  otMonth         String           // "YYYY-MM"
+  otType          OvertimeType     @default(REGULAR)
+  source          OvertimeSource   @default(ATTENDANCE_BASED)
+  status          OvertimeStatus   @default(DRAFT)
+
+  // Attendance snapshot
+  attendanceDate  DateTime         @db.Date
+  checkIn         DateTime?
+  checkOut        DateTime?
+  totalWorkedMinutes  Int          @default(0)
+  regularDutyMinutes  Int          @default(0)
+  breakMinutes        Int          @default(0)
+  extraWorkedMinutes  Int          @default(0)
+  lateMinutes         Int          @default(0)
+  earlyExitMinutes    Int          @default(0)
+
+  // OT calculation
+  eligibleOtMinutes   Int          @default(0)
+  approvedOtMinutes   Int          @default(0)
+  otRateType      OvertimeRateType @default(FIXED_RATE)
+  otRatePerHour   Decimal          @default(0) @db.Decimal(18, 2)
+  otAmount        Decimal          @default(0) @db.Decimal(18, 2)
+  roundOtHours    Boolean          @default(false)
+  minOtMinutes    Int              @default(0)
+  remarks         String?
+
+  // Manager approval
+  managerStatus       String?      // APPROVED, REJECTED, SENT_BACK
+  managerOtMinutes    Int?
+  managerRemarks      String?
+  managerApprovedById String?
+  managerApprovedAt   DateTime?
+
+  // HR verification
+  hrStatus            String?      // VERIFIED, REJECTED, SENT_BACK
+  hrVerifiedMinutes   Int?
+  hrRemarks           String?
+  hrVerifiedById      String?
+  hrVerifiedAt        DateTime?
+
+  // Accounts approval
+  accountsStatus      String?      // APPROVED, REJECTED, CORRECTION_REQUESTED
+  accountsOtRate      Decimal?     @db.Decimal(18, 2)
+  accountsOtAmount    Decimal?     @db.Decimal(18, 2)
+  payrollMonth        String?      // "YYYY-MM"
+  costCenter          String?
+  accountsRemarks     String?
+  accountsApprovedById String?
+  accountsApprovedAt  DateTime?
+
+  // Payroll posting
+  postedToPayroll     Boolean      @default(false)
+  postedAt            DateTime?
+  postedById          String?
+
+  createdById         String?
+  updatedById         String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@index([branchId, status])
+  @@index([employeeId, otDate])
+  @@index([otMonth, status])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AttendanceAdjustment {
+  id                String                     @id @default(cuid())
+  adjustmentNumber  String                     @unique
+  branchId          String
+  branch            Branch                     @relation(fields: [branchId], references: [id])
+  employeeId        String
+  employee          Employee                   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  attendanceDate    DateTime                   @db.Date
+  adjustmentType    AttendanceAdjustmentType
+  reason            String
+  remarks           String?
+  attachmentUrl     String?
+  adjustedById      String
+  adjustedAt        DateTime?
+  status            AttendanceAdjustmentStatus @default(DRAFT)
+
+  oldShiftId        String?
+  oldShift          Shift?                     @relation("AttendanceAdjustmentOldShift", fields: [oldShiftId], references: [id], onDelete: SetNull)
+  newShiftId        String?
+  newShift          Shift?                     @relation("AttendanceAdjustmentNewShift", fields: [newShiftId], references: [id], onDelete: SetNull)
+
+  oldCheckIn        DateTime?
+  oldCheckOut       DateTime?
+  oldStatus         AttendanceStatus
+  oldWorkingMinutes Int                        @default(0)
+  oldOtMinutes      Int                        @default(0)
+  oldLateMinutes    Int                        @default(0)
+  oldEarlyMinutes   Int                        @default(0)
+
+  newCheckIn        DateTime?
+  newCheckOut       DateTime?
+  newStatus         AttendanceStatus
+  newWorkingMinutes Int                        @default(0)
+  newOtMinutes      Int                        @default(0)
+  newLateMinutes    Int                        @default(0)
+  newEarlyMinutes   Int                        @default(0)
+
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  @@index([branchId, status])
+  @@index([employeeId, attendanceDate])
+  @@index([attendanceDate, status])
+}
+
 model LeaveRequest {
-  id         String      @id @default(cuid())
-  employeeId String
-  employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  type       LeaveType
-  fromDate   DateTime    @db.Date
-  toDate     DateTime    @db.Date
-  days       Int
-  reason     String?
-  status     LeaveStatus @default(PENDING)
+  id                String       @id @default(cuid())
+  leaveRequestNo    String       @unique
+  employeeId        String
+  employee          Employee     @relation("EmployeeLeaves", fields: [employeeId], references: [id], onDelete: Cascade)
+  type              LeaveType
+  fromDate          DateTime     @db.Date
+  toDate            DateTime     @db.Date
+  days              Decimal      @db.Decimal(18, 2)
+  halfDay           Boolean      @default(false)
+  halfDayType       String?      // FIRST_HALF, SECOND_HALF
+  reason            String
+  attachmentPath    String?
+  emergencyContact  String?
+  handoverEmployeeId String?
+  handoverEmployee  Employee?    @relation("LeaveHandoverEmployee", fields: [handoverEmployeeId], references: [id])
+  
+  status            LeaveStatus  @default(PENDING_MANAGER)
+
+  // Manager Approval Info
+  managerStatus     String       @default("PENDING") // PENDING, APPROVED, REJECTED
+  managerRemarks    String?
+  managerId         String?
+  managerApprovedAt DateTime?
+
+  // HR Approval Info
+  hrStatus          String       @default("PENDING") // PENDING, APPROVED, REJECTED
+  hrRemarks         String?
+  hrId              String?
+  hrApprovedAt      DateTime?
 
   decidedById  String?
   decidedAt    DateTime?
@@ -3201,6 +3805,168 @@ model LeaveRequest {
 
   @@index([employeeId, status])
   @@index([fromDate, toDate])
+}
+
+model LeavePolicy {
+  id                       String    @id @default(cuid())
+  policyCode               String    @unique
+  policyName               String
+  branchId                 String?
+  branch                   Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  department               String?
+  designation              String?
+  employmentType           String?
+  employeeCategory         String?
+  gender                   String?
+  grade                    String?
+  effectiveFrom            DateTime  @db.Date
+  effectiveTo              DateTime? @db.Date
+  status                   String    @default("DRAFT")
+  description              String?
+  approvalRequired         Boolean   @default(true)
+  managerApprovalRequired  Boolean   @default(true)
+  hrApprovalRequired       Boolean   @default(true)
+  accountsApprovalRequired Boolean   @default(false)
+  autoApproveAllowed       Boolean   @default(false)
+  hrCanOverrideBalance     Boolean   @default(true)
+  allowProbationEmployees  Boolean   @default(false)
+  carryForwardAllowed      Boolean   @default(false)
+  maxCarryForwardDays      Decimal?  @db.Decimal(18, 2)
+  carryForwardExpiryMonth  Int?
+  carryForwardExpiryDay    Int?
+  encashmentAllowed        Boolean   @default(false)
+  maxEncashmentDays        Decimal?  @db.Decimal(18, 2)
+  autoClosing              Boolean   @default(false)
+  payrollImpactDefault     String    @default("NO_PAYROLL_IMPACT")
+  createdById              String?
+  updatedById              String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  rules               LeavePolicyRule[]
+  employeeAssignments EmployeeLeavePolicy[]
+
+  @@index([branchId, status])
+  @@index([employmentType, status])
+  @@index([effectiveFrom, effectiveTo])
+}
+
+model LeavePolicyRule {
+  id                     String      @id @default(cuid())
+  policyId               String
+  policy                 LeavePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  leaveType              LeaveType
+  leaveCode              String
+  paidLeave              Boolean     @default(true)
+  entitledDays           Decimal?    @db.Decimal(18, 2)
+  isUnlimited            Boolean     @default(false)
+  accrualMethod          String
+  minimumServiceMonths   Int?
+  maxLeavePerRequest     Decimal?    @db.Decimal(18, 2)
+  maxLeavePerMonth       Decimal?    @db.Decimal(18, 2)
+  halfDayAllowed         Boolean     @default(false)
+  attachmentRequired     Boolean     @default(false)
+  reasonRequired         Boolean     @default(true)
+  allowNegativeBalance   Boolean     @default(false)
+  includeWeekend         Boolean     @default(false)
+  includeHoliday         Boolean     @default(false)
+  sandwichRuleApplicable Boolean     @default(false)
+  carryForwardAllowed    Boolean     @default(false)
+  maxCarryForwardDays    Decimal?    @db.Decimal(18, 2)
+  encashmentAllowed      Boolean     @default(false)
+  maxEncashmentDays      Decimal?    @db.Decimal(18, 2)
+  payrollImpact          String      @default("NO_PAYROLL_IMPACT")
+  status                 String      @default("ACTIVE")
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
+
+  @@unique([policyId, leaveType])
+  @@index([policyId, status])
+}
+
+model EmployeeLeavePolicy {
+  id           String      @id @default(cuid())
+  employeeId   String
+  employee     Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  policyId     String
+  policy       LeavePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  assignedDate DateTime    @default(now()) @db.Date
+  status       String      @default("ACTIVE")
+  createdById  String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([employeeId, policyId])
+  @@index([employeeId, status])
+  @@index([policyId, status])
+}
+
+model LeaveBalanceAdjustment {
+  id             String    @id @default(cuid())
+  adjustmentNo   String    @unique
+  employeeId     String
+  employee       Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType      LeaveType
+  leaveYear      Int
+  adjustmentType String
+  days           Decimal   @db.Decimal(18, 2)
+  reason         String
+  attachmentPath String?
+  effectiveDate  DateTime  @db.Date
+  adjustedById   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([employeeId, leaveYear, leaveType])
+  @@index([leaveYear, leaveType])
+}
+
+model AttendanceSummaryRecord {
+  id              String   @id @default(cuid())
+  branchId        String
+  branch          Branch   @relation(fields: [branchId], references: [id])
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  
+  /// YYYY-MM
+  summaryMonth    String
+  
+  // Attendance Calculation Fields
+  totalCalendarDays Int @default(0)
+  weeklyOffDays     Int @default(0)
+  holidayDays       Int @default(0)
+  workingDays       Int @default(0)
+  presentDays       Int @default(0)
+  absentDays        Int @default(0)
+  leaveDays         Int @default(0)
+  halfDays          Int @default(0)
+  lateDays          Int @default(0)
+  earlyExitDays     Int @default(0)
+  totalWorkedHours  Decimal @default(0) @db.Decimal(18, 2)
+  totalOtHours      Decimal @default(0) @db.Decimal(18, 2)
+  payableDays       Decimal @default(0) @db.Decimal(18, 2)
+
+  // Control Fields
+  status          AttendanceSummaryStatus @default(GENERATED)
+  payrollMonth    String? // "YYYY-MM"
+  isPayrollReady  Boolean @default(false)
+  isLocked        Boolean @default(false)
+  
+  sentToPayroll   Boolean @default(false)
+  sentById        String?
+  sentAt          DateTime?
+  
+  payrollProcessed Boolean @default(false)
+
+  remarks         String?
+  createdById     String?
+  updatedById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([employeeId, summaryMonth])
+  @@index([branchId, summaryMonth])
+  @@index([status])
 }
 
 model PayrollRun {

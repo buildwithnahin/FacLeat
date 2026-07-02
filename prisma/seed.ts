@@ -365,16 +365,16 @@ const ASSET_CATEGORIES = [
 
 // Employees
 const SAMPLE_EMPLOYEES = [
-  { code: 'EMP-001', firstName: 'Rahim', lastName: 'Ahmed', designation: 'Accountant', department: 'Accounts', basicSalary: 50000 },
-  { code: 'EMP-002', firstName: 'Karim', lastName: 'Hassan', designation: 'Accountant', department: 'Accounts', basicSalary: 40000 },
-  { code: 'EMP-003', firstName: 'Salman', lastName: 'Khan', designation: 'Sales Executive', department: 'Sales', basicSalary: 35000 },
-  { code: 'EMP-004', firstName: 'Ali', lastName: 'Miah', designation: 'Warehouse Supervisor', department: 'Warehouse', basicSalary: 30000 },
-  { code: 'EMP-005', firstName: 'Nadia', lastName: 'Begum', designation: 'HR Manager', department: 'HR', basicSalary: 35000 },
-  { code: 'EMP-006', firstName: 'Jahid', lastName: 'Hasan', designation: 'Factory Manager', department: 'Production', basicSalary: 32000 },
-  { code: 'EMP-007', firstName: 'Rashid', lastName: 'Chowdhury', designation: 'Sales Manager', department: 'Sales', basicSalary: 45000 },
-  { code: 'EMP-008', firstName: 'Priya', lastName: 'Devi', designation: 'Designer', department: 'Design', basicSalary: 38000 },
-  { code: 'EMP-009', firstName: 'Monir', lastName: 'Uddin', designation: 'Machine Operator', department: 'Production', basicSalary: 25000 },
-  { code: 'EMP-010', firstName: 'Fatema', lastName: 'Khatun', designation: 'Packer', department: 'Warehouse', basicSalary: 18000 },
+  { code: 'EMP-001', firstName: 'Rahim', lastName: 'Ahmed', designation: 'Accountant', department: 'Accounts', basicSalary: 50000, email: 'accountant@annex.local' },
+  { code: 'EMP-002', firstName: 'Karim', lastName: 'Hassan', designation: 'Accountant', department: 'Accounts', basicSalary: 40000, email: 'purchase@annex.local' },
+  { code: 'EMP-003', firstName: 'Salman', lastName: 'Khan', designation: 'Sales Executive', department: 'Sales', basicSalary: 35000, email: 'cashier@annex.local' },
+  { code: 'EMP-004', firstName: 'Ali', lastName: 'Miah', designation: 'Warehouse Supervisor', department: 'Warehouse', basicSalary: 30000, email: 'warehouse@annex.local' },
+  { code: 'EMP-005', firstName: 'Nadia', lastName: 'Begum', designation: 'HR Manager', department: 'HR', basicSalary: 35000, email: 'hr@annex.local' },
+  { code: 'EMP-006', firstName: 'Jahid', lastName: 'Hasan', designation: 'Factory Manager', department: 'Production', basicSalary: 32000, email: 'factory@annex.local' },
+  { code: 'EMP-007', firstName: 'Rashid', lastName: 'Chowdhury', designation: 'Sales Manager', department: 'Sales', basicSalary: 45000, email: 'sales@annex.local' },
+  { code: 'EMP-008', firstName: 'Priya', lastName: 'Devi', designation: 'Designer', department: 'Design', basicSalary: 38000, email: 'designer@annex.local' },
+  { code: 'EMP-009', firstName: 'Monir', lastName: 'Uddin', designation: 'Machine Operator', department: 'Production', basicSalary: 25000, email: 'monir@annex.local' },
+  { code: 'EMP-010', firstName: 'Fatema', lastName: 'Khatun', designation: 'Packer', department: 'Warehouse', basicSalary: 18000, email: 'fatema@annex.local' },
 ];
 
 // Sample approval rules
@@ -724,12 +724,15 @@ async function main() {
   for (const e of SAMPLE_EMPLOYEES) {
     await prisma.employee.upsert({
       where: { code: e.code },
-      update: {},
+      update: {
+        email: e.email ?? null,
+      },
       create: {
         branchId: hqBranch.id,
         code: e.code,
         firstName: e.firstName,
         lastName: e.lastName,
+        email: e.email ?? null,
         designation: e.designation,
         department: e.department,
         joinedAt: new Date(year - Math.floor(Math.random() * 5), Math.floor(Math.random() * 12), 1),
@@ -1044,6 +1047,21 @@ async function main() {
     });
   }
   console.log(`  ✓ ${demoHolidays.length} demo holidays seeded`);
+
+  // 20. Link users and employees
+  const allUsers = await prisma.user.findMany();
+  for (const user of allUsers) {
+    const employee = await prisma.employee.findFirst({
+      where: { email: user.email },
+    });
+    if (employee) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { employeeId: employee.id },
+      });
+    }
+  }
+  console.log('  ✓ Linked matching users and employees');
 
   console.log('\n🎉 Seed complete!');
   console.log('\n📋 Login credentials:');

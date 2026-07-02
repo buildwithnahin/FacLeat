@@ -1,12 +1,11 @@
 import 'server-only';
 import { prisma } from '@/server/db';
-import { authorize } from '@/server/auth/authorize';
 import type { AppSession } from '@/server/auth/session';
-import { NotFoundError } from '@/lib/errors';
+import { NotFoundError, UnauthorizedError } from '@/lib/errors';
 
 export const notificationService = {
   async list(session: AppSession | null, filters: { onlyUnread?: boolean; limit?: number } = {}) {
-    await authorize(session, 'notifications:read');
+    if (!session) throw new UnauthorizedError();
     return prisma.notification.findMany({
       where: {
         recipientId: session!.userId,
@@ -18,14 +17,15 @@ export const notificationService = {
   },
 
   async unreadCount(session: AppSession | null) {
-    await authorize(session, 'notifications:read');
+    if (!session) throw new UnauthorizedError();
     return prisma.notification.count({
       where: { recipientId: session!.userId, readAt: null },
     });
   },
 
   async markRead(session: AppSession | null, id: string) {
-    const actor = await authorize(session, 'notifications:read');
+    if (!session) throw new UnauthorizedError();
+    const actor = session;
     const notif = await prisma.notification.findUnique({ where: { id } });
     if (!notif || notif.recipientId !== actor.userId) {
       throw new NotFoundError('Notification not found');
@@ -37,7 +37,8 @@ export const notificationService = {
   },
 
   async markAllRead(session: AppSession | null) {
-    const actor = await authorize(session, 'notifications:read');
+    if (!session) throw new UnauthorizedError();
+    const actor = session;
     const result = await prisma.notification.updateMany({
       where: { recipientId: actor.userId, readAt: null },
       data: { readAt: new Date() },

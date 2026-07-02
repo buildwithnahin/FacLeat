@@ -1,14 +1,16 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { CalendarCheck2, History, TrendingUp, UserRound } from 'lucide-react';
 import { getSession } from '@/server/auth/session';
 import { authorize } from '@/server/auth/authorize';
 import { hrService } from '@/server/services/hr.service';
 import { prisma } from '@/server/db';
+import { isConfirmationTableAvailable, isEmployeeConfirmationTableMissingError } from '@/server/services/confirmations.service';
 import { isEmployeeIncrementTableMissingError, isIncrementTableAvailable } from '@/server/services/increments.service';
 import { isEmployeePromotionTableMissingError, isPromotionTableAvailable } from '@/server/services/promotions.service';
 import { NotFoundError } from '@/lib/errors';
 import { formatCurrency } from '@/lib/money';
+import { CONFIRMATION_STATUS_LABELS, CONFIRMATION_TYPE_LABELS } from '@/server/validators/confirmations';
 import { INCREMENT_STATUS_LABELS, INCREMENT_TYPE_LABELS } from '@/server/validators/increments';
 import { PROMOTION_STATUS_LABELS, PROMOTION_TYPE_LABELS } from '@/server/validators/promotions';
 import { TRANSFER_STATUS_LABELS, TRANSFER_TYPE_LABELS } from '@/server/validators/transfers';
@@ -38,6 +40,13 @@ const STATUS_VARIANT: Record<string, 'default' | 'outline' | 'success' | 'warnin
 export default async function EmployeeProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await getSession();
+  if (!session?.permissions.includes('hr:read')) {
+    const canOpenConfirmations =
+      session?.permissions.includes('accounts:read') ||
+      session?.permissions.includes('accounts:post') ||
+      (session?.roles ?? []).some((role) => ['HR', 'Accounts', 'Management', 'Admin', 'Super Admin'].includes(role));
+    redirect(canOpenConfirmations ? '/hr/confirmations' : '/dashboard');
+  }
   await authorize(session, 'hr:read');
 
   let employee;
@@ -48,9 +57,10 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
     throw error;
   }
   const promotionsAvailable = await isPromotionTableAvailable();
+  const confirmationsAvailable = await isConfirmationTableAvailable();
   const incrementsAvailable = await isIncrementTableAvailable();
 
-  const [attendance, leaves, payrollRuns, documents, audits, workflowRecords, transfers, promotions, increments] = await Promise.all([
+  const [attendance, leaves, payrollRuns, documents, audits, workflowRecords, transfers, promotions, confirmations, increments] = await Promise.all([
     hrService.listAttendance(session, { employeeId: id }),
     hrService.listLeaves(session, { employeeId: id }),
     prisma.payslip.findMany({
@@ -94,6 +104,18 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
             throw error;
           })
       : Promise.resolve([]),
+    confirmationsAvailable
+      ? prisma.employeeConfirmation
+          .findMany({
+            where: { employeeId: id },
+            orderBy: { createdAt: 'desc' },
+            take: 8,
+          })
+          .catch((error) => {
+            if (isEmployeeConfirmationTableMissingError(error)) return [];
+            throw error;
+          })
+      : Promise.resolve([]),
     incrementsAvailable
       ? prisma.employeeIncrement
           .findMany({
@@ -111,8 +133,8 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
   const canWrite = session?.permissions.includes('hr:write') ?? false;
   const presentCount = attendance.filter((record) => ['PRESENT', 'LATE', 'HALF_DAY'].includes(record.status)).length;
   const lateCount = attendance.filter((record) => record.status === 'LATE').length;
-  const approvedLeaves = leaves.filter((leave) => leave.status === 'APPROVED').reduce((sum, leave) => sum + leave.days, 0);
-  const pendingLeaves = leaves.filter((leave) => leave.status === 'PENDING').length;
+  const approvedLeaves = leaves.filter((leave) => leave.status === 'APPROVED').reduce((sum, leave) => sum + Number(leave.days), 0);
+  const pendingLeaves = leaves.filter((leave) => ['PENDING_MANAGER', 'PENDING_HR'].includes(leave.status)).length;
   const payrollTotal = payrollRuns.reduce((sum, payslip) => sum + Number(payslip.net), 0);
 
   const timeline = [
@@ -313,6 +335,9 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
         </SectionCard>
         <SectionCard title="Promotion History">
           <PromotionHistoryList records={promotions} />
+        </SectionCard>
+        <SectionCard title="Confirmation History">
+          <ConfirmationHistoryList records={confirmations} />
         </SectionCard>
         <SectionCard title="Transfer History">
           <TransferHistoryList records={transfers} />
@@ -607,6 +632,49 @@ function PromotionHistoryList({
             </Badge>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">{record.effectiveDate.toISOString().slice(0, 10)}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ConfirmationHistoryList({
+  records,
+}: {
+  records: Array<{
+    id: string;
+    confirmationNumber: string;
+    confirmationType: string;
+    status: string;
+    effectiveDate: Date;
+    salaryRevisionRequired: boolean;
+    newBasicSalary: { toString(): string };
+  }>;
+}) {
+  if (records.length === 0) return <EmptyState text="No confirmation history saved for this employee yet." />;
+
+  return (
+    <ul className="space-y-3">
+      {records.map((record) => (
+        <li key={record.id} className="rounded-lg border p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">
+                {CONFIRMATION_TYPE_LABELS[record.confirmationType] ?? record.confirmationType}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {record.confirmationNumber}
+                {' · '}
+                {record.salaryRevisionRequired ? formatCurrency(record.newBasicSalary.toString()) : 'No salary change'}
+              </p>
+            </div>
+            <Badge variant={record.status === 'CONFIRMED' ? 'success' : record.status === 'REJECTED' ? 'destructive' : 'outline'}>
+              {CONFIRMATION_STATUS_LABELS[record.status] ?? record.status}
+            </Badge>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Effective {record.effectiveDate.toISOString().slice(0, 10)}
+          </p>
         </li>
       ))}
     </ul>

@@ -37,7 +37,7 @@ export default async function HrOverviewPage() {
       leave.fromDate.getTime() <= day.getTime() &&
       leave.toDate.getTime() >= day.getTime(),
   ).length;
-  const pendingLeave = leaves.filter((leave) => leave.status === 'PENDING').length;
+  const pendingLeave = leaves.filter((leave) => ['PENDING_MANAGER', 'PENDING_HR'].includes(leave.status)).length;
   const newJoining = employees.filter((employee) => {
     const joined = employee.joinedAt;
     return joined.getFullYear() === today.getFullYear() && joined.getMonth() === today.getMonth();
