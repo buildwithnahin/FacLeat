@@ -10,6 +10,7 @@ import { ApiError } from '@/lib/errors';
 const PATH = '/hr/leave-balance';
 
 export async function createLeaveBalanceAdjustmentAction(formData: FormData) {
+  const returnPath = String(formData.get('returnPath') ?? PATH).trim() || PATH;
   const employeeId = String(formData.get('employeeId') ?? '');
   const leaveType = String(formData.get('leaveType') ?? '');
   const leaveYear = Number(formData.get('leaveYear') ?? 0);
@@ -29,19 +30,20 @@ export async function createLeaveBalanceAdjustmentAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirect(`${PATH}?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? 'Invalid adjustment input')}`);
+    redirect(`${returnPath}${returnPath.includes('?') ? '&' : '?'}error=${encodeURIComponent(parsed.error.issues[0]?.message ?? 'Invalid adjustment input')}`);
   }
 
   try {
     const session = await getSession();
     await leaveBalanceService.createAdjustment(session, parsed.data);
     revalidatePath(PATH);
+    if (returnPath !== PATH) revalidatePath(returnPath.split('?')[0] ?? PATH);
     revalidatePath('/hr/leaves');
     revalidatePath('/hr/leave-approval');
-    redirect(`${PATH}?success=${encodeURIComponent('Leave balance adjustment saved successfully.')}`);
+    redirect(`${returnPath}${returnPath.includes('?') ? '&' : '?'}success=${encodeURIComponent('Leave balance adjustment saved successfully.')}`);
   } catch (error) {
     if (error instanceof ApiError) {
-      redirect(`${PATH}?error=${encodeURIComponent(error.message)}`);
+      redirect(`${returnPath}${returnPath.includes('?') ? '&' : '?'}error=${encodeURIComponent(error.message)}`);
     }
     throw error;
   }

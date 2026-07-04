@@ -6,8 +6,9 @@ import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import type { AppSession } from '@/server/auth/session';
 import { NotFoundError, ValidationError } from '@/lib/errors';
+import { leaveBalanceService } from '@/server/services/leave-balance.service';
+import { leaveTypesService } from '@/server/services/leave-types.service';
 import {
-  LEGACY_LEAVE_ENTITLEMENTS,
   calculateRequestedLeaveDays,
   resolveLeavePolicyForEmployee,
 } from '@/server/services/leave-policies.service';
@@ -97,7 +98,7 @@ export const leavesService = {
       where: {
         status: statusFilter,
         employeeId: filters.employeeId || undefined,
-        type: filters.type as any || undefined,
+        type: filters.type || undefined,
         fromDate: filters.fromDate ? { gte: new Date(filters.fromDate) } : undefined,
         toDate: filters.toDate ? { lte: new Date(filters.toDate) } : undefined,
         employee: {
@@ -130,55 +131,12 @@ export const leavesService = {
 
   async getLeaveBalance(session: AppSession | null, employeeId: string, year: number) {
     await authorize(session, 'hr:read');
-    const startOfYear = new Date(Date.UTC(year, 0, 1));
-    const endOfYear = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
-    const resolvedPolicy = await resolveLeavePolicyForEmployee(employeeId, startOfYear);
-
-    const requests = await prisma.leaveRequest.findMany({
-      where: {
-        employeeId,
-        fromDate: { gte: startOfYear },
-        toDate: { lte: endOfYear },
-        status: { notIn: ['CANCELLED', 'REJECTED', 'WITHDRAWN'] },
-      },
-    });
-
-    const preview: Record<string, { entitled: number; taken: number; pending: number; available: number }> = {};
-    const rules = resolvedPolicy.rules.length
-      ? resolvedPolicy.rules
-      : Object.entries(LEGACY_LEAVE_ENTITLEMENTS).map(([leaveType, entitledDays]) => ({
-          leaveType,
-          entitledDays,
-          isUnlimited: false,
-          allowNegativeBalance: leaveType === 'UNPAID',
-        }));
-
-    for (const rule of rules) {
-      const type = rule.leaveType;
-      const entitled = rule.isUnlimited ? 0 : rule.entitledDays ?? 0;
-      const taken = requests
-        .filter((r) => r.type === type && r.status === 'APPROVED')
-        .reduce((sum, r) => sum + Number(r.days), 0);
-
-      const pending = requests
-        .filter((r) => r.type === type && ['PENDING_MANAGER', 'PENDING_HR'].includes(r.status))
-        .reduce((sum, r) => sum + Number(r.days), 0);
-
-      const available = rule.isUnlimited ? Number.MAX_SAFE_INTEGER : entitled - taken - pending;
-
-      preview[type] = {
-        entitled: rule.isUnlimited ? 0 : entitled,
-        taken,
-        pending,
-        available: rule.allowNegativeBalance || rule.isUnlimited ? available : Math.max(0, available),
-      };
-    }
-
-    return preview;
+    return leaveBalanceService.getBalancePreview(session, employeeId, year);
   },
 
   async apply(session: AppSession | null, input: LeaveApplicationInput) {
     const actor = await authorize(session, 'hr:write');
+    await leaveTypesService.assertCodeExists(input.type);
     const employee = await prisma.employee.findUnique({
       where: { id: input.employeeId },
       select: { id: true, branchId: true, employmentType: true, joinedAt: true },
@@ -248,7 +206,7 @@ export const leavesService = {
       const monthlyRequested = await prisma.leaveRequest.findMany({
         where: {
           employeeId: input.employeeId,
-          type: input.type as never,
+          type: input.type,
           status: { notIn: ['CANCELLED', 'REJECTED', 'WITHDRAWN'] },
           fromDate: { lte: monthEnd },
           toDate: { gte: monthStart },
@@ -267,9 +225,9 @@ export const leavesService = {
     const typeBalance = balance[input.type];
     
     // Skip balance checks for UNPAID leave types or if type is not strictly limited
-    if (!rule.allowNegativeBalance && !rule.isUnlimited && typeBalance && typeBalance.available < days) {
+    if (!rule.allowNegativeBalance && !rule.isUnlimited && typeBalance && !typeBalance.isUnlimited && typeBalance.available < days) {
       throw new ValidationError(
-        `Insufficient leave balance. Entitled: ${typeBalance.entitled}, Available: ${typeBalance.available}, Requested: ${days}`
+        `Insufficient leave balance. Entitled: ${typeBalance.entitled}, Carry Forward: ${typeBalance.carryForward}, Used: ${typeBalance.used}, Pending: ${typeBalance.pending}, Available: ${typeBalance.available}, Requested: ${days}`
       );
     }
 
@@ -368,14 +326,15 @@ export const leavesService = {
             managerApprovedAt: new Date(),
           };
           actionName = 'leave-manager-reject';
-        } else if (input.action === 'send-back') {
+        } else if (input.action === 'return') {
           statusUpdate = {
-            status: 'DRAFT',
-            managerStatus: 'SEND_BACK',
+            status: 'RETURNED',
+            managerStatus: 'RETURNED',
             managerRemarks: input.remarks,
             managerId: actor.userId,
+            managerApprovedAt: new Date(),
           };
-          actionName = 'leave-manager-sendback';
+          actionName = 'leave-manager-return';
         }
       } else if (input.stage === 'hr') {
         if (record.status !== 'PENDING_HR') {
@@ -400,6 +359,15 @@ export const leavesService = {
             hrApprovedAt: new Date(),
           };
           actionName = 'leave-hr-reject';
+        } else if (input.action === 'return') {
+          statusUpdate = {
+            status: 'RETURNED',
+            hrStatus: 'RETURNED',
+            hrRemarks: input.remarks,
+            hrId: actor.userId,
+            hrApprovedAt: new Date(),
+          };
+          actionName = 'leave-hr-return';
         } else if (input.action === 'cancel') {
           statusUpdate = {
             status: 'CANCELLED',
@@ -461,8 +429,35 @@ export const leavesService = {
         }
       }
 
+      const user = await tx.user.findUnique({ where: { employeeId: record.employeeId } });
+      if (user) {
+        await tx.notification.create({
+          data: {
+            recipientId: user.id,
+            branchId: record.employee.branchId,
+            module: 'hr',
+            title: `Leave Request ${updated.status}`,
+            body: `Your leave request ${record.leaveRequestNo} has been ${updated.status.toLowerCase()}.`,
+            href: `/hr/leaves`,
+          },
+        });
+      }
+
       return updated;
     });
+  },
+
+  async bulkDecide(session: AppSession | null, input: { ids: string[]; stage: 'manager' | 'hr'; action: 'approve' | 'reject' | 'return' | 'cancel'; remarks?: string | null }) {
+    const results = [];
+    for (const id of input.ids) {
+      try {
+        const result = await this.decide(session, { id, stage: input.stage, action: input.action, remarks: input.remarks });
+        results.push({ id, success: true, result });
+      } catch (error: any) {
+        results.push({ id, success: false, error: error.message });
+      }
+    }
+    return results;
   },
 
   async withdraw(session: AppSession | null, id: string) {
@@ -473,8 +468,8 @@ export const leavesService = {
     });
     if (!record) throw new NotFoundError('Leave request not found');
 
-    if (!['PENDING_MANAGER', 'PENDING_HR', 'DRAFT'].includes(record.status)) {
-      throw new ValidationError('Only pending or draft leave requests can be withdrawn.');
+    if (!['PENDING_MANAGER', 'PENDING_HR', 'DRAFT', 'RETURNED'].includes(record.status)) {
+      throw new ValidationError('Only pending, returned, or draft leave requests can be withdrawn.');
     }
 
     return prisma.$transaction(async (tx) => {

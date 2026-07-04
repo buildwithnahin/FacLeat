@@ -3,20 +3,44 @@ import { stockService } from '@/server/services/stock.service';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import {
+  INVENTORY_SECTION_META,
+  INVENTORY_SECTION_SLUGS,
+  parseInventorySection,
+} from '@/lib/inventory-sections';
 
 export const metadata = { title: 'Inventory ledger' };
 
-export default async function LedgerPage() {
+type LedgerPageProps = {
+  searchParams: Promise<{ section?: string }>;
+};
+
+export default async function LedgerPage({ searchParams }: LedgerPageProps) {
   const session = await getSession();
+  const sp = await searchParams;
+  const section = parseInventorySection(sp.section) ?? 'raw-material';
   const branchId = session?.activeBranchId ?? undefined;
-  const rows = await stockService.listMovements(session, { branchId, limit: 300 });
+  const rows = await stockService.listMovements(session, {
+    branchId,
+    limit: 300,
+    section,
+  });
 
   return (
     <div>
       <PageHeader
-        title="Inventory ledger"
-        description="Every stock movement. The single source of truth for stock quantity."
+        title={`${INVENTORY_SECTION_META[section].label} Ledger`}
+        description={`Every ${INVENTORY_SECTION_META[section].label.toLowerCase()} stock movement in the single inventory ledger.`}
       />
+      <div className="mb-4 flex flex-wrap gap-2">
+        {INVENTORY_SECTION_SLUGS.map((slug) => (
+          <Button key={slug} variant={section === slug ? 'default' : 'outline'} asChild>
+            <Link href={`/inventory/ledger?section=${slug}`}>{INVENTORY_SECTION_META[slug].label}</Link>
+          </Button>
+        ))}
+      </div>
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -49,6 +73,7 @@ export default async function LedgerPage() {
                   <td className="px-4 py-3">{r.product.name}</td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {r.warehouse.name} <span className="text-xs">({r.warehouse.code})</span>
+                    <div className="text-xs text-muted-foreground/80">{r.warehouse.type.toLowerCase()}</div>
                   </td>
                   <td className="px-4 py-3">
                     <Badge variant={r.direction === 'IN' ? 'success' : 'destructive'}>

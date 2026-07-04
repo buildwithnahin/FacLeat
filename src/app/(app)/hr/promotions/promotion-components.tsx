@@ -436,7 +436,7 @@ export function PromotionKpiCards({ counts }: { counts: Record<string, number> }
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-7">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
       {cards.map((card) => (
         <Card key={card.label}>
           <CardContent className="px-4 py-3">

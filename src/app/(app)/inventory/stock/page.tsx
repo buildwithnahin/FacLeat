@@ -3,12 +3,16 @@ import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight } from 'lucide-react';
 import type { Prisma } from '@prisma/client';
 import { getSession } from '@/server/auth/session';
 import { stockService } from '@/server/services/stock.service';
-import { warehouseService } from '@/server/services/warehouse.service';
-import { prisma } from '@/server/db';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/money';
+import {
+  INVENTORY_SECTION_META,
+  INVENTORY_SECTION_SLUGS,
+  parseInventorySection,
+  type InventorySectionSlug,
+} from '@/lib/inventory-sections';
 
 export const metadata = { title: 'Stock balance' };
 
@@ -22,11 +26,17 @@ type Product = {
   costPrice: Prisma.Decimal;
   sellPrice: Prisma.Decimal;
 };
-type Warehouse = { id: string; name: string; code: string };
+type Warehouse = { id: string; name: string; code: string; type: import('@prisma/client').WarehouseType };
 type Row = { product: Product; warehouse: Warehouse; qty: Prisma.Decimal };
 
-export default async function StockBalancePage() {
+type StockBalancePageProps = {
+  searchParams: Promise<{ section?: string }>;
+};
+
+export default async function StockBalancePage({ searchParams }: StockBalancePageProps) {
   const session = await getSession();
+  const sp = await searchParams;
+  const section = parseInventorySection(sp.section) ?? 'raw-material';
   const branchId = session?.activeBranchId;
 
   if (!branchId) {
@@ -40,40 +50,17 @@ export default async function StockBalancePage() {
     );
   }
 
-  const [balances, warehouses, products] = await Promise.all([
-    stockService.balanceSnapshot(session, branchId),
-    warehouseService.listActiveForBranch(session, branchId),
-    prisma.product.findMany({
-      orderBy: { name: 'asc' },
-      select: { id: true, sku: true, name: true, unit: true, reorderLevel: true, type: true, costPrice: true, sellPrice: true },
-    }),
-  ]);
-
-  const whById = new Map(warehouses.map((w) => [w.id, w]));
-  const prodById = new Map(products.map((p) => [p.id, p]));
-
-  const allRows: Row[] = [];
-  for (const b of balances) {
-    const product = prodById.get(b.productId);
-    const warehouse = whById.get(b.warehouseId);
-    if (!product || !warehouse) continue;
-    allRows.push({ product, warehouse: { id: warehouse.id, name: warehouse.name, code: warehouse.code }, qty: b.balance });
-  }
-  allRows.sort((a, b) => {
-    const pa = a.product.name.localeCompare(b.product.name);
-    if (pa !== 0) return pa;
-    return a.warehouse.name.localeCompare(b.warehouse.name);
-  });
-
-  const finishedRows = allRows.filter((r) => r.product.type === 'FINISHED_GOOD');
-  const rawRows = allRows.filter((r) => r.product.type === 'RAW_MATERIAL');
-  const otherRows = allRows.filter(
-    (r) => r.product.type !== 'FINISHED_GOOD' && r.product.type !== 'RAW_MATERIAL',
-  );
+  const allRows = (await stockService.balanceSnapshotDetailed(session, {
+    branchId,
+    section,
+  })) as Row[];
 
   return (
     <div>
-      <PageHeader title="Stock balance" description="Live balance per warehouse, derived from the inventory ledger.">
+      <PageHeader
+        title={`${INVENTORY_SECTION_META[section].label} Stock Balance`}
+        description={INVENTORY_SECTION_META[section].description}
+      >
         <Button variant="outline" asChild>
           <Link href="/warehouse/receive">
             <ArrowDownToLine className="h-4 w-4" />
@@ -95,27 +82,32 @@ export default async function StockBalancePage() {
       </PageHeader>
 
       <div className="space-y-6">
+        <SectionLinks activeSection={section} page="stock" />
         <StockSection
-          title="Finished products"
-          description="Sellable finished goods produced in the factory or received for resale."
-          rows={finishedRows}
-          emptyLabel="No finished-goods stock yet."
+          title={INVENTORY_SECTION_META[section].label}
+          description={INVENTORY_SECTION_META[section].description}
+          rows={allRows}
+          emptyLabel={`No ${INVENTORY_SECTION_META[section].label.toLowerCase()} stock yet.`}
         />
-        <StockSection
-          title="Raw materials"
-          description="Materials and inputs consumed in production."
-          rows={rawRows}
-          emptyLabel="No raw-material stock yet."
-        />
-        {otherRows.length > 0 && (
-          <StockSection
-            title="Other"
-            description="Work-in-progress, consumables, and other stock items."
-            rows={otherRows}
-            emptyLabel="No other stock."
-          />
-        )}
       </div>
+    </div>
+  );
+}
+
+function SectionLinks({
+  activeSection,
+  page,
+}: {
+  activeSection: InventorySectionSlug | null;
+  page: 'stock' | 'ledger' | 'products';
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {INVENTORY_SECTION_SLUGS.map((slug) => (
+        <Button key={slug} variant={activeSection === slug ? 'default' : 'outline'} asChild>
+          <Link href={`/inventory/${page}?section=${slug}`}>{INVENTORY_SECTION_META[slug].label}</Link>
+        </Button>
+      ))}
     </div>
   );
 }

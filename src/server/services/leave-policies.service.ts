@@ -5,6 +5,7 @@ import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import { listActiveHolidaysInRange } from '@/server/services/holidays.service';
+import { leaveTypesService } from '@/server/services/leave-types.service';
 import type { AppSession } from '@/server/auth/session';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 import type {
@@ -85,8 +86,6 @@ export type ResolvedLeaveRule = {
   sandwichRuleApplicable: boolean;
   carryForwardAllowed: boolean;
   maxCarryForwardDays: number | null;
-  encashmentAllowed: boolean;
-  maxEncashmentDays: number | null;
   payrollImpact: string;
   status: string;
 };
@@ -116,8 +115,6 @@ export type ResolvedLeavePolicy = {
   maxCarryForwardDays: number | null;
   carryForwardExpiryMonth: number | null;
   carryForwardExpiryDay: number | null;
-  encashmentAllowed: boolean;
-  maxEncashmentDays: number | null;
   autoClosing: boolean;
   payrollImpactDefault: string;
   rules: ResolvedLeaveRule[];
@@ -162,17 +159,42 @@ function ruleToResolvedRule(rule: LeavePolicyRecord['rules'][number]): ResolvedL
     sandwichRuleApplicable: rule.sandwichRuleApplicable,
     carryForwardAllowed: rule.carryForwardAllowed,
     maxCarryForwardDays: toNullableNumber(rule.maxCarryForwardDays),
-    encashmentAllowed: rule.encashmentAllowed,
-    maxEncashmentDays: toNullableNumber(rule.maxEncashmentDays),
     payrollImpact: rule.payrollImpact,
     status: rule.status,
   };
 }
 
-function buildLegacyPolicy(employee: Pick<EmployeeResolverRecord, 'employmentType'>): ResolvedLeavePolicy {
+function buildRuleFromMasterLeaveType(leaveType: Awaited<ReturnType<typeof leaveTypesService.listActivePublic>>[number]): ResolvedLeaveRule {
+  return {
+    leaveType: leaveType.code,
+    leaveCode: leaveType.code,
+    paidLeave: leaveType.paidLeave,
+    entitledDays: leaveType.annualEntitlement,
+    isUnlimited: false,
+    accrualMethod: 'YEARLY_ALLOCATION',
+    minimumServiceMonths: null,
+    maxLeavePerRequest: leaveType.maxConsecutiveDays,
+    maxLeavePerMonth: null,
+    halfDayAllowed: leaveType.allowHalfDay,
+    attachmentRequired: leaveType.attachmentRequired || leaveType.medicalCertificateRequired,
+    reasonRequired: true,
+    allowNegativeBalance: leaveType.allowNegativeBalance,
+    includeWeekend: leaveType.weekendIncluded,
+    includeHoliday: leaveType.holidayIncluded,
+    sandwichRuleApplicable: false,
+    carryForwardAllowed: leaveType.carryForwardAllowed,
+    maxCarryForwardDays: leaveType.maximumCarryForwardDays,
+    payrollImpact: leaveType.paidLeave ? 'PAID_LEAVE' : 'UNPAID_LEAVE_DEDUCTION',
+    status: leaveType.status,
+  };
+}
+
+async function buildLegacyPolicy(employee: Pick<EmployeeResolverRecord, 'employmentType'>): Promise<ResolvedLeavePolicy> {
   const label = employee.employmentType
     ? `${employee.employmentType.charAt(0)}${employee.employmentType.slice(1).toLowerCase()} Leave Policy`
     : 'Standard Leave Policy';
+  const activeLeaveTypes = await leaveTypesService.listActivePublic();
+  const masterRules = activeLeaveTypes.map(buildRuleFromMasterLeaveType);
 
   return {
     id: 'legacy',
@@ -199,34 +221,32 @@ function buildLegacyPolicy(employee: Pick<EmployeeResolverRecord, 'employmentTyp
     maxCarryForwardDays: null,
     carryForwardExpiryMonth: null,
     carryForwardExpiryDay: null,
-    encashmentAllowed: false,
-    maxEncashmentDays: null,
     autoClosing: false,
     payrollImpactDefault: 'NO_PAYROLL_IMPACT',
-    rules: Object.entries(LEGACY_LEAVE_ENTITLEMENTS).map(([leaveType, entitledDays]) => ({
-      leaveType,
-      leaveCode: leaveType,
-      paidLeave: leaveType !== 'UNPAID',
-      entitledDays,
-      isUnlimited: false,
-      accrualMethod: 'YEARLY_ALLOCATION',
-      minimumServiceMonths: null,
-      maxLeavePerRequest: null,
-      maxLeavePerMonth: null,
-      halfDayAllowed: leaveType !== 'MATERNITY',
-      attachmentRequired: false,
-      reasonRequired: true,
-      allowNegativeBalance: leaveType === 'UNPAID',
-      includeWeekend: true,
-      includeHoliday: false,
-      sandwichRuleApplicable: false,
-      carryForwardAllowed: false,
-      maxCarryForwardDays: null,
-      encashmentAllowed: false,
-      maxEncashmentDays: null,
-      payrollImpact: leaveType === 'UNPAID' ? 'UNPAID_LEAVE_DEDUCTION' : 'PAID_LEAVE',
-      status: 'ACTIVE',
-    })),
+    rules: masterRules.length
+      ? masterRules
+      : Object.entries(LEGACY_LEAVE_ENTITLEMENTS).map(([leaveType, entitledDays]) => ({
+          leaveType,
+          leaveCode: leaveType,
+          paidLeave: leaveType !== 'UNPAID',
+          entitledDays,
+          isUnlimited: false,
+          accrualMethod: 'YEARLY_ALLOCATION',
+          minimumServiceMonths: null,
+          maxLeavePerRequest: null,
+          maxLeavePerMonth: null,
+          halfDayAllowed: leaveType !== 'MATERNITY',
+          attachmentRequired: false,
+          reasonRequired: true,
+          allowNegativeBalance: leaveType === 'UNPAID',
+          includeWeekend: false,
+          includeHoliday: false,
+          sandwichRuleApplicable: false,
+          carryForwardAllowed: false,
+          maxCarryForwardDays: null,
+          payrollImpact: leaveType === 'UNPAID' ? 'UNPAID_LEAVE_DEDUCTION' : 'PAID_LEAVE',
+          status: 'ACTIVE',
+        })),
   };
 }
 
@@ -258,8 +278,6 @@ function serializePolicy(policy: LeavePolicyRecord) {
     maxCarryForwardDays: toNullableNumber(policy.maxCarryForwardDays),
     carryForwardExpiryMonth: policy.carryForwardExpiryMonth,
     carryForwardExpiryDay: policy.carryForwardExpiryDay,
-    encashmentAllowed: policy.encashmentAllowed,
-    maxEncashmentDays: toNullableNumber(policy.maxEncashmentDays),
     autoClosing: policy.autoClosing,
     payrollImpactDefault: policy.payrollImpactDefault,
     rules: policy.rules.map(ruleToResolvedRule),
@@ -273,10 +291,6 @@ function serializePolicy(policy: LeavePolicyRecord) {
       employmentType: assignment.employee.employmentType,
     })),
   };
-}
-
-function resolveRuleStatus(rule: ResolvedLeaveRule) {
-  return rule.status.toUpperCase() === 'ACTIVE';
 }
 
 function hasUnsupportedApplicability(policy: {
@@ -334,8 +348,6 @@ function policyToResolved(policy: LeavePolicyRecord, source: 'assignment' | 'app
     maxCarryForwardDays: toNullableNumber(policy.maxCarryForwardDays),
     carryForwardExpiryMonth: policy.carryForwardExpiryMonth,
     carryForwardExpiryDay: policy.carryForwardExpiryDay,
-    encashmentAllowed: policy.encashmentAllowed,
-    maxEncashmentDays: toNullableNumber(policy.maxEncashmentDays),
     autoClosing: policy.autoClosing,
     payrollImpactDefault: policy.payrollImpactDefault,
     rules: policy.rules.map(ruleToResolvedRule),
@@ -368,8 +380,6 @@ function buildPolicyWriteData(input: LeavePolicyCreateInput | LeavePolicyUpdateI
     maxCarryForwardDays: input.maxCarryForwardDays != null ? D(input.maxCarryForwardDays) : null,
     carryForwardExpiryMonth: input.carryForwardExpiryMonth != null ? Math.trunc(input.carryForwardExpiryMonth) : null,
     carryForwardExpiryDay: input.carryForwardExpiryDay != null ? Math.trunc(input.carryForwardExpiryDay) : null,
-    encashmentAllowed: input.encashmentAllowed,
-    maxEncashmentDays: input.maxEncashmentDays != null ? D(input.maxEncashmentDays) : null,
     autoClosing: input.autoClosing,
     payrollImpactDefault: input.payrollImpactDefault,
     updatedById: actorUserId,
@@ -396,8 +406,6 @@ function buildRuleCreateMany(rules: LeavePolicyRuleInput[]) {
     sandwichRuleApplicable: rule.sandwichRuleApplicable,
     carryForwardAllowed: rule.carryForwardAllowed,
     maxCarryForwardDays: rule.maxCarryForwardDays != null ? D(rule.maxCarryForwardDays) : null,
-    encashmentAllowed: rule.encashmentAllowed,
-    maxEncashmentDays: rule.maxEncashmentDays != null ? D(rule.maxEncashmentDays) : null,
     payrollImpact: rule.payrollImpact,
     status: rule.status,
   }));
@@ -448,8 +456,10 @@ export async function resolveLeavePolicyForEmployee(employeeId: string, asOfDate
     where: {
       status: 'ACTIVE',
       effectiveFrom: { lte: normalizeDate(asOfDate) },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gte: normalizeDate(asOfDate) } }],
-      OR: [{ branchId: null }, { branchId: employee.branchId }],
+      AND: [
+        { OR: [{ effectiveTo: null }, { effectiveTo: { gte: normalizeDate(asOfDate) } }] },
+        { OR: [{ branchId: null }, { branchId: employee.branchId }] },
+      ],
     },
     include: POLICY_INCLUDE,
   });
@@ -529,6 +539,14 @@ export const leavePoliciesService = {
 
   async create(session: AppSession | null, input: LeavePolicyCreateInput) {
     const actor = await authorize(session, 'hr:write');
+    await Promise.all(input.rules.map((rule) => leaveTypesService.assertCodeExists(rule.leaveType)));
+    const existingByName = await prisma.leavePolicy.findFirst({
+      where: { policyName: { equals: input.policyName, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existingByName) {
+      throw new ValidationError('Policy name already exists. Create a new version with a new effective date instead of duplicating names.');
+    }
     const data = buildPolicyWriteData(input, actor.userId);
 
     return prisma.$transaction(async (tx) => {
@@ -575,6 +593,17 @@ export const leavePoliciesService = {
 
   async update(session: AppSession | null, input: LeavePolicyUpdateInput) {
     const actor = await authorize(session, 'hr:write');
+    await Promise.all(input.rules.map((rule) => leaveTypesService.assertCodeExists(rule.leaveType)));
+    const existingByName = await prisma.leavePolicy.findFirst({
+      where: {
+        policyName: { equals: input.policyName, mode: 'insensitive' },
+        id: { not: input.id },
+      },
+      select: { id: true },
+    });
+    if (existingByName) {
+      throw new ValidationError('Another leave policy already uses this name.');
+    }
     const existing = await prisma.leavePolicy.findUnique({
       where: { id: input.id },
       include: POLICY_INCLUDE,

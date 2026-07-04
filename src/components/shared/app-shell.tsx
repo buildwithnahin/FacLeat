@@ -1,5 +1,5 @@
 import { LogOut } from 'lucide-react';
-import { MODULES } from '@/constants/navigation';
+import { getModulesForAccess } from '@/constants/navigation';
 import { logoutAction } from '@/server/actions/auth';
 import { BranchSwitcher } from '@/components/shared/branch-switcher';
 import { NotificationBell } from '@/components/shared/notification-bell';
@@ -43,6 +43,10 @@ export async function AppShell({
 
   const perms = session.permissions;
   const can = (p?: string) => !p || perms.includes(p);
+  const modules = getModulesForAccess({
+    roles: session.roles,
+    permissions: session.permissions,
+  });
 
   const visibleItems = (items?: NavItem[]): ClientNavItem[] | undefined => {
     const filtered: ClientNavItem[] = [];
@@ -61,7 +65,7 @@ export async function AppShell({
     return filtered && filtered.length > 0 ? filtered : undefined;
   };
 
-  const visibleModules: ClientNavModule[] = MODULES.filter((m) => {
+  const visibleModules: ClientNavModule[] = modules.filter((m) => {
     if (!can(m.permission)) return false;
     const childrenVisible = !!visibleItems(m.items)?.length;
     return !m.items || childrenVisible || can(m.permission);
@@ -103,7 +107,7 @@ export async function AppShell({
         <div className="flex-1 flex flex-col min-w-0">
           <header className="h-14 bg-background border-b sticky top-0 z-10 flex items-center gap-3 px-6">
             <div className="flex-1 max-w-xl">
-              <SearchCommand permissions={perms} />
+              <SearchCommand modules={visibleModules} />
             </div>
             <BranchSwitcher session={session} />
             {await renderBell(session)}

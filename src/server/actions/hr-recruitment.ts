@@ -116,6 +116,7 @@ export async function createRecruitmentRequestAction(_prev: ActionState, fd: For
     await prisma.$transaction(async (tx) => {
       const row = await tx.hrWorkflowRecord.create({
         data: {
+          branchId: actor.activeBranchId ?? null,
           section: 'recruitment',
           title,
           subject,
@@ -266,6 +267,7 @@ export async function createCandidateAction(_prev: ActionState, fd: FormData): P
     await prisma.$transaction(async (tx) => {
       const row = await tx.hrWorkflowRecord.create({
         data: {
+          branchId: req.branchId ?? actor.activeBranchId ?? null,
           section: 'candidates',
           title: name,
           subject: req.title, // Position
@@ -381,6 +383,7 @@ export async function scheduleInterviewAction(_prev: ActionState, fd: FormData):
     await prisma.$transaction(async (tx) => {
       const row = await tx.hrWorkflowRecord.create({
         data: {
+          branchId: candidate.branchId ?? actor.activeBranchId ?? null,
           section: 'interviews',
           title: `Interview - ${candidate.title}`,
           subject: interviewType,
@@ -544,6 +547,7 @@ export async function createJobOfferAction(_prev: ActionState, fd: FormData): Pr
     await prisma.$transaction(async (tx) => {
       const row = await tx.hrWorkflowRecord.create({
         data: {
+          branchId: candidate.branchId ?? actor.activeBranchId ?? null,
           section: 'job-offers',
           title: offerNo,
           subject: candidate.subject, // Position
@@ -822,6 +826,7 @@ export async function completeJoiningAction(_prev: ActionState, fd: FormData): P
       // 2. Create joining record in workflow
       await tx.hrWorkflowRecord.create({
         data: {
+          branchId,
           section: 'joining',
           title: `Joining - ${candidate.title}`,
           subject: designation,
@@ -834,6 +839,8 @@ export async function completeJoiningAction(_prev: ActionState, fd: FormData): P
             offerId,
             employeeId: emp.id,
             employeeCode: emp.code,
+            designation: designation || offerContract.designation || candidate.subject || '',
+            department: department || offerContract.department || candidateMeta.department || '',
             employmentType,
             shiftId: shift.id,
             shiftName: shift.name,

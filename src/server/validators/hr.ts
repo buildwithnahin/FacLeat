@@ -11,20 +11,6 @@ export const ATTENDANCE_STATUSES = [
   'WEEKEND',
   'OFFICIAL_DUTY',
 ] as const;
-export const LEAVE_TYPES = [
-  'CASUAL',
-  'SICK',
-  'EARNED',
-  'ANNUAL',
-  'MATERNITY',
-  'PATERNITY',
-  'EMERGENCY',
-  'UNPAID',
-  'COMPENSATORY',
-  'SPECIAL',
-  'FESTIVAL',
-  'OTHER',
-] as const;
 export const LEAVE_STATUSES = [
   'DRAFT',
   'PENDING_MANAGER',
@@ -91,7 +77,7 @@ export const attendanceMarkSchema = z.object({
 export const leaveCreateSchema = z
   .object({
     employeeId: z.string().cuid(),
-    type: z.enum(LEAVE_TYPES),
+    type: z.string().trim().min(1).max(40),
     fromDate: z.coerce.date(),
     toDate: z.coerce.date(),
     reason: z.string().trim().max(500).optional().or(z.literal('')),

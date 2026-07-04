@@ -7,15 +7,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { prisma } from '@/server/db';
-import { LEAVE_TYPES } from '@/server/validators/hr';
 import { leaveBalanceService } from '@/server/services/leave-balance.service';
-import { createLeaveBalanceAdjustmentAction } from '@/server/actions/leave-balance';
+import { leaveTypesService } from '@/server/services/leave-types.service';
 import { LeaveBalanceActions } from './_components/leave-balance-actions';
-import { RotateCcw, ShieldPlus } from 'lucide-react';
+import { RotateCcw, RefreshCw } from 'lucide-react';
 
 export const metadata = { title: 'Leave Balance' };
 
 type SearchParams = Promise<{
+  q?: string;
   year?: string;
   branchId?: string;
   department?: string;
@@ -34,15 +34,6 @@ const BALANCE_STATUS_OPTIONS = [
   { value: 'NEGATIVE_BALANCE', label: 'Negative Balance' },
 ] as const;
 
-const ADJUSTMENT_TYPE_LABELS: Record<string, string> = {
-  ADD_LEAVE: 'Add Leave',
-  DEDUCT_LEAVE: 'Deduct Leave',
-  CARRY_FORWARD_CORRECTION: 'Carry Forward Correction',
-  OPENING_BALANCE_CORRECTION: 'Opening Balance Correction',
-  SPECIAL_LEAVE_ADD: 'Special Leave Add',
-  LEAVE_ENCASHMENT_DEDUCTION: 'Leave Encashment Deduction',
-};
-
 export default async function LeaveBalancePage({
   searchParams,
 }: {
@@ -53,6 +44,7 @@ export default async function LeaveBalancePage({
   const currentYear = new Date().getUTCFullYear();
 
   const filters = {
+    q: sp.q || '',
     year: Number(sp.year || currentYear),
     branchId: sp.branchId || '',
     department: sp.department || '',
@@ -64,7 +56,7 @@ export default async function LeaveBalancePage({
     error: sp.error || '',
   };
 
-  const [branches, employees, rows, adjustments] = await Promise.all([
+  const [branches, employees, leaveTypes, summaries, adjustments] = await Promise.all([
     prisma.branch.findMany({
       where: { isActive: true },
       select: { id: true, code: true, name: true },
@@ -82,7 +74,9 @@ export default async function LeaveBalancePage({
       },
       orderBy: [{ code: 'asc' }],
     }),
-    leaveBalanceService.listBalances(session, {
+    leaveTypesService.listActive(session),
+    leaveBalanceService.listEmployeeSummaries(session, {
+      q: filters.q || undefined,
       year: filters.year,
       branchId: filters.branchId || undefined,
       department: filters.department || undefined,
@@ -99,32 +93,59 @@ export default async function LeaveBalancePage({
     }),
   ]);
 
-  const departmentOptions = Array.from(new Set(employees.map((employee) => employee.department).filter(Boolean) as string[])).sort((a, b) =>
-    a.localeCompare(b),
-  );
-  const designationOptions = Array.from(new Set(employees.map((employee) => employee.designation).filter(Boolean) as string[])).sort((a, b) =>
-    a.localeCompare(b),
-  );
+  const departmentOptions = Array.from(
+    new Set(employees.map((employee) => employee.department).filter(Boolean) as string[]),
+  ).sort((a, b) => a.localeCompare(b));
+  const designationOptions = Array.from(
+    new Set(employees.map((employee) => employee.designation).filter(Boolean) as string[]),
+  ).sort((a, b) => a.localeCompare(b));
 
-  const totalEmployees = new Set(rows.map((row) => row.employeeId)).size;
-  const totalEntitledLeave = rows.reduce((sum, row) => sum + row.entitledDays, 0);
-  const usedLeave = rows.reduce((sum, row) => sum + row.approvedTakenDays, 0);
-  const pendingLeave = rows.reduce((sum, row) => sum + row.pendingLeaveDays, 0);
-  const availableLeave = rows.reduce((sum, row) => sum + row.availableBalance, 0);
-  const negativeBalanceEmployees = new Set(rows.filter((row) => row.status === 'NEGATIVE_BALANCE').map((row) => row.employeeId)).size;
-
+  const totalEmployees = summaries.length;
+  const totalEntitledLeave = summaries.reduce((sum, row) => sum + row.totalEntitledDays, 0);
+  const usedLeave = summaries.reduce((sum, row) => sum + row.totalApprovedTakenDays, 0);
+  const pendingLeave = summaries.reduce((sum, row) => sum + row.totalPendingLeaveDays, 0);
+  const negativeBalanceEmployees = summaries.filter((row) => row.status === 'NEGATIVE_BALANCE').length;
   const yearOptions = Array.from({ length: 5 }, (_, index) => currentYear - 2 + index);
+  const queryString = buildQueryString({
+    q: filters.q,
+    year: String(filters.year),
+    branchId: filters.branchId,
+    department: filters.department,
+    designation: filters.designation,
+    employeeId: filters.employeeId,
+    leaveType: filters.leaveType,
+    balanceStatus: filters.balanceStatus,
+  });
+
+  const exportRows = summaries.map((row) => ({
+    employeeCode: row.employeeCode,
+    employeeName: row.employeeName,
+    department: row.department ?? '',
+    designation: row.designation ?? '',
+    leavePolicy: row.leavePolicy,
+    year: row.leaveYear,
+    entitled: row.totalEntitledDays,
+    used: row.totalApprovedTakenDays,
+    pending: row.totalPendingLeaveDays,
+    carryForward: row.totalCarryForwardDays,
+    available: row.hasUnlimitedBalance ? 'Mixed' : row.totalAvailableBalance,
+    status: statusLabel(row.status),
+  }));
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Leave Balance"
-        description="Track employee-wise leave entitlement, usage, carry forward, and HR adjustments."
+        description="Review employee-wise balances generated from leave policy, approvals, and carry forward."
       >
         <Button asChild variant="outline">
           <Link href="/hr/leaves">Leave Application</Link>
         </Button>
       </PageHeader>
+
+      <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-900">
+        Leave balances are system-generated. HR should only correct them through controlled manual adjustments with reasons and audit logs.
+      </div>
 
       {filters.success ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
@@ -146,6 +167,7 @@ export default async function LeaveBalancePage({
         <CardContent>
           <form className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <TextField label="Search Employee" name="q" defaultValue={filters.q} placeholder="Code or employee name" />
               <SelectField
                 label="Year"
                 name="year"
@@ -183,13 +205,13 @@ export default async function LeaveBalancePage({
                 label="Leave Type"
                 name="leaveType"
                 defaultValue={filters.leaveType}
-                options={LEAVE_TYPES.map((leaveType) => ({
-                  value: leaveType,
-                  label: leaveType.replaceAll('_', ' '),
+                options={leaveTypes.map((leaveType) => ({
+                  value: leaveType.code,
+                  label: leaveType.name,
                 }))}
               />
               <SelectField
-                label="Balance Status"
+                label="Status"
                 name="balanceStatus"
                 defaultValue={filters.balanceStatus}
                 options={BALANCE_STATUS_OPTIONS.map((status) => ({ value: status.value, label: status.label }))}
@@ -203,25 +225,47 @@ export default async function LeaveBalancePage({
                   Reset
                 </Link>
               </Button>
-              <LeaveBalanceActions rows={rows} />
+              <Button type="button" variant="outline" asChild>
+                <Link href={`/hr/leave-balance${queryString ? `?${queryString}` : ''}`}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh Balance
+                </Link>
+              </Button>
+              <LeaveBalanceActions
+                filename="leave-balance-employee-list.csv"
+                rows={exportRows}
+                columns={[
+                  { key: 'employeeCode', label: 'Employee Code' },
+                  { key: 'employeeName', label: 'Employee Name' },
+                  { key: 'department', label: 'Department' },
+                  { key: 'designation', label: 'Designation' },
+                  { key: 'leavePolicy', label: 'Leave Policy' },
+                  { key: 'year', label: 'Year' },
+                  { key: 'entitled', label: 'Entitled' },
+                  { key: 'used', label: 'Used' },
+                  { key: 'pending', label: 'Pending' },
+                  { key: 'carryForward', label: 'Carry Forward' },
+                  { key: 'available', label: 'Available' },
+                  { key: 'status', label: 'Status' },
+                ]}
+              />
             </div>
           </form>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <SummaryCard title="Total Employees" value={String(totalEmployees)} />
-        <SummaryCard title="Total Entitled Leave" value={`${totalEntitledLeave} Days`} />
-        <SummaryCard title="Used Leave" value={`${usedLeave} Days`} />
-        <SummaryCard title="Pending Leave" value={`${pendingLeave} Days`} />
-        <SummaryCard title="Available Leave" value={`${availableLeave} Days`} />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <SummaryCard title="Employees" value={String(totalEmployees)} />
+        <SummaryCard title="Entitled" value={`${totalEntitledLeave} Days`} />
+        <SummaryCard title="Used" value={`${usedLeave} Days`} />
+        <SummaryCard title="Pending" value={`${pendingLeave} Days`} />
         <SummaryCard title="Negative Balance" value={`${negativeBalanceEmployees} Employees`} tone="text-rose-600 dark:text-rose-400" />
       </div>
 
       <Card className="overflow-hidden border border-slate-200 dark:border-slate-800">
         <CardHeader>
           <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
-            Leave Balance Table
+            Employee Leave Balance List
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -230,45 +274,39 @@ export default async function LeaveBalancePage({
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-muted-foreground dark:bg-slate-900/60">
                 <tr>
                   <th className="px-4 py-3 text-left">Employee Code</th>
-                  <th className="px-4 py-3 text-left">Employee</th>
+                  <th className="px-4 py-3 text-left">Employee Name</th>
                   <th className="px-4 py-3 text-left">Department</th>
-                  <th className="px-4 py-3 text-left">Leave Type</th>
-                  <th className="px-4 py-3 text-right">Entitled</th>
-                  <th className="px-4 py-3 text-right">Taken</th>
-                  <th className="px-4 py-3 text-right">Pending</th>
-                  <th className="px-4 py-3 text-right">Adjusted</th>
-                  <th className="px-4 py-3 text-right">Carry Forward</th>
-                  <th className="px-4 py-3 text-right">Available</th>
+                  <th className="px-4 py-3 text-left">Year</th>
                   <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {rows.length === 0 ? (
+                {summaries.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
                       No leave balance rows found for the selected filters.
                     </td>
                   </tr>
                 ) : (
-                  rows.map((row) => (
-                    <tr key={`${row.employeeId}-${row.leaveType}`} className="hover:bg-slate-50/40 dark:hover:bg-slate-900/10">
+                  summaries.map((row) => (
+                    <tr key={row.employeeId} className="hover:bg-slate-50/40 dark:hover:bg-slate-900/10">
                       <td className="px-4 py-3 font-mono text-xs font-semibold">{row.employeeCode}</td>
                       <td className="px-4 py-3">
                         <div className="font-semibold text-slate-900 dark:text-slate-100">{row.employeeName}</div>
                         <div className="text-xs text-muted-foreground">
-                          {row.designation || '—'} · {row.branchName}
+                          {row.designation || '—'} · {row.branchName} · {row.leavePolicy}
                         </div>
                       </td>
                       <td className="px-4 py-3">{row.department || '—'}</td>
-                      <td className="px-4 py-3">{row.leaveType.replaceAll('_', ' ')}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{row.entitledDays}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{row.approvedTakenDays}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{row.pendingLeaveDays}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{row.manualAdjustmentDays}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{row.carryForwardDays}</td>
-                      <td className="px-4 py-3 text-right font-bold tabular-nums">{row.availableBalance}</td>
+                      <td className="px-4 py-3">{row.leaveYear}</td>
                       <td className="px-4 py-3">
                         <Badge variant={statusVariant(row.status)}>{statusLabel(row.status)}</Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Button type="button" size="sm" variant="outline" asChild>
+                          <Link href={`/hr/leave-balance/${row.employeeId}?year=${row.leaveYear}`}>View</Link>
+                        </Button>
                       </td>
                     </tr>
                   ))
@@ -279,108 +317,48 @@ export default async function LeaveBalancePage({
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_1fr]">
-        <Card className="border border-slate-200 dark:border-slate-800">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
-              <ShieldPlus className="h-4 w-4" />
-              HR Manual Adjustment
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={createLeaveBalanceAdjustmentAction} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <SelectField
-                  label="Employee"
-                  name="employeeId"
-                  defaultValue={filters.employeeId}
-                  options={employees.map((employee) => ({
-                    value: employee.id,
-                    label: `${employee.code} · ${employee.firstName} ${employee.lastName}`,
-                  }))}
-                />
-                <SelectField
-                  label="Leave Type"
-                  name="leaveType"
-                  defaultValue={filters.leaveType}
-                  options={LEAVE_TYPES.map((leaveType) => ({
-                    value: leaveType,
-                    label: leaveType.replaceAll('_', ' '),
-                  }))}
-                />
-                <SelectField
-                  label="Adjustment Type"
-                  name="adjustmentType"
-                  defaultValue=""
-                  options={leaveBalanceService.adjustmentTypes.map((type) => ({
-                    value: type,
-                    label: ADJUSTMENT_TYPE_LABELS[type] ?? type,
-                  }))}
-                />
-                <Field label="Adjustment Days" name="adjustmentDays" type="number" step="0.5" required />
-                <SelectField
-                  label="Leave Year"
-                  name="leaveYear"
-                  defaultValue={String(filters.year)}
-                  options={yearOptions.map((year) => ({ value: String(year), label: String(year) }))}
-                />
-                <Field label="Attachment URL / Path" name="attachmentPath" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="reason" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Reason
-                </Label>
-                <textarea
-                  id="reason"
-                  name="reason"
-                  required
-                  rows={4}
-                  className="flex min-h-[110px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button type="submit">Save Adjustment</Button>
-                <Button type="reset" variant="outline">Cancel</Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-slate-200 dark:border-slate-800">
-          <CardHeader>
-            <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
-              Adjustment History
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {adjustments.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No leave balance adjustments recorded yet.</p>
-            ) : (
-              adjustments.map((adjustment) => (
-                <div key={adjustment.id} className="rounded-lg border border-slate-100 bg-slate-50/50 p-3 dark:border-slate-800 dark:bg-slate-900/20">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-slate-100">{adjustment.adjustmentNo}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {adjustment.employee.code} · {adjustment.employee.name}
-                      </p>
-                    </div>
-                    <Badge variant={adjustment.days >= 0 ? 'success' : 'destructive'}>
-                      {adjustment.days >= 0 ? '+' : ''}{adjustment.days}
-                    </Badge>
+      <Card className="border border-slate-200 dark:border-slate-800">
+        <CardHeader>
+          <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+            Recent Adjustment Log
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {adjustments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No leave balance adjustments recorded yet.</p>
+          ) : (
+            adjustments.slice(0, 8).map((adjustment) => (
+              <div key={adjustment.id} className="rounded-lg border border-slate-100 bg-slate-50/50 p-3 dark:border-slate-800 dark:bg-slate-900/20">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{adjustment.adjustmentNo}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {adjustment.employee.code} · {adjustment.employee.name} · {adjustment.adjustedByName ?? 'System'}
+                    </p>
                   </div>
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    {ADJUSTMENT_TYPE_LABELS[adjustment.adjustmentType] ?? adjustment.adjustmentType} · {adjustment.leaveType.replaceAll('_', ' ')} · {adjustment.leaveYear}
-                  </div>
-                  <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{adjustment.reason}</p>
+                  <Badge variant={adjustment.days >= 0 ? 'success' : 'destructive'}>
+                    {adjustment.days >= 0 ? '+' : ''}{adjustment.days}
+                  </Badge>
                 </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  {adjustment.leaveType.replaceAll('_', ' ')} · {adjustment.leaveYear}
+                </div>
+                <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{adjustment.reason}</p>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
+}
+
+function buildQueryString(values: Record<string, string>) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    if (value) params.set(key, value);
+  }
+  return params.toString();
 }
 
 function SummaryCard({
@@ -404,25 +382,23 @@ function SummaryCard({
   );
 }
 
-function Field({
+function TextField({
   label,
   name,
-  type = 'text',
-  step,
-  required = false,
+  defaultValue,
+  placeholder,
 }: {
   label: string;
   name: string;
-  type?: string;
-  step?: string;
-  required?: boolean;
+  defaultValue: string;
+  placeholder?: string;
 }) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={name} className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </Label>
-      <Input id={name} name={name} type={type} step={step} required={required} />
+      <Input id={name} name={name} defaultValue={defaultValue} placeholder={placeholder} />
     </div>
   );
 }

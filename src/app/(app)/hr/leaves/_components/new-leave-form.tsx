@@ -38,7 +38,21 @@ export function NewLeaveForm({ employees, types }: Props) {
   const [halfDay, setHalfDay] = useState<boolean>(false);
   const [halfDayType, setHalfDayType] = useState<string>('FIRST_HALF');
 
-  const [balances, setBalances] = useState<Record<string, { entitled: number; taken: number; pending: number; available: number }> | null>(null);
+  const [balances, setBalances] = useState<
+    Record<
+      string,
+      {
+        entitled: number;
+        used: number;
+        pending: number;
+        carryForward: number;
+        encashed: number;
+        available: number;
+        isUnlimited: boolean;
+        status: string;
+      }
+    > | null
+  >(null);
   const [policyName, setPolicyName] = useState<string>('Loading...');
   const [availableTypes, setAvailableTypes] = useState<string[]>(types);
   const [loadingBalance, setLoadingBalance] = useState<boolean>(false);
@@ -83,7 +97,11 @@ export function NewLeaveForm({ employees, types }: Props) {
 
   const reqDays = getRequestedDays();
   const currentBalance = balances?.[selectedType];
-  const balanceAfterApproval = currentBalance ? Math.max(0, currentBalance.available - reqDays) : 0;
+  const balanceAfterApproval = currentBalance
+    ? currentBalance.isUnlimited
+      ? Number.MAX_SAFE_INTEGER
+      : currentBalance.available - reqDays
+    : 0;
 
   // Handle submit validation
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -92,7 +110,7 @@ export function NewLeaveForm({ employees, types }: Props) {
       alert('Invalid date range');
       return;
     }
-    if (selectedType !== 'UNPAID' && currentBalance && currentBalance.available < reqDays) {
+    if (selectedType !== 'UNPAID' && currentBalance && !currentBalance.isUnlimited && currentBalance.available < reqDays) {
       e.preventDefault();
       alert('Insufficient leave balance for this type.');
       return;
@@ -310,13 +328,13 @@ export function NewLeaveForm({ employees, types }: Props) {
                   <div className="bg-white dark:bg-slate-950 p-2.5 rounded border border-slate-100 dark:border-slate-800">
                     <span className="text-[10px] text-muted-foreground uppercase block font-semibold">Entitled</span>
                     <span className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                      {currentBalance?.entitled ?? 0} Days
+                      {currentBalance?.isUnlimited ? 'Unlimited' : `${currentBalance?.entitled ?? 0} Days`}
                     </span>
                   </div>
                   <div className="bg-white dark:bg-slate-950 p-2.5 rounded border border-slate-100 dark:border-slate-800">
-                    <span className="text-[10px] text-muted-foreground uppercase block font-semibold">Taken</span>
+                    <span className="text-[10px] text-muted-foreground uppercase block font-semibold">Used</span>
                     <span className="text-lg font-bold text-slate-500">
-                      {currentBalance?.taken ?? 0} Days
+                      {currentBalance?.used ?? 0} Days
                     </span>
                   </div>
                   <div className="bg-white dark:bg-slate-950 p-2.5 rounded border border-slate-100 dark:border-slate-800">
@@ -326,21 +344,21 @@ export function NewLeaveForm({ employees, types }: Props) {
                     </span>
                   </div>
                   <div className="bg-white dark:bg-slate-950 p-2.5 rounded border border-slate-100 dark:border-slate-800">
-                    <span className="text-[10px] text-muted-foreground uppercase block font-semibold">Available</span>
-                    <span className="text-lg font-bold text-emerald-500">
-                      {currentBalance?.available ?? 0} Days
+                    <span className="text-[10px] text-muted-foreground uppercase block font-semibold">Carry Forward</span>
+                    <span className="text-lg font-bold text-sky-600">
+                      {currentBalance?.carryForward ?? 0} Days
                     </span>
                   </div>
                   <div className="bg-white dark:bg-slate-950 p-2.5 rounded border border-slate-100 dark:border-slate-800">
-                    <span className="text-[10px] text-muted-foreground uppercase block font-semibold">Requested</span>
-                    <span className="text-lg font-bold text-blue-500">
-                      {reqDays} Days
+                    <span className="text-[10px] text-muted-foreground uppercase block font-semibold">Available</span>
+                    <span className="text-lg font-bold text-emerald-500">
+                      {currentBalance?.isUnlimited ? 'Unlimited' : `${currentBalance?.available ?? 0} Days`}
                     </span>
                   </div>
                   <div className="bg-white dark:bg-slate-950 p-2.5 rounded border border-slate-100 dark:border-slate-800">
                     <span className="text-[10px] text-muted-foreground uppercase block font-semibold">Balance After</span>
                     <span className={`text-lg font-bold ${balanceAfterApproval < 0 ? 'text-rose-500' : 'text-indigo-500'}`}>
-                      {balanceAfterApproval} Days
+                      {currentBalance?.isUnlimited ? 'Unlimited' : `${balanceAfterApproval} Days`}
                     </span>
                   </div>
                 </div>
@@ -376,11 +394,15 @@ export function NewLeaveForm({ employees, types }: Props) {
                     <Badge variant="outline" className="text-[9px] uppercase tracking-wide px-1.5 py-0">
                       {type.replace('_', ' ')}
                     </Badge>
-                    <span className="text-[10px] text-muted-foreground font-mono">Entitled: {bal.entitled}d</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {bal.isUnlimited ? 'Unlimited' : `Entitled: ${bal.entitled}d`}
+                    </span>
                   </div>
                   <div className="mt-2 flex justify-between items-baseline">
                     <span className="text-[10px] text-muted-foreground">Available:</span>
-                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{bal.available} Days</span>
+                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                      {bal.isUnlimited ? 'Unlimited' : `${bal.available} Days`}
+                    </span>
                   </div>
                 </div>
               ))}

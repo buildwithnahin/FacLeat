@@ -52,12 +52,34 @@ function hasWorkflowDelegates(client: PrismaClient | undefined): client is Prism
     typeof client.leavePolicy === 'object' &&
     'leavePolicyRule' in client &&
     typeof client.leavePolicyRule === 'object' &&
+    'leaveType' in client &&
+    typeof client.leaveType === 'object' &&
     'employeeLeavePolicy' in client &&
     typeof client.employeeLeavePolicy === 'object' &&
     'employeeSalaryHistory' in client &&
     typeof client.employeeSalaryHistory === 'object' &&
     'employeeTransfer' in client &&
-    typeof client.employeeTransfer === 'object'
+    typeof client.employeeTransfer === 'object' &&
+    'salaryComponent' in client &&
+    typeof client.salaryComponent === 'object' &&
+    'salaryStructure' in client &&
+    typeof client.salaryStructure === 'object' &&
+    'employeeSalaryStructureAssignment' in client &&
+    typeof client.employeeSalaryStructureAssignment === 'object' &&
+    'payrollPeriod' in client &&
+    typeof client.payrollPeriod === 'object' &&
+    'loanRequest' in client &&
+    typeof client.loanRequest === 'object' &&
+    'loanRepaymentSchedule' in client &&
+    typeof client.loanRepaymentSchedule === 'object' &&
+    'bonus' in client &&
+    typeof client.bonus === 'object' &&
+    'employeeBonus' in client &&
+    typeof client.employeeBonus === 'object' &&
+    'payrollAdjustment' in client &&
+    typeof client.payrollAdjustment === 'object' &&
+    'finalSettlement' in client &&
+    typeof client.finalSettlement === 'object'
   );
 }
 

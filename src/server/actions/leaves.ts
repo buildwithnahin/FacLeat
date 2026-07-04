@@ -70,6 +70,23 @@ export async function decideLeaveAction(fd: FormData) {
   }
 }
 
+export async function bulkDecideLeaveAction(fd: FormData) {
+  const idsStr = String(fd.get('ids') ?? '[]');
+  const stage = String(fd.get('stage') ?? '') as any;
+  const action = String(fd.get('action') ?? '') as any;
+  const remarks = fd.get('remarks') ? String(fd.get('remarks')) : null;
+
+  try {
+    const ids = JSON.parse(idsStr) as string[];
+    const session = await getSession();
+    await leavesService.bulkDecide(session, { ids, stage, action, remarks });
+    revalidatePath(PATH);
+    revalidatePath('/hr/leave-approval');
+  } catch (e) {
+    // silently ignore or handle
+  }
+}
+
 export async function withdrawLeaveAction(fd: FormData) {
   const id = String(fd.get('id') ?? '');
   if (!id) return;

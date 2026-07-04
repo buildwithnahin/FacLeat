@@ -1,6 +1,5 @@
 {
-  "/(app)/dashboard/page": "app/(app)/dashboard/page.js",
-  "/(app)/hr/leave-policy/page": "app/(app)/hr/leave-policy/page.js",
-  "/(app)/hr/[...slug]/page": "app/(app)/hr/[...slug]/page.js",
-  "/(app)/hr/payroll/page": "app/(app)/hr/payroll/page.js"
+  "/api/sse/notifications/route": "app/api/sse/notifications/route.js",
+  "/(app)/hr/attendance/page": "app/(app)/hr/attendance/page.js",
+  "/(app)/hr/attendance-adjustment/page": "app/(app)/hr/attendance-adjustment/page.js"
 }

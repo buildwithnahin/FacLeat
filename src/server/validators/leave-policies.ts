@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { LEAVE_TYPES } from './hr';
 
 export const LEAVE_POLICY_STATUSES = ['DRAFT', 'ACTIVE', 'INACTIVE', 'EXPIRED', 'ARCHIVED'] as const;
 export const LEAVE_ACCRUAL_METHODS = [
@@ -30,7 +29,7 @@ const optionalString = z
   });
 
 export const leavePolicyRuleSchema = z.object({
-  leaveType: z.enum(LEAVE_TYPES),
+  leaveType: z.string().trim().min(1).max(40),
   leaveCode: z.string().trim().min(1).max(32),
   paidLeave: z.boolean().default(true),
   entitledDays: optionalNumber,
@@ -48,8 +47,6 @@ export const leavePolicyRuleSchema = z.object({
   sandwichRuleApplicable: z.boolean().default(false),
   carryForwardAllowed: z.boolean().default(false),
   maxCarryForwardDays: optionalNumber,
-  encashmentAllowed: z.boolean().default(false),
-  maxEncashmentDays: optionalNumber,
   payrollImpact: z.enum(LEAVE_PAYROLL_IMPACTS),
   status: z.string().trim().min(1).max(40).default('ACTIVE'),
 }).superRefine((value, ctx) => {
@@ -68,14 +65,6 @@ export const leavePolicyRuleSchema = z.object({
       path: ['maxCarryForwardDays'],
     });
   }
-
-  if (value.encashmentAllowed && value.maxEncashmentDays != null && value.maxEncashmentDays < 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Max encashment days cannot be negative.',
-      path: ['maxEncashmentDays'],
-    });
-  }
 });
 
 const leavePolicyFields = {
@@ -84,7 +73,7 @@ const leavePolicyFields = {
   branchId: optionalString,
   department: optionalString,
   designation: optionalString,
-  employmentType: optionalString,
+  employmentType: z.string().trim().min(1, 'Employment type is required.').max(80),
   employeeCategory: optionalString,
   gender: optionalString,
   grade: optionalString,
@@ -103,8 +92,6 @@ const leavePolicyFields = {
   maxCarryForwardDays: optionalNumber,
   carryForwardExpiryMonth: optionalNumber,
   carryForwardExpiryDay: optionalNumber,
-  encashmentAllowed: z.boolean().default(false),
-  maxEncashmentDays: optionalNumber,
   autoClosing: z.boolean().default(false),
   payrollImpactDefault: z.enum(LEAVE_PAYROLL_IMPACTS).default('NO_PAYROLL_IMPACT'),
   assignedEmployeeIds: z.array(z.string().cuid()).default([]),
@@ -135,6 +122,16 @@ const refineLeavePolicy = (
       });
     }
     uniqueTypes.add(rule.leaveType);
+
+    if (!rule.isUnlimited && rule.entitledDays != null) {
+      if (rule.maxCarryForwardDays != null && rule.maxCarryForwardDays > rule.entitledDays) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Carry forward cannot exceed annual entitlement for ${rule.leaveType}.`,
+          path: ['rules'],
+        });
+      }
+    }
   }
 };
 

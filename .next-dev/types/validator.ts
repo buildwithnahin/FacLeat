@@ -596,6 +596,24 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/(app)/hr/bonus/[id]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/bonus/[id]">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/bonus/[id]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/bonus/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/bonus">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/bonus/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/(app)/hr/candidates/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/hr/candidates">> = Specific
@@ -681,6 +699,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends AppPageConfig<"/hr/exit-clearance">> = Specific
   const handler = {} as typeof import("../../src/app/(app)/hr/exit-clearance/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/final-settlement/[id]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/final-settlement/[id]">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/final-settlement/[id]/page.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check
@@ -776,6 +803,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/(app)/hr/leave-balance/[employeeId]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/leave-balance/[employeeId]">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/leave-balance/[employeeId]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/(app)/hr/leave-balance/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/hr/leave-balance">> = Specific
@@ -794,10 +830,37 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/(app)/hr/leave-types/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/leave-types">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/leave-types/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/(app)/hr/leaves/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/hr/leaves">> = Specific
   const handler = {} as typeof import("../../src/app/(app)/hr/leaves/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/loans-advances/[id]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/loans-advances/[id]">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/loans-advances/[id]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/loans-advances/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/loans-advances">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/loans-advances/page.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check
@@ -839,6 +902,69 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/(app)/hr/payroll-adjustment/[id]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/payroll-adjustment/[id]">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/payroll-adjustment/[id]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/payroll-adjustment/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/payroll-adjustment">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/payroll-adjustment/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/payroll-period/[id]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/payroll-period/[id]">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/payroll-period/[id]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/payroll-period/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/payroll-period">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/payroll-period/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/payroll-run/[id]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/payroll-run/[id]">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/payroll-run/[id]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/payroll-run/[id]/payslips/[payslipId]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/payroll-run/[id]/payslips/[payslipId]">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/payroll-run/[id]/payslips/[payslipId]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/payroll-run/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/payroll-run">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/payroll-run/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/(app)/hr/payroll/[id]/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/hr/payroll/[id]">> = Specific
@@ -852,6 +978,24 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends AppPageConfig<"/hr/payroll">> = Specific
   const handler = {} as typeof import("../../src/app/(app)/hr/payroll/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/payslip/[id]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/payslip/[id]">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/payslip/[id]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/payslip/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/payslip">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/payslip/page.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check
@@ -875,10 +1019,100 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/(app)/hr/reports/attendance/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/reports/attendance">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/reports/attendance/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/reports/employee/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/reports/employee">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/reports/employee/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/reports/leave/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/reports/leave">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/reports/leave/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/reports/lifecycle/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/reports/lifecycle">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/reports/lifecycle/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/reports/payroll/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/reports/payroll">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/reports/payroll/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/reports/recruitment/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/reports/recruitment">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/reports/recruitment/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/(app)/hr/resignations/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/hr/resignations">> = Specific
   const handler = {} as typeof import("../../src/app/(app)/hr/resignations/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/salary-components/[id]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/salary-components/[id]">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/salary-components/[id]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/salary-components/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/salary-components">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/salary-components/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/salary-structure/[id]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/salary-structure/[id]">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/salary-structure/[id]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/(app)/hr/salary-structure/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/hr/salary-structure">> = Specific
+  const handler = {} as typeof import("../../src/app/(app)/hr/salary-structure/page.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check

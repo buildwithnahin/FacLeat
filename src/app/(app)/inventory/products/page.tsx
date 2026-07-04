@@ -1,17 +1,45 @@
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
+import type { ProductType } from '@prisma/client';
 import { getSession } from '@/server/auth/session';
 import { productService } from '@/server/services/product.service';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
+import {
+  INVENTORY_SECTION_META,
+  INVENTORY_SECTION_SLUGS,
+  parseInventorySection,
+} from '@/lib/inventory-sections';
 import { ProductsBrowser, type ProductRow } from './products-browser';
 
 export const metadata = { title: 'Products' };
 
-export default async function ProductsPage() {
+type ProductsPageProps = {
+  searchParams: Promise<{ section?: string }>;
+};
+
+function sectionToProductType(section: ReturnType<typeof parseInventorySection>): ProductType | undefined {
+  switch (section) {
+    case 'raw-material':
+      return 'RAW_MATERIAL';
+    case 'work-in-progress':
+      return 'WORK_IN_PROGRESS';
+    case 'finished-goods':
+      return 'FINISHED_GOOD';
+    default:
+      return undefined;
+  }
+}
+
+export default async function ProductsPage({ searchParams }: ProductsPageProps) {
   const session = await getSession();
-  const products = await productService.list(session);
+  const sp = await searchParams;
+  const section = parseInventorySection(sp.section) ?? 'raw-material';
+  const products = await productService.list(session, {
+    type: sectionToProductType(section),
+  });
   const canWrite = session?.permissions.includes('inventory:write') ?? false;
+  const sectionMeta = INVENTORY_SECTION_META[section];
 
   const rows: ProductRow[] = products.map((p) => ({
     id: p.id,
@@ -29,7 +57,10 @@ export default async function ProductsPage() {
 
   return (
     <div>
-      <PageHeader title="Products" description="Master list of SKUs. Stock levels land with goods receiving / issue.">
+      <PageHeader
+        title={`${sectionMeta.label} Products`}
+        description={`${sectionMeta.description} This product list is filtered to ${sectionMeta.label.toLowerCase()} SKUs.`}
+      >
         {canWrite && (
           <Button asChild>
             <Link href="/inventory/products/new">
@@ -39,6 +70,14 @@ export default async function ProductsPage() {
           </Button>
         )}
       </PageHeader>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        {INVENTORY_SECTION_SLUGS.map((slug) => (
+          <Button key={slug} variant={section === slug ? 'default' : 'outline'} asChild>
+            <Link href={`/inventory/products?section=${slug}`}>{INVENTORY_SECTION_META[slug].label}</Link>
+          </Button>
+        ))}
+      </div>
 
       <ProductsBrowser products={rows} canWrite={canWrite} />
     </div>

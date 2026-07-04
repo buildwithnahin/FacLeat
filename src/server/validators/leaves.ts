@@ -1,9 +1,8 @@
 import { z } from 'zod';
-import { LEAVE_TYPES } from './hr';
 
 export const leaveApplicationSchema = z.object({
   employeeId: z.string().cuid(),
-  type: z.enum(LEAVE_TYPES),
+  type: z.string().trim().min(1).max(40),
   fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid from date format (YYYY-MM-DD)'),
   toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid to date format (YYYY-MM-DD)'),
   halfDay: z.boolean().default(false),
@@ -26,7 +25,7 @@ export const leaveApplicationSchema = z.object({
 export const leaveApprovalSchema = z.object({
   id: z.string().cuid(),
   stage: z.enum(['manager', 'hr']),
-  action: z.enum(['approve', 'reject', 'send-back', 'cancel']),
+  action: z.enum(['approve', 'reject', 'return', 'cancel']),
   remarks: z.string().trim().max(500).optional().nullable(),
 });
 

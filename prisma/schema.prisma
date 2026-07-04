@@ -563,6 +563,7 @@ model Branch {
   employeeTransfersToNewBranch  EmployeeTransfer[] @relation("TransferNewBranch")
   employeeTransfersToTempBranch EmployeeTransfer[] @relation("TransferTempBranch")
   leavePolicies                 LeavePolicy[]
+  leaveTypes                    LeaveType[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2656,20 +2657,7 @@ enum AttendanceStatus {
   OFFICIAL_DUTY
 }
 
-enum LeaveType {
-  CASUAL
-  SICK
-  EARNED
-  ANNUAL
-  MATERNITY
-  PATERNITY
-  EMERGENCY
-  UNPAID
-  COMPENSATORY
-  SPECIAL
-  FESTIVAL
-  OTHER
-}
+
 
 enum LeaveStatus {
   DRAFT
@@ -2677,16 +2665,36 @@ enum LeaveStatus {
   PENDING_HR
   APPROVED
   REJECTED
+  RETURNED
   CANCELLED
   WITHDRAWN
 }
 
 enum PayrollRunStatus {
   DRAFT
+  PREPARING
+  CALCULATED
+  PENDING_HR
+  PENDING_FINANCE
+  PENDING_MANAGEMENT
   APPROVED
   PAID
+  COMPLETED
+  CLOSED
   LOCKED
   CANCELLED
+}
+
+enum PayslipStatus {
+  GENERATED
+  PUBLISHED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
 }
 
 enum AttendanceAdjustmentType {
@@ -2869,6 +2877,11 @@ model Employee {
   attendanceSummaryRecords AttendanceSummaryRecord[]
   leaveBalanceAdjustments LeaveBalanceAdjustment[]
   leavePolicies           EmployeeLeavePolicy[]
+  salaryStructureAssignments EmployeeSalaryStructureAssignment[]
+  loans                    LoanRequest[]
+  bonuses                  EmployeeBonus[]
+  payrollAdjustments       PayrollAdjustment[]
+  finalSettlements         FinalSettlement[]
 
   createdById String?
   updatedById String?
@@ -3438,6 +3451,7 @@ model EmployeeResignation {
   archivedAt            DateTime?
 
   exitClearance         EmployeeExitClearance?
+  finalSettlement       FinalSettlement?
 
   createdById           String?
   updatedById           String?
@@ -3769,7 +3783,7 @@ model LeaveRequest {
   leaveRequestNo    String       @unique
   employeeId        String
   employee          Employee     @relation("EmployeeLeaves", fields: [employeeId], references: [id], onDelete: Cascade)
-  type              LeaveType
+  type              String
   fromDate          DateTime     @db.Date
   toDate            DateTime     @db.Date
   days              Decimal      @db.Decimal(18, 2)
@@ -3807,6 +3821,48 @@ model LeaveRequest {
   @@index([fromDate, toDate])
 }
 
+model LeaveType {
+  id                         String    @id @default(cuid())
+  code                       String    @unique
+  name                       String
+  description                String?
+  status                     String    @default("ACTIVE")
+  paidLeave                  Boolean   @default(true)
+  annualEntitlement          Decimal?  @db.Decimal(18, 2)
+  maxConsecutiveDays         Decimal?  @db.Decimal(18, 2)
+  minimumLeaveDays           Decimal?  @db.Decimal(18, 2)
+  applyBeforeDays            Int?
+  unit                       String    @default("FULL_DAY")
+  applicableEmploymentTypes  Json?
+  genderApplicability        String    @default("ALL")
+  applicableDepartment       String?
+  applicableDesignation      String?
+  applicableBranchId         String?
+  applicableBranch           Branch?   @relation(fields: [applicableBranchId], references: [id], onDelete: SetNull)
+  attachmentRequired         Boolean   @default(false)
+  medicalCertificateRequired Boolean   @default(false)
+  allowHalfDay               Boolean   @default(false)
+  allowBackdatedApplication  Boolean   @default(false)
+  allowFutureApplication     Boolean   @default(true)
+  approvalRequired           Boolean   @default(true)
+  autoApprove                Boolean   @default(false)
+  holidayIncluded            Boolean   @default(false)
+  weekendIncluded            Boolean   @default(false)
+  carryForwardAllowed        Boolean   @default(false)
+  maximumCarryForwardDays    Decimal?  @db.Decimal(18, 2)
+  carryForwardExpiryMonths   Int?
+  requiredAttachmentTypes    Json?
+  allowNegativeBalance       Boolean   @default(false)
+  displayOrder               Int       @default(0)
+  createdById                String?
+  updatedById                String?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
+  @@index([status, displayOrder])
+  @@index([applicableBranchId, status])
+}
+
 model LeavePolicy {
   id                       String    @id @default(cuid())
   policyCode               String    @unique
@@ -3834,8 +3890,6 @@ model LeavePolicy {
   maxCarryForwardDays      Decimal?  @db.Decimal(18, 2)
   carryForwardExpiryMonth  Int?
   carryForwardExpiryDay    Int?
-  encashmentAllowed        Boolean   @default(false)
-  maxEncashmentDays        Decimal?  @db.Decimal(18, 2)
   autoClosing              Boolean   @default(false)
   payrollImpactDefault     String    @default("NO_PAYROLL_IMPACT")
   createdById              String?
@@ -3855,7 +3909,7 @@ model LeavePolicyRule {
   id                     String      @id @default(cuid())
   policyId               String
   policy                 LeavePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
-  leaveType              LeaveType
+  leaveType              String
   leaveCode              String
   paidLeave              Boolean     @default(true)
   entitledDays           Decimal?    @db.Decimal(18, 2)
@@ -3873,8 +3927,6 @@ model LeavePolicyRule {
   sandwichRuleApplicable Boolean     @default(false)
   carryForwardAllowed    Boolean     @default(false)
   maxCarryForwardDays    Decimal?    @db.Decimal(18, 2)
-  encashmentAllowed      Boolean     @default(false)
-  maxEncashmentDays      Decimal?    @db.Decimal(18, 2)
   payrollImpact          String      @default("NO_PAYROLL_IMPACT")
   status                 String      @default("ACTIVE")
   createdAt              DateTime    @default(now())
@@ -3906,7 +3958,7 @@ model LeaveBalanceAdjustment {
   adjustmentNo   String    @unique
   employeeId     String
   employee       Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  leaveType      LeaveType
+  leaveType      String
   leaveYear      Int
   adjustmentType String
   days           Decimal   @db.Decimal(18, 2)
@@ -3975,16 +4027,29 @@ model PayrollRun {
   branch   Branch           @relation(fields: [branchId], references: [id])
   /// YYYY-MM — e.g. "2026-04"
   period   String
+  payrollPeriodId String?
+  payrollPeriod   PayrollPeriod? @relation(fields: [payrollPeriodId], references: [id])
   status   PayrollRunStatus @default(DRAFT)
   notes    String?
 
+  totalEmployees Int @default(0)
   totalGross     Decimal @default(0) @db.Decimal(18, 2)
   totalDeduction Decimal @default(0) @db.Decimal(18, 2)
   totalNet       Decimal @default(0) @db.Decimal(18, 2)
+  
+  totalOT        Decimal @default(0) @db.Decimal(18, 2)
+  totalBonus     Decimal @default(0) @db.Decimal(18, 2)
+  totalLoan      Decimal @default(0) @db.Decimal(18, 2)
+  totalAdvance   Decimal @default(0) @db.Decimal(18, 2)
+  totalTax       Decimal @default(0) @db.Decimal(18, 2)
 
   payslips Payslip[]
 
   journalEntryId String? @unique
+
+  hrApproval   String?
+  financeApproval String?
+  managementApproval String?
 
   createdById  String?
   approvedById String?
@@ -4002,10 +4067,19 @@ model PayrollRun {
 
 model Payslip {
   id           String     @id @default(cuid())
+  no           String?    @unique
   payrollRunId String
   payrollRun   PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
   employeeId   String
   employee     Employee   @relation(fields: [employeeId], references: [id])
+
+  status       PayslipStatus @default(GENERATED)
+  paymentStatus PaymentStatus @default(PENDING)
+  paymentMethod String?
+  bankName      String?
+  bankAccount   String?
+  paymentDate   DateTime?
+  transactionRef String?
 
   workedDays Int
   leaveDays  Int @default(0)
@@ -4016,10 +4090,18 @@ model Payslip {
   transportAllowance Decimal @default(0) @db.Decimal(18, 2)
   medicalAllowance   Decimal @default(0) @db.Decimal(18, 2)
   otherAllowance     Decimal @default(0) @db.Decimal(18, 2)
+  attendanceBonus    Decimal @default(0) @db.Decimal(18, 2)
+  overtimeAmount     Decimal @default(0) @db.Decimal(18, 2)
   bonus              Decimal @default(0) @db.Decimal(18, 2)
+  payrollAdjustmentsAddition Decimal @default(0) @db.Decimal(18, 2)
 
   providentFund  Decimal @default(0) @db.Decimal(18, 2)
   taxDeduction   Decimal @default(0) @db.Decimal(18, 2)
+  loanDeduction  Decimal @default(0) @db.Decimal(18, 2)
+  advanceDeduction Decimal @default(0) @db.Decimal(18, 2)
+  lateDeduction  Decimal @default(0) @db.Decimal(18, 2)
+  absentDeduction Decimal @default(0) @db.Decimal(18, 2)
+  payrollAdjustmentsDeduction Decimal @default(0) @db.Decimal(18, 2)
   otherDeduction Decimal @default(0) @db.Decimal(18, 2)
 
   gross Decimal @db.Decimal(18, 2)
@@ -4389,4 +4471,550 @@ model CashEntry {
   @@index([branchId, date])
   @@index([type, branchId])
   @@index([contactId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Salary Components
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum SalaryComponentCategory {
+  EARNINGS
+  DEDUCTION
+}
+
+enum SalaryComponentType {
+  FIXED
+  VARIABLE
+}
+
+enum SalaryCalculationType {
+  FIXED_AMOUNT
+  PERCENTAGE
+  FORMULA
+  MANUAL_ENTRY
+}
+
+enum SalaryComponentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model SalaryComponent {
+  id                      String                  @id @default(cuid())
+  name                    String
+  code                    String                  @unique
+  description             String?
+  category                SalaryComponentCategory
+  type                    SalaryComponentType
+  calculationType         SalaryCalculationType
+  value                   Decimal?                @db.Decimal(18, 4) // Fixed amount or percentage
+  formula                 String?
+  baseComponent           String?                 // e.g., 'BASIC', 'GROSS'
+  
+  isTaxable               Boolean                 @default(true)
+  includeInGross          Boolean                 @default(true)
+  includeInNet            Boolean                 @default(true)
+  showInPayslip           Boolean                 @default(true)
+  isSystemGenerated       Boolean                 @default(false)
+  
+  isMandatory             Boolean                 @default(false)
+  isEditableDuringPayroll Boolean                 @default(false)
+  allowNegativeValue      Boolean                 @default(false)
+  maxAmount               Decimal?                @db.Decimal(18, 4)
+  minAmount               Decimal?                @db.Decimal(18, 4)
+  
+  status                  SalaryComponentStatus   @default(ACTIVE)
+
+  applicableEmploymentTypes String[]              
+  applicableDepartments     String[]
+  applicableDesignations    String[]
+
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+
+  @@index([category])
+  @@index([type])
+  @@index([status])
+  salaryStructureComponents SalaryStructureComponent[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Salary Structure
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum PayrollFrequency {
+  MONTHLY
+  WEEKLY
+  DAILY
+  HOURLY
+}
+
+enum SalaryStructureStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model SalaryStructure {
+  id              String                 @id @default(cuid())
+  name            String
+  code            String                 @unique
+  description     String?
+  status          SalaryStructureStatus  @default(ACTIVE)
+  
+  grossSalary     Decimal                @db.Decimal(18, 4)
+  netSalary       Decimal?               @db.Decimal(18, 4)
+
+  effectiveFrom   DateTime               @db.Date
+  effectiveTo     DateTime?              @db.Date
+  payrollFrequency PayrollFrequency      @default(MONTHLY)
+  currency        CurrencyCode           @default(BDT)
+
+  employmentTypes String[]
+  departmentIds   String[]
+  designationIds  String[]
+  branchIds       String[]
+  
+  notes           String?
+
+  components      SalaryStructureComponent[]
+  employeeAssignments EmployeeSalaryStructureAssignment[]
+
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([status])
+}
+
+model SalaryStructureComponent {
+  id                String          @id @default(cuid())
+  salaryStructureId String
+  salaryStructure   SalaryStructure @relation(fields: [salaryStructureId], references: [id], onDelete: Cascade)
+  salaryComponentId String
+  salaryComponent   SalaryComponent @relation(fields: [salaryComponentId], references: [id], onDelete: Restrict)
+  
+  value             Decimal         @db.Decimal(18, 4)
+  isAutoCalculated  Boolean         @default(false)
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([salaryStructureId, salaryComponentId])
+}
+
+model EmployeeSalaryStructureAssignment {
+  id                String          @id @default(cuid())
+  employeeId        String
+  employee          Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  salaryStructureId String
+  salaryStructure   SalaryStructure @relation(fields: [salaryStructureId], references: [id], onDelete: Restrict)
+  effectiveFrom     DateTime        @db.Date
+  effectiveTo       DateTime?       @db.Date
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([employeeId])
+  @@index([salaryStructureId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payroll Period
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum PayrollPeriodStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+model PayrollPeriod {
+  id                      String              @id @default(cuid())
+  name                    String
+  code                    String              @unique
+  month                   Int
+  year                    Int
+  
+  startDate               DateTime            @db.Date
+  endDate                 DateTime            @db.Date
+  processingDate          DateTime?           @db.Date
+  paymentDate             DateTime?           @db.Date
+  
+  attendanceCutoffDate    DateTime?           @db.Date
+  overtimeCutoffDate      DateTime?           @db.Date
+  leaveCutoffDate         DateTime?           @db.Date
+  
+  includeAttendance       Boolean             @default(true)
+  includeLeave            Boolean             @default(true)
+  includeOvertime         Boolean             @default(true)
+  includeBonus            Boolean             @default(true)
+  includeLoanDeduction    Boolean             @default(true)
+  includeSalaryAdvance    Boolean             @default(true)
+  includeTax              Boolean             @default(true)
+  
+  allowReprocessing       Boolean             @default(false)
+  autoCloseAfterPayroll   Boolean             @default(true)
+  lockPayrollAfterClosing Boolean             @default(true)
+  
+  status                  PayrollPeriodStatus @default(DRAFT)
+  
+  payrollRuns             PayrollRun[]
+  payrollAdjustments      PayrollAdjustment[]
+
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  @@unique([month, year])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Loans & Advances
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum LoanType {
+  EMPLOYEE_LOAN
+  SALARY_ADVANCE
+}
+
+enum LoanPurpose {
+  MEDICAL
+  EDUCATION
+  EMERGENCY
+  PERSONAL
+  FESTIVAL
+  HOUSE_RENT
+  OTHERS
+}
+
+enum LoanInstallmentType {
+  MONTHLY
+  ONE_TIME
+}
+
+enum LoanStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_HR
+  PENDING_ACCOUNTS
+  PENDING_MANAGEMENT
+  APPROVED
+  DISBURSED
+  ACTIVE
+  COMPLETED
+  REJECTED
+  CLOSED
+}
+
+model LoanRequest {
+  id                    String              @id @default(cuid())
+  referenceNo           String              @unique
+  requestType           LoanType            @default(EMPLOYEE_LOAN)
+  
+  employeeId            String
+  employee              Employee            @relation(fields: [employeeId], references: [id])
+  
+  loanAmount            Decimal             @db.Decimal(18, 4)
+  purpose               LoanPurpose
+  disbursementDate      DateTime            @db.Date
+  repaymentStartMonth   String              // YYYY-MM
+  
+  installmentType       LoanInstallmentType @default(MONTHLY)
+  numberOfInstallments  Int                 @default(1)
+  monthlyDeduction      Decimal             @db.Decimal(18, 4)
+  
+  outstandingBalance    Decimal             @default(0) @db.Decimal(18, 4)
+  paidAmount            Decimal             @default(0) @db.Decimal(18, 4)
+  
+  remarks               String?
+  
+  status                LoanStatus          @default(DRAFT)
+  
+  hrApprovalStatus      String?
+  accountsVerification  String?
+  managementDecision    String?
+  
+  repaymentSchedules    LoanRepaymentSchedule[]
+  
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([employeeId, status])
+  @@index([requestType])
+}
+
+enum RepaymentStatus {
+  PENDING
+  PAID
+  SKIPPED
+}
+
+model LoanRepaymentSchedule {
+  id              String          @id @default(cuid())
+  loanRequestId   String
+  loanRequest     LoanRequest     @relation(fields: [loanRequestId], references: [id], onDelete: Cascade)
+  
+  payrollMonth    String          // YYYY-MM
+  installment     Decimal         @db.Decimal(18, 4)
+  remainingBalance Decimal        @db.Decimal(18, 4)
+  
+  status          RepaymentStatus @default(PENDING)
+  payrollRunId    String?
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([loanRequestId])
+  @@index([payrollMonth])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bonus
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum BonusType {
+  FESTIVAL
+  ATTENDANCE
+  PRODUCTION
+  PERFORMANCE
+  SALES_INCENTIVE
+  SPECIAL
+  YEARLY
+  JOINING
+  RETENTION
+  OTHER
+}
+
+enum BonusCalculationMethod {
+  FIXED_AMOUNT
+  PERCENTAGE
+  FORMULA
+}
+
+enum BonusBasedOn {
+  BASIC_SALARY
+  GROSS_SALARY
+  NET_SALARY
+}
+
+enum BonusStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_HR
+  PENDING_MANAGEMENT
+  APPROVED
+  PUBLISHED
+  PAID
+  REJECTED
+  CLOSED
+}
+
+enum BonusPaymentMethod {
+  PAYROLL
+  CASH
+  BANK_TRANSFER
+}
+
+model Bonus {
+  id                      String                  @id @default(cuid())
+  name                    String
+  code                    String                  @unique
+  bonusType               BonusType               @default(FESTIVAL)
+  effectivePayrollMonth   String                  // YYYY-MM
+  description             String?
+  
+  calculationMethod       BonusCalculationMethod  @default(FIXED_AMOUNT)
+  amount                  Decimal?                @db.Decimal(18, 4)
+  percentage              Decimal?                @db.Decimal(18, 4)
+  basedOn                 BonusBasedOn?           
+  
+  minimumServiceMonths    Int                     @default(0)
+  
+  paymentMethod           BonusPaymentMethod      @default(PAYROLL)
+  paymentDate             DateTime?               @db.Date
+  includeInPayslip        Boolean                 @default(true)
+  
+  status                  BonusStatus             @default(DRAFT)
+  
+  hrApprovalStatus        String?
+  managementDecision      String?
+  remarks                 String?
+  
+  employeeBonuses         EmployeeBonus[]
+  
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+
+  @@index([effectivePayrollMonth])
+  @@index([status])
+}
+
+model EmployeeBonus {
+  id              String      @id @default(cuid())
+  bonusId         String
+  bonus           Bonus       @relation(fields: [bonusId], references: [id], onDelete: Cascade)
+  
+  employeeId      String
+  employee        Employee    @relation(fields: [employeeId], references: [id])
+  
+  amount          Decimal     @db.Decimal(18, 4)
+  
+  payrollRunId    String?
+  isPaid          Boolean     @default(false)
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([bonusId, employeeId])
+  @@index([employeeId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payroll Adjustment
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum PayrollAdjustmentType {
+  ALLOWANCE
+  DEDUCTION
+  BONUS_CORRECTION
+  SALARY_CORRECTION
+  TAX_ADJUSTMENT
+  OVERTIME_ADJUSTMENT
+  ATTENDANCE_ADJUSTMENT
+  LOAN_ADJUSTMENT
+  ADVANCE_ADJUSTMENT
+  OTHER
+}
+
+enum PayrollAdjustmentCategory {
+  ONE_TIME
+  RECURRING
+}
+
+enum PayrollAdjustmentReason {
+  ATTENDANCE_CORRECTION
+  MANUAL_BONUS
+  LATE_SALARY_REVISION
+  OT_CORRECTION
+  RECOVERY
+  OTHER
+}
+
+enum PayrollAdjustmentStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_HR
+  PENDING_MANAGEMENT
+  APPROVED
+  APPLIED
+  COMPLETED
+  REJECTED
+  CLOSED
+}
+
+model PayrollAdjustment {
+  id                      String                  @id @default(cuid())
+  no                      String                  @unique
+  
+  payrollPeriodId         String
+  payrollPeriod           PayrollPeriod           @relation(fields: [payrollPeriodId], references: [id], onDelete: Restrict)
+  
+  employeeId              String
+  employee                Employee                @relation(fields: [employeeId], references: [id])
+  
+  adjustmentDate          DateTime                @db.Date
+  
+  type                    PayrollAdjustmentType
+  category                PayrollAdjustmentCategory @default(ONE_TIME)
+  amount                  Decimal                 @db.Decimal(18, 4)
+  description             String?
+  
+  includeInGrossSalary    Boolean                 @default(true)
+  includeInTax            Boolean                 @default(false)
+  includeInPayslip        Boolean                 @default(true)
+  
+  reason                  PayrollAdjustmentReason
+  remarks                 String?
+  
+  status                  PayrollAdjustmentStatus @default(DRAFT)
+  
+  hrDecision              String?
+  managementDecision      String?
+  
+  payrollRunId            String?
+  
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+
+  @@index([payrollPeriodId])
+  @@index([employeeId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Final Settlement
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum FinalSettlementStatus {
+  DRAFT
+  CALCULATED
+  PENDING_HR
+  PENDING_FINANCE
+  PENDING_MANAGEMENT
+  APPROVED
+  PAID
+  CLOSED
+  REJECTED
+}
+
+model FinalSettlement {
+  id              String      @id @default(cuid())
+  no              String      @unique
+  
+  employeeId      String
+  employee        Employee    @relation(fields: [employeeId], references: [id])
+  
+  resignationId   String?     @unique
+  resignation     EmployeeResignation? @relation(fields: [resignationId], references: [id])
+  
+  separationType  String
+  lastWorkingDate DateTime    @db.Date
+  reason          String?
+  
+  // Earnings
+  pendingSalary   Decimal     @default(0) @db.Decimal(18, 2)
+  leaveEncashment Decimal     @default(0) @db.Decimal(18, 2)
+  overtimeAmount  Decimal     @default(0) @db.Decimal(18, 2)
+  bonusAmount     Decimal     @default(0) @db.Decimal(18, 2)
+  otherEarnings   Decimal     @default(0) @db.Decimal(18, 2)
+  totalEarnings   Decimal     @default(0) @db.Decimal(18, 2)
+  
+  // Deductions
+  loanRecovery    Decimal     @default(0) @db.Decimal(18, 2)
+  advanceRecovery Decimal     @default(0) @db.Decimal(18, 2)
+  incomeTax       Decimal     @default(0) @db.Decimal(18, 2)
+  noticePayRecovery Decimal   @default(0) @db.Decimal(18, 2)
+  assetRecovery   Decimal     @default(0) @db.Decimal(18, 2)
+  otherDeductions Decimal     @default(0) @db.Decimal(18, 2)
+  totalDeductions Decimal     @default(0) @db.Decimal(18, 2)
+  
+  // Net
+  netSettlement   Decimal     @default(0) @db.Decimal(18, 2)
+  
+  // Approvals & Status
+  status          FinalSettlementStatus @default(DRAFT)
+  hrApproval      String?
+  financeApproval String?
+  managementApproval String?
+  remarks         String?
+  
+  // Payment
+  paymentMethod   String?
+  paymentDate     DateTime?
+  transactionRef  String?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([employeeId])
+  @@index([status])
 }

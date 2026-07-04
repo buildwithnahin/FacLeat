@@ -46,6 +46,12 @@ function parseAssignedEmployeeIds(fd: FormData): string[] {
 }
 
 function parseForm(fd: FormData) {
+  const approvalFlow = String(fd.get('approvalFlow') ?? 'MANAGER_THEN_HR');
+  const autoApproveAllowed = approvalFlow === 'AUTO_APPROVE' || parseBoolean(fd, 'autoApproveAllowed');
+  const approvalRequired = approvalFlow !== 'AUTO_APPROVE' && parseBoolean(fd, 'approvalRequired');
+  const managerApprovalRequired = approvalRequired && approvalFlow === 'MANAGER_THEN_HR';
+  const hrApprovalRequired = approvalRequired && (approvalFlow === 'MANAGER_THEN_HR' || approvalFlow === 'HR_ONLY');
+
   return {
     policyCode: String(fd.get('policyCode') ?? ''),
     policyName: String(fd.get('policyName') ?? ''),
@@ -60,19 +66,17 @@ function parseForm(fd: FormData) {
     effectiveTo: fd.get('effectiveTo') ? String(fd.get('effectiveTo')) : null,
     status: String(fd.get('status') ?? 'DRAFT'),
     description: String(fd.get('description') ?? ''),
-    approvalRequired: parseBoolean(fd, 'approvalRequired'),
-    managerApprovalRequired: parseBoolean(fd, 'managerApprovalRequired'),
-    hrApprovalRequired: parseBoolean(fd, 'hrApprovalRequired'),
+    approvalRequired,
+    managerApprovalRequired,
+    hrApprovalRequired,
     accountsApprovalRequired: parseBoolean(fd, 'accountsApprovalRequired'),
-    autoApproveAllowed: parseBoolean(fd, 'autoApproveAllowed'),
+    autoApproveAllowed,
     hrCanOverrideBalance: parseBoolean(fd, 'hrCanOverrideBalance'),
     allowProbationEmployees: parseBoolean(fd, 'allowProbationEmployees'),
     carryForwardAllowed: parseBoolean(fd, 'carryForwardAllowed'),
     maxCarryForwardDays: parseOptionalNumber(fd.get('maxCarryForwardDays')),
     carryForwardExpiryMonth: parseOptionalNumber(fd.get('carryForwardExpiryMonth')),
     carryForwardExpiryDay: parseOptionalNumber(fd.get('carryForwardExpiryDay')),
-    encashmentAllowed: parseBoolean(fd, 'encashmentAllowed'),
-    maxEncashmentDays: parseOptionalNumber(fd.get('maxEncashmentDays')),
     autoClosing: parseBoolean(fd, 'autoClosing'),
     payrollImpactDefault: String(fd.get('payrollImpactDefault') ?? 'NO_PAYROLL_IMPACT'),
     assignedEmployeeIds: parseAssignedEmployeeIds(fd),
@@ -133,7 +137,7 @@ export async function generateLeavePolicyAssignmentsAction(fd: FormData) {
     revalidatePath('/hr/leave-policy');
     revalidatePath('/hr/leave-balance');
   } catch (error) {
-    if (error instanceof ApiError) return { error: error.message };
+    if (error instanceof ApiError) return;
     throw error;
   }
 }

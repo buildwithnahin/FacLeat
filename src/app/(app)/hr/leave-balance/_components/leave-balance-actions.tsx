@@ -3,55 +3,23 @@
 import { Button } from '@/components/ui/button';
 import { Download, FileText, Printer } from 'lucide-react';
 
-type BalanceExportRow = {
-  employeeCode: string;
-  employeeName: string;
-  branchName: string;
-  department: string | null;
-  designation: string | null;
-  leaveType: string;
-  entitledDays: number;
-  approvedTakenDays: number;
-  pendingLeaveDays: number;
-  manualAdjustmentDays: number;
-  carryForwardDays: number;
-  availableBalance: number;
-  status: string;
+type ExportColumn<T extends Record<string, string | number | null>> = {
+  key: keyof T;
+  label: string;
 };
 
-export function LeaveBalanceActions({ rows }: { rows: BalanceExportRow[] }) {
+export function LeaveBalanceActions<T extends Record<string, string | number | null>>({
+  rows,
+  columns,
+  filename,
+}: {
+  rows: T[];
+  columns: ExportColumn<T>[];
+  filename: string;
+}) {
   const exportCsv = () => {
-    const header = [
-      'Employee Code',
-      'Employee Name',
-      'Branch',
-      'Department',
-      'Designation',
-      'Leave Type',
-      'Entitled',
-      'Taken',
-      'Pending',
-      'Adjusted',
-      'Carry Forward',
-      'Available',
-      'Status',
-    ];
-
-    const csv = [header, ...rows.map((row) => [
-      row.employeeCode,
-      row.employeeName,
-      row.branchName,
-      row.department ?? '',
-      row.designation ?? '',
-      row.leaveType,
-      String(row.entitledDays),
-      String(row.approvedTakenDays),
-      String(row.pendingLeaveDays),
-      String(row.manualAdjustmentDays),
-      String(row.carryForwardDays),
-      String(row.availableBalance),
-      row.status,
-    ])]
+    const header = columns.map((column) => column.label);
+    const csv = [header, ...rows.map((row) => columns.map((column) => row[column.key] ?? ''))]
       .map((line) => line.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
       .join('\n');
 
@@ -59,7 +27,7 @@ export function LeaveBalanceActions({ rows }: { rows: BalanceExportRow[] }) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = 'leave-balance-report.csv';
+    anchor.download = filename;
     anchor.click();
     URL.revokeObjectURL(url);
   };

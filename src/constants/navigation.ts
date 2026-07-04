@@ -16,6 +16,54 @@ export interface NavModule {
   section?: string;
 }
 
+type NavigationAccess = {
+  roles?: string[];
+  permissions?: string[];
+};
+
+export function resolveDashboardModuleLabel(access: NavigationAccess): string {
+  const roleNames = (access.roles ?? []).map((role) => role.toLowerCase());
+  const permissions = new Set(access.permissions ?? []);
+
+  if (roleNames.some((role) => role.includes('super admin'))) return 'Super Admin Dashboard';
+  if (roleNames.some((role) => role === 'admin' || role.endsWith(' admin'))) return 'Admin Dashboard';
+  if (roleNames.some((role) => role.includes('hr'))) return 'HR Dashboard';
+  if (roleNames.some((role) => role.includes('account'))) return 'Accounts Dashboard';
+  if (roleNames.some((role) => role.includes('commercial') || role.includes('trade') || role.includes('export') || role.includes('import'))) {
+    return 'Commercial Dashboard';
+  }
+  if (roleNames.some((role) => role.includes('warehouse') || role.includes('store'))) return 'Store Dashboard';
+  if (roleNames.some((role) => role.includes('inventory'))) return 'Inventory Dashboard';
+  if (roleNames.some((role) => role.includes('factory') || role.includes('production'))) return 'Production Dashboard';
+  if (roleNames.some((role) => role.includes('purchase') || role.includes('procurement'))) return 'Purchase Dashboard';
+  if (roleNames.some((role) => role.includes('sales'))) return 'Sales Dashboard';
+  if (roleNames.some((role) => role.includes('management'))) return 'Management Dashboard';
+
+  if (permissions.has('trade:read')) return 'Commercial Dashboard';
+  if (permissions.has('hr:read')) return 'HR Dashboard';
+  if (permissions.has('accounts:read')) return 'Accounts Dashboard';
+  if (permissions.has('factory:read')) return 'Production Dashboard';
+  if (permissions.has('purchase:read')) return 'Purchase Dashboard';
+  if (permissions.has('warehouse:read')) return 'Store Dashboard';
+  if (permissions.has('inventory:read')) return 'Inventory Dashboard';
+  if (
+    permissions.has('wholesale:read') ||
+    permissions.has('corporate-sales:read') ||
+    permissions.has('crm:read')
+  ) {
+    return 'Sales Dashboard';
+  }
+
+  return 'Admin Dashboard';
+}
+
+export function getModulesForAccess(access: NavigationAccess): NavModule[] {
+  const dashboardLabel = resolveDashboardModuleLabel(access);
+  return MODULES.map((module) =>
+    module.href === '/dashboard' ? { ...module, label: dashboardLabel } : module,
+  );
+}
+
 export const MODULES: NavModule[] = [
   {
     number: 1,
@@ -311,57 +359,38 @@ export const MODULES: NavModule[] = [
         label: 'Leave Management',
         permission: 'hr:read',
         items: [
+          { label: 'Leave Types', href: '/hr/leave-types', permission: 'hr:read' },
+          { label: 'Leave Policy', href: '/hr/leave-policy', permission: 'hr:read' },
           { label: 'Leave Application', href: '/hr/leaves', permission: 'hr:read' },
           { label: 'Leave Approval', href: '/hr/leave-approval', permission: 'hr:leave-approve' },
           { label: 'Leave Balance', href: '/hr/leave-balance', permission: 'hr:read' },
-          { label: 'Leave Policy', href: '/hr/leave-policy', permission: 'hr:read' },
-        ],
-      },
-      {
-        label: 'Performance',
-        permission: 'hr:read',
-        items: [
-          { label: 'KPI', href: '/hr/kpi', permission: 'hr:read' },
-          { label: 'Performance Review', href: '/hr/performance-review', permission: 'hr:read' },
-          { label: 'Appraisal', href: '/hr/appraisal', permission: 'hr:read' },
-        ],
-      },
-      {
-        label: 'Training',
-        permission: 'hr:read',
-        items: [
-          { label: 'Training Schedule', href: '/hr/training-schedule', permission: 'hr:read' },
-          { label: 'Training History', href: '/hr/training-history', permission: 'hr:read' },
-        ],
-      },
-      {
-        label: 'Disciplinary',
-        permission: 'hr:read',
-        items: [
-          { label: 'Warning', href: '/hr/warnings', permission: 'hr:read' },
-          { label: 'Suspension', href: '/hr/suspensions', permission: 'hr:read' },
-          { label: 'Notice', href: '/hr/notices', permission: 'hr:read' },
         ],
       },
       {
         label: 'Payroll',
         permission: 'hr:read',
         items: [
+          { label: 'Salary Components', href: '/hr/salary-components', permission: 'hr:read' },
           { label: 'Salary Structure', href: '/hr/salary-structure', permission: 'hr:read' },
+          { label: 'Payroll Period', href: '/hr/payroll-period', permission: 'hr:read' },
           { label: 'Payroll Run', href: '/hr/payroll', permission: 'hr:read' },
-          { label: 'Payslip', href: '/hr/payslip', permission: 'hr:read' },
+          { label: 'Payroll Adjustment', href: '/hr/payroll-adjustment', permission: 'hr:read' },
+          { label: 'Payslips', href: '/hr/payslip', permission: 'hr:read' },
           { label: 'Bonus', href: '/hr/bonus', permission: 'hr:read' },
+          { label: 'Loans & Advances', href: '/hr/loans-advances', permission: 'hr:read' },
+          { label: 'Final Settlement', href: '/hr/final-settlement', permission: 'hr:read' },
         ],
       },
       {
         label: 'Reports',
         permission: 'hr:read',
         items: [
-          { label: 'Employee Report', href: '/hr/reports/employee', permission: 'hr:read' },
-          { label: 'Attendance Report', href: '/hr/reports/attendance', permission: 'hr:read' },
-          { label: 'Leave Report', href: '/hr/reports/leave', permission: 'hr:read' },
-          { label: 'Payroll Report', href: '/hr/reports/payroll', permission: 'hr:read' },
-          { label: 'Performance Report', href: '/hr/reports/performance', permission: 'hr:read' },
+          { label: 'Employee Reports', href: '/hr/reports/employee', permission: 'hr:read' },
+          { label: 'Recruitment Reports', href: '/hr/reports/recruitment', permission: 'hr:read' },
+          { label: 'Attendance Reports', href: '/hr/reports/attendance', permission: 'hr:read' },
+          { label: 'Leave Reports', href: '/hr/reports/leave', permission: 'hr:read' },
+          { label: 'Payroll Reports', href: '/hr/reports/payroll', permission: 'hr:read' },
+          { label: 'Employee Lifecycle Reports', href: '/hr/reports/lifecycle', permission: 'hr:read' },
         ],
       },
     ],

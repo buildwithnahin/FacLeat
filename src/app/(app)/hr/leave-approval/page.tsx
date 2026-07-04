@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { prisma } from '@/server/db';
-import { LEAVE_TYPES } from '@/server/validators/hr';
+import { leaveTypesService } from '@/server/services/leave-types.service';
 import { CheckSquare, AlertCircle, Clock, CheckCheck, XCircle, FileClock, Filter, RotateCcw } from 'lucide-react';
 import { ApprovalFilterActions } from './_components/approval-filter-actions';
 
@@ -29,7 +29,7 @@ type SearchParams = Promise<{
 
 type LeaveRow = Awaited<ReturnType<typeof leavesService.list>>[number];
 
-const HISTORY_STATUSES = ['APPROVED', 'REJECTED', 'CANCELLED', 'WITHDRAWN'] as const;
+const HISTORY_STATUSES = ['APPROVED', 'REJECTED', 'RETURNED', 'CANCELLED', 'WITHDRAWN'] as const;
 
 export default async function LeaveApprovalPage({
   searchParams,
@@ -50,7 +50,7 @@ export default async function LeaveApprovalPage({
     stage: sp.stage || '',
   };
 
-  const [branches, employees, allLeaves] = await Promise.all([
+  const [branches, employees, leaveTypes, allLeaves] = await Promise.all([
     prisma.branch.findMany({
       where: { isActive: true },
       select: { id: true, code: true, name: true },
@@ -67,6 +67,7 @@ export default async function LeaveApprovalPage({
       },
       orderBy: [{ firstName: 'asc' }],
     }),
+    leaveTypesService.listActive(session),
     leavesService.list(session, {
       branchId: filters.branchId || undefined,
       employeeId: filters.employeeId || undefined,
@@ -111,8 +112,8 @@ export default async function LeaveApprovalPage({
     const decidedOn = leave.hrApprovedAt || leave.managerApprovedAt;
     return leave.status === 'REJECTED' && decidedOn?.slice(0, 10) === todayIso;
   }).length;
-  const unpaidPending = allLeaves.filter(
-    (leave) => leave.type === 'UNPAID' && ['PENDING_MANAGER', 'PENDING_HR'].includes(leave.status),
+  const returnedCount = allLeaves.filter(
+    (leave) => leave.status === 'RETURNED'
   ).length;
 
   const canManagerDecide = session?.permissions.includes('hr:write') ?? false;
@@ -166,10 +167,10 @@ export default async function LeaveApprovalPage({
           titleClassName="text-rose-600 dark:text-rose-400"
         />
         <SummaryCard
-          title="Unpaid Leave Pending"
-          value={unpaidPending}
-          caption="Will affect payroll if approved"
-          icon={<FileClock className="h-4 w-4 text-orange-500" />}
+          title="Returned"
+          value={returnedCount}
+          caption="Sent back for correction"
+          icon={<RotateCcw className="h-4 w-4 text-orange-500" />}
           className="border-orange-200 bg-orange-50/20 dark:border-orange-950 dark:bg-orange-950/10"
           titleClassName="text-orange-600 dark:text-orange-400"
         />
@@ -218,9 +219,9 @@ export default async function LeaveApprovalPage({
                 label="Leave Type"
                 name="type"
                 defaultValue={filters.type}
-                options={LEAVE_TYPES.map((type) => ({
-                  value: type,
-                  label: type.replaceAll('_', ' '),
+                options={leaveTypes.map((type) => ({
+                  value: type.code,
+                  label: type.name,
                 }))}
               />
               <FilterSelect
@@ -232,6 +233,7 @@ export default async function LeaveApprovalPage({
                   { value: 'PENDING_HR', label: 'Pending HR Verification' },
                   { value: 'APPROVED', label: 'Approved' },
                   { value: 'REJECTED', label: 'Rejected' },
+                  { value: 'RETURNED', label: 'Returned' },
                   { value: 'CANCELLED', label: 'Cancelled' },
                   { value: 'WITHDRAWN', label: 'Withdrawn' },
                 ]}
@@ -337,7 +339,9 @@ async function attachBalanceSummaries(session: Awaited<ReturnType<typeof getSess
           ? {
               ...typeBalance,
               requested: Number(leave.days),
-              balanceAfterApproval: Math.max(0, typeBalance.available - Number(leave.days)),
+              balanceAfterApproval: typeBalance.isUnlimited
+                ? Number.MAX_SAFE_INTEGER
+                : typeBalance.available - Number(leave.days),
             }
           : null,
       };

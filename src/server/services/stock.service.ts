@@ -6,6 +6,10 @@ import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { publishToPermission } from '@/server/notifications/publisher';
 import type { AppSession } from '@/server/auth/session';
+import {
+  matchesInventorySection,
+  type InventorySectionSlug,
+} from '@/lib/inventory-sections';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 
 export type MovementItem = {
@@ -49,6 +53,26 @@ export type PhysicalCountInput = {
 };
 
 type BalanceRow = { productId: string; warehouseId: string; balance: Prisma.Decimal };
+
+export type DetailedBalanceRow = {
+  product: {
+    id: string;
+    sku: string;
+    name: string;
+    unit: string;
+    type: import('@prisma/client').ProductType;
+    reorderLevel: Prisma.Decimal;
+    costPrice: Prisma.Decimal;
+    sellPrice: Prisma.Decimal;
+  };
+  warehouse: {
+    id: string;
+    name: string;
+    code: string;
+    type: import('@prisma/client').WarehouseType;
+  };
+  qty: Prisma.Decimal;
+};
 
 function assertPositiveItems(items: MovementItem[]) {
   if (items.length === 0) throw new ValidationError('At least one item is required');
@@ -132,6 +156,70 @@ export const stockService = {
     return getBalances(prisma, branchId, warehouseId);
   },
 
+  async balanceSnapshotDetailed(
+    session: AppSession | null,
+    filters: {
+      branchId: string;
+      warehouseId?: string;
+      section?: InventorySectionSlug | null;
+    },
+  ): Promise<DetailedBalanceRow[]> {
+    await authorize(session, 'inventory:read');
+
+    const [balances, warehouses, products] = await Promise.all([
+      getBalances(prisma, filters.branchId, filters.warehouseId),
+      prisma.warehouse.findMany({
+        where: { branchId: filters.branchId, ...(filters.warehouseId ? { id: filters.warehouseId } : {}) },
+        select: { id: true, name: true, code: true, type: true },
+      }),
+      prisma.product.findMany({
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          unit: true,
+          reorderLevel: true,
+          type: true,
+          costPrice: true,
+          sellPrice: true,
+        },
+      }),
+    ]);
+
+    const whById = new Map(warehouses.map((warehouse) => [warehouse.id, warehouse]));
+    const prodById = new Map(products.map((product) => [product.id, product]));
+
+    const rows: DetailedBalanceRow[] = [];
+    for (const balance of balances) {
+      const product = prodById.get(balance.productId);
+      const warehouse = whById.get(balance.warehouseId);
+      if (!product || !warehouse) continue;
+      if (
+        filters.section &&
+        !matchesInventorySection({
+          section: filters.section,
+          productType: product.type,
+          warehouseType: warehouse.type,
+        })
+      ) {
+        continue;
+      }
+      rows.push({
+        product,
+        warehouse,
+        qty: balance.balance,
+      });
+    }
+
+    rows.sort((a, b) => {
+      const byProduct = a.product.name.localeCompare(b.product.name);
+      if (byProduct !== 0) return byProduct;
+      return a.warehouse.name.localeCompare(b.warehouse.name);
+    });
+
+    return rows;
+  },
+
   async listMovements(
     session: AppSession | null,
     filters: {
@@ -143,10 +231,11 @@ export const stockService = {
       from?: Date;
       to?: Date;
       limit?: number;
+      section?: InventorySectionSlug | null;
     },
   ) {
     await authorize(session, 'inventory:read');
-    return prisma.inventoryLedger.findMany({
+    const rows = await prisma.inventoryLedger.findMany({
       where: {
         branchId: filters.branchId,
         warehouseId: filters.warehouseId,
@@ -161,10 +250,20 @@ export const stockService = {
       orderBy: { createdAt: 'desc' },
       take: filters.limit ?? 200,
       include: {
-        product: { select: { sku: true, name: true, unit: true } },
-        warehouse: { select: { code: true, name: true } },
+        product: { select: { sku: true, name: true, unit: true, type: true } },
+        warehouse: { select: { code: true, name: true, type: true } },
       },
     });
+
+    if (!filters.section) return rows;
+
+    return rows.filter((row) =>
+      matchesInventorySection({
+        section: filters.section!,
+        productType: row.product.type,
+        warehouseType: row.warehouse.type,
+      }),
+    );
   },
 
   async postReceipt(session: AppSession | null, input: ReceiptInput) {

@@ -7,7 +7,8 @@ import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { decideLeaveAction, withdrawLeaveAction } from '@/server/actions/leaves';
+import { Checkbox } from '@/components/ui/checkbox';
+import { decideLeaveAction, withdrawLeaveAction, bulkDecideLeaveAction } from '@/server/actions/leaves';
 import { Calendar, User, FileText, CheckCircle2, XCircle, ArrowLeft, Printer, ShieldAlert } from 'lucide-react';
 
 interface LeaveRequestItem {
@@ -54,9 +55,12 @@ interface LeaveRequestItem {
   } | null;
   balanceSummary?: {
     entitled: number;
-    taken: number;
+    used: number;
     pending: number;
+    carryForward: number;
+    encashed: number;
     available: number;
+    isUnlimited: boolean;
     requested: number;
     balanceAfterApproval: number;
   } | null;
@@ -76,6 +80,7 @@ const STATUS_VARIANT: Record<string, 'default' | 'outline' | 'success' | 'warnin
   PENDING_HR: 'warning',
   APPROVED: 'success',
   REJECTED: 'destructive',
+  RETURNED: 'warning',
   CANCELLED: 'destructive',
   WITHDRAWN: 'outline',
 };
@@ -89,6 +94,7 @@ export function LeaveTable({
 }: Props) {
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequestItem | null>(null);
   const [remarks, setRemarks] = useState<string>('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const showDepartment = mode !== 'application';
   const showBalance = mode === 'approval';
@@ -191,11 +197,51 @@ export function LeaveTable({
 
   return (
     <div className="space-y-4">
+      {showApprovalActions && selectedIds.size > 0 && (
+        <div className="bg-slate-50 border border-slate-200 dark:bg-slate-900/50 dark:border-slate-800 p-3 rounded-md flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-3">
+            <Badge variant="outline" className="font-mono text-sm bg-white dark:bg-slate-950">
+              {selectedIds.size} Selected
+            </Badge>
+            <span className="text-sm text-slate-600 dark:text-slate-400 font-medium">Bulk Actions:</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <form action={bulkDecideLeaveAction} onSubmit={() => setSelectedIds(new Set())}>
+              <input type="hidden" name="ids" value={JSON.stringify(Array.from(selectedIds))} />
+              <input type="hidden" name="stage" value={leaves.find(l => selectedIds.has(l.id))?.status === 'PENDING_MANAGER' ? 'manager' : 'hr'} />
+              <input type="hidden" name="action" value="approve" />
+              <Button type="submit" size="sm" className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">
+                Approve Selected
+              </Button>
+            </form>
+            <form action={bulkDecideLeaveAction} onSubmit={() => setSelectedIds(new Set())}>
+              <input type="hidden" name="ids" value={JSON.stringify(Array.from(selectedIds))} />
+              <input type="hidden" name="stage" value={leaves.find(l => selectedIds.has(l.id))?.status === 'PENDING_MANAGER' ? 'manager' : 'hr'} />
+              <input type="hidden" name="action" value="reject" />
+              <Button type="submit" size="sm" variant="destructive" className="h-8 font-semibold">
+                Reject Selected
+              </Button>
+            </form>
+          </div>
+        </div>
+      )}
+
       <Card className="overflow-hidden border border-slate-200 dark:border-slate-800 shadow">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 dark:bg-slate-900/60 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
               <tr>
+                {showApprovalActions && (
+                  <th className="text-left px-4 py-3 w-10">
+                    <Checkbox
+                      checked={leaves.length > 0 && selectedIds.size === leaves.length}
+                      onCheckedChange={(c) => {
+                        if (c) setSelectedIds(new Set(leaves.map((l) => l.id)));
+                        else setSelectedIds(new Set());
+                      }}
+                    />
+                  </th>
+                )}
                 <th className="text-left px-4 py-3">Leave No</th>
                 <th className="text-left px-4 py-3">Employee</th>
                 {showDepartment && <th className="text-left px-4 py-3">Department</th>}
@@ -220,6 +266,19 @@ export function LeaveTable({
               )}
               {leaves.map((l) => (
                 <tr key={l.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10 transition-colors">
+                  {showApprovalActions && (
+                    <td className="px-4 py-3.5">
+                      <Checkbox
+                        checked={selectedIds.has(l.id)}
+                        onCheckedChange={(c) => {
+                          const next = new Set(selectedIds);
+                          if (c) next.add(l.id);
+                          else next.delete(l.id);
+                          setSelectedIds(next);
+                        }}
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-3.5 font-semibold text-slate-800 dark:text-slate-200 font-mono text-xs">
                     {l.leaveRequestNo}
                   </td>
@@ -251,10 +310,10 @@ export function LeaveTable({
                   {showBalance && (
                     <td className="px-4 py-3.5 text-right">
                       <div className="font-bold tabular-nums text-slate-800 dark:text-slate-100">
-                        {l.balanceSummary?.available ?? '—'}
+                        {l.balanceSummary?.isUnlimited ? 'Unlimited' : (l.balanceSummary?.available ?? '—')}
                       </div>
                       <div className="text-[10px] text-muted-foreground">
-                        After: {l.balanceSummary?.balanceAfterApproval ?? '—'}
+                        After: {l.balanceSummary?.isUnlimited ? 'Unlimited' : (l.balanceSummary?.balanceAfterApproval ?? '—')}
                       </div>
                     </td>
                   )}
@@ -452,12 +511,24 @@ export function LeaveTable({
                       Leave Balance
                     </span>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      <BalanceCard label="Entitled" value={selectedLeave.balanceSummary.entitled} />
-                      <BalanceCard label="Taken" value={selectedLeave.balanceSummary.taken} />
+                      <BalanceCard
+                        label="Entitled"
+                        value={selectedLeave.balanceSummary.isUnlimited ? 'Unlimited' : selectedLeave.balanceSummary.entitled}
+                      />
+                      <BalanceCard label="Used" value={selectedLeave.balanceSummary.used} />
                       <BalanceCard label="Pending" value={selectedLeave.balanceSummary.pending} />
-                      <BalanceCard label="Available" value={selectedLeave.balanceSummary.available} />
+                      <BalanceCard label="Carry Forward" value={selectedLeave.balanceSummary.carryForward} />
+                      <BalanceCard
+                        label="Available"
+                        value={selectedLeave.balanceSummary.isUnlimited ? 'Unlimited' : selectedLeave.balanceSummary.available}
+                      />
                       <BalanceCard label="Requested" value={selectedLeave.balanceSummary.requested} />
-                      <BalanceCard label="After Approval" value={selectedLeave.balanceSummary.balanceAfterApproval} />
+                      <BalanceCard
+                        label="After Approval"
+                        value={
+                          selectedLeave.balanceSummary.isUnlimited ? 'Unlimited' : selectedLeave.balanceSummary.balanceAfterApproval
+                        }
+                      />
                     </div>
                   </div>
                 )}
@@ -562,10 +633,10 @@ export function LeaveTable({
                         <form action={decideLeaveAction} onSubmit={() => setSelectedLeave(null)}>
                           <input type="hidden" name="id" value={selectedLeave.id} />
                           <input type="hidden" name="stage" value="manager" />
-                          <input type="hidden" name="action" value="send-back" />
+                          <input type="hidden" name="action" value="return" />
                           <input type="hidden" name="remarks" value={remarks} />
-                          <Button type="submit" size="sm" variant="outline" className="font-semibold">
-                            Send Back to Draft
+                          <Button type="submit" size="sm" variant="outline" className="font-semibold text-amber-600 border-amber-200 hover:bg-amber-50">
+                            Return for Correction
                           </Button>
                         </form>
                       </div>
@@ -606,6 +677,16 @@ export function LeaveTable({
                         <form action={decideLeaveAction} onSubmit={() => setSelectedLeave(null)}>
                           <input type="hidden" name="id" value={selectedLeave.id} />
                           <input type="hidden" name="stage" value="hr" />
+                          <input type="hidden" name="action" value="return" />
+                          <input type="hidden" name="remarks" value={remarks} />
+                          <Button type="submit" size="sm" variant="outline" className="font-semibold text-amber-600 border-amber-200 hover:bg-amber-50">
+                            Return for Correction
+                          </Button>
+                        </form>
+
+                        <form action={decideLeaveAction} onSubmit={() => setSelectedLeave(null)}>
+                          <input type="hidden" name="id" value={selectedLeave.id} />
+                          <input type="hidden" name="stage" value="hr" />
                           <input type="hidden" name="action" value="cancel" />
                           <input type="hidden" name="remarks" value={remarks} />
                           <Button type="submit" size="sm" variant="ghost" className="text-rose-500 font-semibold border border-rose-200 hover:bg-rose-50">
@@ -616,8 +697,7 @@ export function LeaveTable({
                     </div>
                   )}
 
-                  {/* Option 3: Withdraw request (allowed for employee/HR in pending or draft stages) */}
-                  {allowWithdraw && ['PENDING_MANAGER', 'PENDING_HR', 'DRAFT'].includes(selectedLeave.status) && (
+                  {allowWithdraw && ['PENDING_MANAGER', 'PENDING_HR', 'DRAFT', 'RETURNED'].includes(selectedLeave.status) && (
                     <div className="flex justify-end pt-2 border-t border-dashed border-slate-100 dark:border-slate-800 mt-4">
                       <form action={withdrawLeaveAction} onSubmit={() => setSelectedLeave(null)}>
                         <input type="hidden" name="id" value={selectedLeave.id} />
@@ -637,7 +717,7 @@ export function LeaveTable({
   );
 }
 
-function BalanceCard({ label, value }: { label: string; value: number }) {
+function BalanceCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-3 dark:border-slate-800 dark:bg-slate-900/30">
       <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">{label}</span>

@@ -4,25 +4,21 @@ import * as React from 'react';
 import { Command } from 'cmdk';
 import { Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { MODULES } from '@/constants/navigation';
-import type { NavItem } from '@/constants/navigation';
+import type { ClientNavItem, ClientNavModule } from '@/components/shared/sidebar-nav';
 import { cn } from '@/lib/utils';
 
 type SearchItem = { label: string; href: string };
 
-export function SearchCommand({ permissions = [] }: { permissions?: string[] }) {
+export function SearchCommand({ modules }: { modules: ClientNavModule[] }) {
   const [open, setOpen] = React.useState(false);
   const router = useRouter();
-  const allowed = React.useMemo(() => new Set(permissions), [permissions]);
   const items = React.useMemo(() => {
-    const can = (permission?: string) => !permission || allowed.has(permission);
     const flattenItems = (
       moduleLabel: string,
-      navItems: NavItem[] | undefined,
+      navItems: ClientNavItem[] | undefined,
       parents: string[] = [],
     ): SearchItem[] =>
       navItems?.flatMap((item) => {
-        if (!can(item.permission)) return [];
         const path = [...parents, item.label];
         const current = item.href
           ? [{ label: `${moduleLabel} / ${path.join(' / ')}`, href: item.href }]
@@ -30,13 +26,12 @@ export function SearchCommand({ permissions = [] }: { permissions?: string[] }) 
         return [...current, ...flattenItems(moduleLabel, item.items, path)];
       }) ?? [];
 
-    return MODULES.flatMap((module) => {
-      if (!can(module.permission)) return [];
+    return modules.flatMap((module) => {
       const moduleItem: SearchItem[] = [{ label: module.label, href: module.href }];
       const children = flattenItems(module.label, module.items);
       return [...moduleItem, ...children];
     });
-  }, [allowed]);
+  }, [modules]);
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

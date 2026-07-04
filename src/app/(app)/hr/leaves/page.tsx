@@ -2,7 +2,7 @@ import { getSession } from '@/server/auth/session';
 import { PageHeader } from '@/components/shared/page-header';
 import { leavesService } from '@/server/services/leaves.service';
 import { prisma } from '@/server/db';
-import { LEAVE_TYPES } from '@/server/validators/hr';
+import { leaveTypesService } from '@/server/services/leave-types.service';
 import { NewLeaveForm } from './_components/new-leave-form';
 import { LeaveTable } from './_components/leave-table';
 
@@ -12,26 +12,29 @@ export default async function LeavesPage() {
   const session = await getSession();
   
   // Fetch active employees with full details for client-side populate
-  const employeesResult = await prisma.employee.findMany({
-    where: { status: 'ACTIVE' },
-    select: {
-      id: true,
-      code: true,
-      firstName: true,
-      lastName: true,
-      department: true,
-      designation: true,
-      joinedAt: true,
-      employmentType: true,
-      branch: {
-        select: {
-          id: true,
-          name: true,
+  const [employeesResult, leaveTypes] = await Promise.all([
+    prisma.employee.findMany({
+      where: { status: 'ACTIVE' },
+      select: {
+        id: true,
+        code: true,
+        firstName: true,
+        lastName: true,
+        department: true,
+        designation: true,
+        joinedAt: true,
+        employmentType: true,
+        branch: {
+          select: {
+            id: true,
+            name: true,
+          },
         },
       },
-    },
-    orderBy: [{ firstName: 'asc' }],
-  });
+      orderBy: [{ firstName: 'asc' }],
+    }),
+    leaveTypesService.listActive(session),
+  ]);
 
   const employees = employeesResult.map((emp) => ({
     id: emp.id,
@@ -59,7 +62,7 @@ export default async function LeavesPage() {
       {canCreate && (
         <NewLeaveForm
           employees={employees}
-          types={[...LEAVE_TYPES]}
+          types={leaveTypes.map((type) => type.code)}
         />
       )}
 

@@ -36,10 +36,16 @@ async function generateUniqueBarcode() {
 }
 
 export const productService = {
-  async list(session: AppSession | null) {
+  async list(
+    session: AppSession | null,
+    filters: { type?: Prisma.ProductWhereInput['type'] } = {},
+  ) {
     await authorize(session, 'inventory:read');
     const [products, ledgerAgg] = await Promise.all([
       prisma.product.findMany({
+        where: {
+          type: filters.type,
+        },
         orderBy: { createdAt: 'desc' },
         include: PRODUCT_INCLUDE,
       }),
