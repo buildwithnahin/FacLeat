@@ -10,6 +10,45 @@ import { BonusService } from '@/server/services/bonus.service';
 import { BonusForm } from './bonus-form';
 import { Prisma } from '@prisma/client';
 
+function serializeEmployee(employee: {
+  id: string;
+  firstName: string;
+  lastName: string;
+  code: string;
+  basicSalary: Prisma.Decimal | number | null;
+}) {
+  return {
+    ...employee,
+    basicSalary: employee.basicSalary ? Number(employee.basicSalary) : 0,
+  };
+}
+
+function serializeBonusForForm(initial: Awaited<ReturnType<typeof BonusService.getBonusById>>) {
+  if (!initial) return null;
+
+  return {
+    ...initial,
+    amount: initial.amount ? Number(initial.amount) : null,
+    percentage: initial.percentage ? Number(initial.percentage) : null,
+    employeeBonuses: initial.employeeBonuses.map((employeeBonus) => ({
+      ...employeeBonus,
+      amount: Number(employeeBonus.amount),
+      employee: {
+        ...employeeBonus.employee,
+        basicSalary: employeeBonus.employee.basicSalary ? Number(employeeBonus.employee.basicSalary) : 0,
+        salaryStructureAssignments: employeeBonus.employee.salaryStructureAssignments.map((assignment) => ({
+          ...assignment,
+          salaryStructure: {
+            ...assignment.salaryStructure,
+            grossSalary: Number(assignment.salaryStructure.grossSalary),
+            netSalary: assignment.salaryStructure.netSalary ? Number(assignment.salaryStructure.netSalary) : null,
+          },
+        })),
+      },
+    })),
+  };
+}
+
 export default async function BonusPage({
   searchParams,
 }: {
@@ -43,6 +82,9 @@ export default async function BonusPage({
     select: { id: true, firstName: true, lastName: true, code: true, basicSalary: true },
     orderBy: [{ firstName: 'asc' }],
   });
+
+  const serializedEmployees = employees.map(serializeEmployee);
+  const serializedInitial = serializeBonusForForm(initial);
 
   return (
     <div className="space-y-6">
@@ -207,8 +249,8 @@ export default async function BonusPage({
       ) : (
         <BonusForm
           mode={sp.edit === 'new' ? 'create' : 'edit'}
-          initialData={sp.edit === 'new' ? null : initial}
-          employees={employees}
+          initialData={sp.edit === 'new' ? null : serializedInitial}
+          employees={serializedEmployees}
           path="/hr/bonus"
         />
       )}

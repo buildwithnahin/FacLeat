@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getSession } from '@/server/auth/session';
 import { factoryService } from '@/server/services/factory.service';
+import { factoryWorkflowService } from '@/server/services/factory-workflow.service';
 import {
   productionOrderCreateSchema,
   productionConsumeSchema,
@@ -13,6 +14,11 @@ import {
   productionCostEntryCreateSchema,
   productionCostEntryDeleteSchema,
   productionOverheadRateSchema,
+  productionIssueCreateSchema,
+  productionIssueStatusSchema,
+  processTrackingCreateSchema,
+  productionReceiveCreateSchema,
+  finishedGoodsReceiveCreateSchema,
 } from '@/server/validators/factory';
 import { ApiError } from '@/lib/errors';
 
@@ -206,5 +212,129 @@ export async function updateOverheadRateAction(
     throw e;
   }
   revalidatePath(`/factory/${parsed.data.orderId}`);
+  return { success: true };
+}
+
+export async function createProductionIssueAction(
+  _prev: FactoryFormState,
+  formData: FormData,
+): Promise<FactoryFormState> {
+  const parsed = productionIssueCreateSchema.safeParse({
+    orderId: formData.get('orderId'),
+    date: formData.get('date'),
+    warehouseId: formData.get('warehouseId'),
+    remarks: formData.get('remarks') ?? '',
+    items: parseJson(formData.get('items'), []),
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  try {
+    const session = await getSession();
+    await factoryWorkflowService.createProductionIssue(session, parsed.data);
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    throw e;
+  }
+  revalidatePath('/factory/production-issue');
+  return { success: true };
+}
+
+export async function updateProductionIssueStatusAction(formData: FormData) {
+  const parsed = productionIssueStatusSchema.safeParse({
+    voucherId: formData.get('voucherId'),
+    status: formData.get('status'),
+  });
+  if (!parsed.success) return;
+  try {
+    const session = await getSession();
+    await factoryWorkflowService.changeProductionIssueStatus(session, parsed.data);
+  } catch (e) {
+    if (e instanceof ApiError) return;
+    throw e;
+  }
+  revalidatePath('/factory/production-issue');
+}
+
+export async function saveProcessTrackingAction(
+  _prev: FactoryFormState,
+  formData: FormData,
+): Promise<FactoryFormState> {
+  const parsed = processTrackingCreateSchema.safeParse({
+    trackingId: formData.get('trackingId') ?? '',
+    orderId: formData.get('orderId'),
+    productId: formData.get('productId'),
+    stageId: formData.get('stageId'),
+    operatorId: formData.get('operatorId') ?? '',
+    machine: formData.get('machine') ?? '',
+    batchNo: formData.get('batchNo') ?? '',
+    inputQty: formData.get('inputQty') ?? 0,
+    outputQty: formData.get('outputQty') ?? 0,
+    rejectedQty: formData.get('rejectedQty') ?? 0,
+    scrapQty: formData.get('scrapQty') ?? 0,
+    reworkQty: formData.get('reworkQty') ?? 0,
+    startTime: formData.get('startTime') ?? '',
+    endTime: formData.get('endTime') ?? '',
+    status: formData.get('status'),
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  try {
+    const session = await getSession();
+    await factoryWorkflowService.saveProcessTracking(session, parsed.data);
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    throw e;
+  }
+  revalidatePath('/factory/process-tracking');
+  return { success: true };
+}
+
+export async function createProductionReceiveAction(
+  _prev: FactoryFormState,
+  formData: FormData,
+): Promise<FactoryFormState> {
+  const parsed = productionReceiveCreateSchema.safeParse({
+    date: formData.get('date'),
+    orderId: formData.get('orderId'),
+    fromStageId: formData.get('fromStageId'),
+    toStageId: formData.get('toStageId'),
+    productId: formData.get('productId'),
+    receivedQty: formData.get('receivedQty'),
+    rejectedQty: formData.get('rejectedQty') ?? 0,
+    scrapQty: formData.get('scrapQty') ?? 0,
+    operatorId: formData.get('operatorId') ?? '',
+    remarks: formData.get('remarks') ?? '',
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  try {
+    const session = await getSession();
+    await factoryWorkflowService.createProductionReceive(session, parsed.data);
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    throw e;
+  }
+  revalidatePath('/factory/production-receive');
+  return { success: true };
+}
+
+export async function createFinishedGoodsReceiveAction(
+  _prev: FactoryFormState,
+  formData: FormData,
+): Promise<FactoryFormState> {
+  const parsed = finishedGoodsReceiveCreateSchema.safeParse({
+    date: formData.get('date'),
+    orderId: formData.get('orderId'),
+    warehouseId: formData.get('warehouseId'),
+    sourceStageId: formData.get('sourceStageId') ?? '',
+    remarks: formData.get('remarks') ?? '',
+    items: parseJson(formData.get('items'), []),
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  try {
+    const session = await getSession();
+    await factoryWorkflowService.createFinishedGoodsReceive(session, parsed.data);
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    throw e;
+  }
+  revalidatePath('/factory/finished-goods-receive');
   return { success: true };
 }

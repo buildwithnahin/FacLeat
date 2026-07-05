@@ -15,12 +15,24 @@ import {
   type CreateOrderInput,
   type CancelOrderInput,
   type RecordDeliveryInput,
+  type UpdateDeliveryWorkflowInput,
   type CreateInvoiceInput,
   type RecordInvoicePaymentInput,
 } from '@/server/validators/corporate-sales';
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const ZERO = new Prisma.Decimal(0);
+
+const DELIVERY_TRANSITIONS: Record<string, string[]> = {
+  DRAFT: ['APPROVED'],
+  APPROVED: ['PICKING'],
+  PICKING: ['PACKED'],
+  PACKED: ['DISPATCHED'],
+  DISPATCHED: ['DELIVERED'],
+  DELIVERED: ['CLOSED'],
+  CLOSED: [],
+  VOIDED: [],
+};
 
 function computeLine(item: {
   quantity: number;
@@ -514,8 +526,14 @@ export const corporateService = {
           branchId: order.branchId,
           warehouseId: input.warehouseId,
           orderId: order.id,
+          expectedDate: input.expectedDate ?? null,
+          deliveryAddress: input.deliveryAddress || null,
           trackingNo: input.trackingNo || null,
-          carrier: input.carrier || null,
+          transportCompany: input.transportCompany || input.carrier || null,
+          vehicleNo: input.vehicleNo || null,
+          driverName: input.driverName || null,
+          driverPhone: input.driverPhone || null,
+          gatePassNo: input.gatePassNo || null,
           notes: input.notes || null,
           createdById: actor.userId,
           items: {
@@ -593,6 +611,66 @@ export const corporateService = {
         tx,
       );
       return delivery;
+    });
+  },
+
+  async updateDeliveryWorkflow(session: AppSession | null, input: UpdateDeliveryWorkflowInput) {
+    const actor = await authorize(session, 'corporate-sales:deliver');
+    const delivery = await prisma.corporateDelivery.findUnique({
+      where: { id: input.deliveryId },
+      include: { order: { select: { number: true, branchId: true } } },
+    });
+    if (!delivery) throw new NotFoundError('Delivery challan not found');
+
+    const allowedStatuses = DELIVERY_TRANSITIONS[delivery.status] ?? [];
+    if (!allowedStatuses.includes(input.status)) {
+      throw new ValidationError(`Cannot move delivery from ${delivery.status} to ${input.status}`);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, delivery.order.branchId);
+
+      const updated = await tx.corporateDelivery.update({
+        where: { id: delivery.id },
+        data: {
+          status: input.status,
+          trackingNo: input.trackingNo || delivery.trackingNo || null,
+          gatePassNo: input.gatePassNo || delivery.gatePassNo || null,
+          transportCompany: input.transportCompany || delivery.transportCompany || null,
+          vehicleNo: input.vehicleNo || delivery.vehicleNo || null,
+          driverName: input.driverName || delivery.driverName || null,
+          driverPhone: input.driverPhone || delivery.driverPhone || null,
+          customerSignature:
+            input.status === 'DELIVERED'
+              ? input.customerSignature || delivery.customerSignature || null
+              : delivery.customerSignature,
+          podAttachment:
+            input.status === 'DELIVERED'
+              ? input.podAttachment || delivery.podAttachment || null
+              : delivery.podAttachment,
+          deliveryDate:
+            input.status === 'DELIVERED' ? delivery.deliveryDate ?? new Date() : delivery.deliveryDate,
+          receivedById:
+            input.status === 'DELIVERED' ? delivery.receivedById ?? actor.userId : delivery.receivedById,
+          notes: input.notes || delivery.notes || null,
+        },
+      });
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: delivery.order.branchId,
+          module: 'corporate-sales',
+          action: `delivery-${input.status.toLowerCase()}`,
+          entityType: 'CorporateDelivery',
+          entityId: delivery.id,
+          before: { status: delivery.status },
+          after: { status: input.status, orderNumber: delivery.order.number },
+        },
+        tx,
+      );
+
+      return updated;
     });
   },
 

@@ -36,6 +36,7 @@ import { getSession, type AppSession } from '@/server/auth/session';
 import { prisma } from '@/server/db';
 import { KpiCard, type KpiTone } from '@/components/shared/kpi-card';
 import { PageHeader } from '@/components/shared/page-header';
+import { getDashboardPendingTasks, getDashboardNotifications } from '@/server/actions/dashboard';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -255,9 +256,9 @@ const DASHBOARDS: Record<DashboardRole, DashboardDefinition> = {
     tasks: [
       { key: 'production-plan', primary: 'Production Plan', secondary: 'Create and maintain production plans', href: '/factory/new' },
       { key: 'work-order', primary: 'Work Order', secondary: 'Monitor and progress active work orders', href: '/factory' },
-      { key: 'rm-issue', primary: 'RM Issue', secondary: 'Coordinate material issue for production', href: '/warehouse/issue' },
-      { key: 'production-receive', primary: 'Production Receive', secondary: 'Record finished output into warehouse', href: '/factory' },
-      { key: 'quality-check', primary: 'Quality Check', secondary: 'Review exceptions before completing production', href: '/factory' },
+      { key: 'rm-issue', primary: 'RM Issue', secondary: 'Coordinate material issue for production', href: '/factory/production-issue' },
+      { key: 'production-receive', primary: 'Production Receive', secondary: 'Move WIP output into the next process', href: '/factory/production-receive' },
+      { key: 'quality-check', primary: 'Quality Check', secondary: 'Review finished output before FG receive', href: '/factory/finished-goods-receive' },
     ],
     reports: [
       { key: 'production-report', primary: 'Production Report', secondary: 'Output and work-order summary', href: '/factory' },
@@ -398,10 +399,7 @@ export async function RoleDashboardPage({
       <PageHeader
         title={definition.label}
         description={`${definition.summary} ${scopeText}.`}
-      >
-        <Badge variant="outline">{labelForRole(role)}</Badge>
-        <Badge variant="secondary">{session.roles.join(', ')}</Badge>
-      </PageHeader>
+      />
 
       <Suspense
         fallback={
@@ -440,13 +438,10 @@ async function DashboardContent({
   tasks: DashboardRow[];
   reports: DashboardRow[];
 }) {
-  const [dashboard, notifications, approvals] = await Promise.all([
+  const [dashboard, notifData, pendingData, approvals] = await Promise.all([
     loadDashboardData(role, session, scopedBranchId),
-    prisma.notification.findMany({
-      where: { recipientId: session.userId, readAt: null },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-    }),
+    getDashboardNotifications(),
+    getDashboardPendingTasks(),
     prisma.approvalRequest.findMany({
       where: {
         status: 'PENDING',
@@ -480,18 +475,47 @@ async function DashboardContent({
         <PanelCard title="Reports" href={reports[0]?.href ?? '/dashboard'} emptyText="No report shortcuts available." rows={reports} />
       </div>
 
-      <PanelCard
-        title="Pending Approvals"
-        href="/approvals"
-        emptyText="No pending approvals in your dashboard scope."
-        rows={approvals.map((approval) => ({
-          key: approval.id,
-          primary: approval.title,
-          secondary: `${approval.module} · ${approval.action}${approval.amount ? ` · ${formatCurrency(approval.amount, approval.currency ?? 'BDT')}` : ''}`,
-          href: '/approvals',
-          right: <Badge variant="warning">{approval.status}</Badge>,
-        }))}
-      />
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 mt-6">
+        <PanelCard
+          title={`My Pending Tasks (${pendingData.total})`}
+          href="/dashboard"
+          emptyText="No pending tasks available."
+          rows={pendingData.tasks.map((task) => ({
+            key: task.title,
+            primary: task.title,
+            secondary: `${task.module} Module`,
+            href: task.url,
+            right: <Badge variant="default">{task.count}</Badge>,
+          }))}
+        />
+        <PanelCard
+          title={`Unread Notifications (${notifData.unreadCount})`}
+          href="/notifications"
+          emptyText="No unread notifications."
+          rows={notifData.latest.map((n) => ({
+            key: n.id,
+            primary: n.title,
+            secondary: n.message,
+            href: n.url,
+            right: <Badge variant={n.priority === 'critical' ? 'destructive' : 'secondary'}>{n.priority}</Badge>,
+          }))}
+        />
+      </div>
+
+      <div className="mt-6">
+        <PanelCard
+          title="Pending Approvals"
+          href="/approvals"
+          emptyText="No pending approvals in your dashboard scope."
+          rows={approvals.map((approval) => ({
+            key: approval.id,
+            primary: approval.title,
+            secondary: `${approval.module} · ${approval.action}${approval.amount ? ` · ${formatCurrency(approval.amount, approval.currency ?? 'BDT')}` : ''}`,
+            href: '/approvals',
+            right: <Badge variant="warning">{approval.status}</Badge>,
+          }))}
+        />
+      </div>
     </>
   );
 }
@@ -541,7 +565,7 @@ function labelForRole(role: DashboardRole) {
 }
 
 function shouldUseBranchScope(role: DashboardRole) {
-  return !['super-admin', 'admin', 'management'].includes(role);
+  return !['super-admin', 'admin'].includes(role);
 }
 
 function startOfDay(date = new Date()) {
@@ -1083,7 +1107,7 @@ async function loadManagementData(branchId?: string): Promise<DashboardData> {
       receivable: formatCurrency(sales.outstanding),
     },
     notes: [
-      'Cash/Bank Balance uses posted ledger balances and is shown as a combined management snapshot.',
+      'Cash/Bank Balance uses posted ledger balances within the current dashboard scope.',
     ],
   };
 }

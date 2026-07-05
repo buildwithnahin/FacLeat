@@ -31,7 +31,7 @@ export default async function CashFlowPage({
       to: new Date(to + 'T23:59:59.999Z'),
       branchId: sp.branchId || undefined,
     }),
-    branchService.listActive(session),
+    branchService.listAccessible(session),
   ]);
 
   const exportHref =

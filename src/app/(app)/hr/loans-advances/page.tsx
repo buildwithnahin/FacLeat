@@ -16,6 +16,48 @@ export const metadata = { title: 'Loans & Advances' };
 
 type SearchParams = Promise<{ q?: string; type?: string; status?: string; edit?: string }>;
 
+function serializeEmployee(employee: {
+  id: string;
+  firstName: string;
+  lastName: string;
+  code: string;
+  basicSalary: number | { toString(): string } | null;
+}) {
+  return {
+    ...employee,
+    basicSalary: employee.basicSalary ? Number(employee.basicSalary) : 0,
+  };
+}
+
+function serializeLoanForForm(initial: Awaited<ReturnType<typeof LoansService.getLoanById>>) {
+  if (!initial) return null;
+
+  return {
+    ...initial,
+    loanAmount: Number(initial.loanAmount),
+    monthlyDeduction: Number(initial.monthlyDeduction),
+    outstandingBalance: Number(initial.outstandingBalance),
+    disbursementDate: initial.disbursementDate.toISOString(),
+    createdAt: initial.createdAt.toISOString(),
+    updatedAt: initial.updatedAt.toISOString(),
+    employee: initial.employee
+      ? {
+          ...initial.employee,
+          basicSalary: initial.employee.basicSalary ? Number(initial.employee.basicSalary) : 0,
+          houseAllowance: initial.employee.houseAllowance ? Number(initial.employee.houseAllowance) : 0,
+          joinedAt: initial.employee.joinedAt?.toISOString() ?? null,
+        }
+      : null,
+    repaymentSchedules: initial.repaymentSchedules.map((schedule) => ({
+      ...schedule,
+      installment: Number(schedule.installment),
+      remainingBalance: Number(schedule.remainingBalance),
+      createdAt: schedule.createdAt.toISOString(),
+      updatedAt: schedule.updatedAt.toISOString(),
+    })),
+  };
+}
+
 export default async function LoansPage({
   searchParams,
 }: {
@@ -40,6 +82,8 @@ export default async function LoansPage({
 
   const initialId = sp.edit && sp.edit !== 'new' ? sp.edit : null;
   const initial = initialId ? await LoansService.getLoanById(initialId).catch(() => null) : null;
+  const serializedEmployees = employees.map(serializeEmployee);
+  const serializedInitial = serializeLoanForForm(initial);
 
   return (
     <div className="space-y-6">
@@ -208,8 +252,8 @@ export default async function LoansPage({
       {canWrite && sp.edit ? (
         <LoanForm
           mode={sp.edit === 'new' ? 'create' : 'edit'}
-          initial={sp.edit === 'new' ? null : initial}
-          employees={employees as any[]}
+          initial={sp.edit === 'new' ? null : serializedInitial}
+          employees={serializedEmployees}
           path="/hr/loans-advances"
         />
       ) : null}

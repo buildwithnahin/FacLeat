@@ -4,14 +4,14 @@ import { branchService } from '@/server/services/branch.service';
 import { setActiveBranchAction } from '@/server/actions/branches';
 
 export async function BranchSwitcher({ session }: { session: AppSession }) {
-  if (!session.permissions.includes('branches:read')) return null;
-
-  let branches: Awaited<ReturnType<typeof branchService.listActive>> = [];
+  let branches: Awaited<ReturnType<typeof branchService.listAccessible>> = [];
   try {
-    branches = await branchService.listActive(session);
+    branches = await branchService.listAccessible(session);
   } catch {
     return null;
   }
+
+  if (branches.length === 0) return null;
 
   const active = branches.find((b) => b.id === session.activeBranchId) ?? branches[0];
 

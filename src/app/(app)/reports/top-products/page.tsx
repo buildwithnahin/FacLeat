@@ -25,7 +25,7 @@ export default async function TopProductsReportPage({
       branchId: sp.branchId || undefined,
       limit: 50,
     }),
-    branchService.listActive(session),
+    branchService.listAccessible(session),
   ]);
 
   return (

@@ -152,9 +152,18 @@ export default async function OrderDetailPage({
                 empty="—"
                 columns={[
                   { key: 'number', header: 'Number', cell: (r) => <span className="tabular">{r.number}</span> },
-                  { key: 'date', header: 'Date', cell: (r) => <span className="tabular">{r.deliveryDate.toISOString().slice(0, 10)}</span> },
+                  {
+                    key: 'date',
+                    header: 'Date',
+                    cell: (r) =>
+                      r.deliveryDate ? (
+                        <span className="tabular">{r.deliveryDate.toISOString().slice(0, 10)}</span>
+                      ) : (
+                        '—'
+                      ),
+                  },
                   { key: 'tracking', header: 'Tracking', cell: (r) => r.trackingNo ?? '—' },
-                  { key: 'carrier', header: 'Carrier', cell: (r) => r.carrier ?? '—' },
+                  { key: 'carrier', header: 'Carrier', cell: (r) => r.transportCompany ?? '—' },
                   { key: 'items', header: 'Items', align: 'right', cell: (r) => <span className="tabular">{r.items.length}</span> },
                 ]}
               />

@@ -18,7 +18,7 @@ export default async function InventoryReportPage({
   const session = await getSession();
   const [data, branches] = await Promise.all([
     reportsService.inventoryValuation(session, { branchId: sp.branchId || undefined }),
-    branchService.listActive(session),
+    branchService.listAccessible(session),
   ]);
 
   const exportHref = `/api/reports/inventory.csv${sp.branchId ? `?branchId=${sp.branchId}` : ''}`;

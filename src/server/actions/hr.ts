@@ -88,10 +88,18 @@ export async function markAttendanceAction(fd: FormData) {
     checkOut: fd.get('checkOut') ?? '',
     remarks: fd.get('remarks') ?? '',
   });
-  if (!parsed.success) return;
+  if (!parsed.success) {
+    console.error('Attendance Validation Error:', parsed.error.flatten().fieldErrors);
+    return;
+  }
   const session = await getSession();
   try {
-    await hrService.markAttendance(session, parsed.data);
+    const record = await hrService.markAttendance(session, parsed.data);
+    
+    // 🔥 Hook up the automated Attendance Engine!
+    const { attendanceEngineService } = await import('@/server/services/attendance-engine.service');
+    await attendanceEngineService.processEmployeeDay(record.employeeId, record.date, record.checkIn, record.checkOut);
+    
   } catch (e) {
     if (e instanceof ApiError) return;
     throw e;

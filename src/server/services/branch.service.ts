@@ -1,6 +1,7 @@
 import 'server-only';
 import { revalidateTag, unstable_cache } from 'next/cache';
 import { prisma } from '@/server/db';
+import { canAccessBranch, getAllowedBranchIds } from '@/server/auth/branch-access';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import type { AppSession } from '@/server/auth/session';
@@ -20,20 +21,46 @@ const cachedAllBranches = unstable_cache(
 );
 
 export const branchService = {
+  async listAccessible(session: AppSession | null) {
+    if (!session) return [];
+
+    const branches = await cachedActiveBranches();
+    if (session.branchAccessType === 'ALL_BRANCHES') {
+      return branches;
+    }
+
+    const allowed = new Set(getAllowedBranchIds(session));
+    return branches.filter((branch) => allowed.has(branch.id));
+  },
+
   async listActive(session: AppSession | null) {
     await authorize(session, 'branches:read');
-    return cachedActiveBranches();
+    return this.listAccessible(session);
+  },
+
+  async listActiveIfPermitted(session: AppSession | null) {
+    return this.listAccessible(session);
   },
 
   async listAll(session: AppSession | null) {
     await authorize(session, 'branches:read');
-    return cachedAllBranches();
+    const branches = await cachedAllBranches();
+    if (session?.branchAccessType === 'ALL_BRANCHES') return branches;
+    const allowed = new Set(getAllowedBranchIds(session));
+    return branches.filter((branch) => allowed.has(branch.id));
   },
 
   async getById(session: AppSession | null, id: string) {
-    await authorize(session, 'branches:read');
+    if (!session) {
+      await authorize(session, 'branches:read');
+    } else if (session.permissions.includes('branches:read')) {
+      await authorize(session, 'branches:read');
+    } else if (!canAccessBranch(session, id)) {
+      throw new ValidationError('Branch access denied');
+    }
     const branch = await prisma.branch.findUnique({ where: { id } });
     if (!branch) throw new NotFoundError('Branch not found');
+    if (!canAccessBranch(session, branch.id)) throw new ValidationError('Branch access denied');
     return branch;
   },
 

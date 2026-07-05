@@ -1,6 +1,6 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useEffect, useRef, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -17,6 +17,14 @@ import { loanFormSchema, LoanFormValues } from '@/server/validators/loans';
 import { createLoanAction, updateLoanAction } from '@/server/actions/loans';
 import { LoanType, LoanPurpose, LoanInstallmentType } from '@prisma/client';
 
+type LoanFormEmployee = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  code: string;
+  basicSalary: number;
+};
+
 export function LoanForm({
   mode,
   initial,
@@ -25,7 +33,7 @@ export function LoanForm({
 }: {
   mode: 'create' | 'edit';
   initial: any | null;
-  employees: any[];
+  employees: LoanFormEmployee[];
   path: string;
 }) {
   const router = useRouter();
@@ -36,13 +44,13 @@ export function LoanForm({
     defaultValues: {
       requestType: initial?.requestType ?? 'EMPLOYEE_LOAN',
       employeeId: initial?.employeeId ?? '',
-      loanAmount: initial?.loanAmount ? Number(initial.loanAmount) : 0,
+      loanAmount: initial?.loanAmount != null ? Number(initial.loanAmount) : undefined,
       purpose: initial?.purpose ?? 'OTHERS',
       disbursementDate: initial?.disbursementDate ? new Date(initial.disbursementDate) : new Date(),
       repaymentStartMonth: initial?.repaymentStartMonth ?? format(new Date(), 'yyyy-MM'),
       installmentType: initial?.installmentType ?? 'MONTHLY',
-      numberOfInstallments: initial?.numberOfInstallments ?? 1,
-      monthlyDeduction: initial?.monthlyDeduction ? Number(initial.monthlyDeduction) : 0,
+      numberOfInstallments: initial?.numberOfInstallments ?? undefined,
+      monthlyDeduction: initial?.monthlyDeduction != null ? Number(initial.monthlyDeduction) : undefined,
       remarks: initial?.remarks ?? '',
       status: initial?.status ?? 'DRAFT',
     },
@@ -52,17 +60,19 @@ export function LoanForm({
   const watchEmployeeId = form.watch('employeeId');
   const watchLoanAmount = form.watch('loanAmount');
   const watchInstallments = form.watch('numberOfInstallments');
+  const watchMonthlyDeduction = form.watch('monthlyDeduction');
+  const deductionOverriddenRef = useRef(mode === 'edit');
 
   const selectedEmployee = employees.find(e => e.id === watchEmployeeId);
 
-  // Auto-calculate deduction if amount and installments change
-  const currentDeduction = form.getValues('monthlyDeduction');
-  if (watchLoanAmount > 0 && watchInstallments > 0) {
-    const calculated = watchLoanAmount / watchInstallments;
-    if (Math.abs(currentDeduction - calculated) > 0.01 && !form.formState.dirtyFields.monthlyDeduction) {
-      form.setValue('monthlyDeduction', Number(calculated.toFixed(2)));
+  useEffect(() => {
+    if (watchLoanAmount > 0 && watchInstallments > 0 && !deductionOverriddenRef.current) {
+      const calculated = Number((watchLoanAmount / watchInstallments).toFixed(2));
+      if (Math.abs((watchMonthlyDeduction || 0) - calculated) > 0.01) {
+        form.setValue('monthlyDeduction', calculated, { shouldDirty: false });
+      }
     }
-  }
+  }, [form, watchInstallments, watchLoanAmount, watchMonthlyDeduction]);
 
   function onSubmit(data: LoanFormValues) {
     startTransition(async () => {
@@ -104,6 +114,7 @@ export function LoanForm({
                         if (val === 'SALARY_ADVANCE') {
                           form.setValue('numberOfInstallments', 1);
                           form.setValue('installmentType', 'ONE_TIME');
+                          deductionOverriddenRef.current = false;
                         }
                       }} defaultValue={field.value}>
                         <FormControl>
@@ -170,7 +181,10 @@ export function LoanForm({
                 <FormField control={form.control} name="loanAmount" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Amount Requested *</FormLabel>
-                    <FormControl><Input type="number" step="0.01" {...field} onChange={e => field.onChange(Number(e.target.value))} /></FormControl>
+                    <FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} onChange={e => {
+                      deductionOverriddenRef.current = false;
+                      field.onChange(e.target.value === '' ? undefined : Number(e.target.value));
+                    }} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -226,14 +240,20 @@ export function LoanForm({
                 <FormField control={form.control} name="numberOfInstallments" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Number of Installments *</FormLabel>
-                    <FormControl><Input type="number" min="1" {...field} onChange={e => field.onChange(Number(e.target.value))} disabled={watchRequestType === 'SALARY_ADVANCE'} /></FormControl>
+                    <FormControl><Input type="number" min="1" {...field} value={field.value ?? ''} onChange={e => {
+                      deductionOverriddenRef.current = false;
+                      field.onChange(e.target.value === '' ? undefined : Number(e.target.value));
+                    }} disabled={watchRequestType === 'SALARY_ADVANCE'} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="monthlyDeduction" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Monthly Deduction *</FormLabel>
-                    <FormControl><Input type="number" step="0.01" {...field} onChange={e => field.onChange(Number(e.target.value))} /></FormControl>
+                    <FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} onChange={e => {
+                      deductionOverriddenRef.current = true;
+                      field.onChange(e.target.value === '' ? undefined : Number(e.target.value));
+                    }} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />

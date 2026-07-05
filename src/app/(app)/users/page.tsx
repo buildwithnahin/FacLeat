@@ -18,7 +18,7 @@ export default async function UsersPage() {
 
   return (
     <div>
-      <PageHeader title="Users" description="System users, their roles, and default branch.">
+      <PageHeader title="Users" description="System users, their roles, and branch access.">
         {canWrite && (
           <Button asChild>
             <Link href="/users/new">
@@ -37,10 +37,10 @@ export default async function UsersPage() {
               <col className="w-[19%]" />
               <col className="w-[11%]" />
               <col className="w-[13%]" />
-              <col className="w-[12%]" />
+              <col className="w-[14%]" />
               <col className="w-[8%]" />
               <col className="w-[8%]" />
-              <col className="w-[12%]" />
+              <col className="w-[10%]" />
             </colgroup>
             <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
@@ -48,7 +48,7 @@ export default async function UsersPage() {
                 <th className="px-3 py-3 text-left font-semibold">Email</th>
                 <th className="px-3 py-3 text-left font-semibold">Role</th>
                 <th className="px-3 py-3 text-left font-semibold">Designation</th>
-                <th className="px-3 py-3 text-left font-semibold">Branch</th>
+                <th className="px-3 py-3 text-left font-semibold">Branch access</th>
                 <th className="px-3 py-3 text-left font-semibold">Status</th>
                 <th className="px-3 py-3 text-left font-semibold">Created</th>
                 <th className="px-3 py-3 text-right font-semibold">Actions</th>
@@ -86,7 +86,18 @@ export default async function UsersPage() {
                     <span className="block truncate">{u.employee?.designation ?? '—'}</span>
                   </td>
                   <td className="px-3 py-3 text-muted-foreground">
-                    <span className="block truncate">{u.defaultBranch?.name ?? '—'}</span>
+                    <span className="block truncate">
+                      {u.branchAccessType === 'ALL_BRANCHES'
+                        ? 'All branches'
+                        : u.branchAccessType === 'ASSIGNED_BRANCHES'
+                          ? `${u.branchAccesses.length} assigned`
+                          : u.defaultBranch?.name ?? '—'}
+                    </span>
+                    {u.branchAccessType === 'ASSIGNED_BRANCHES' && u.branchAccesses.length > 0 ? (
+                      <span className="block truncate text-xs">
+                        {u.branchAccesses.map((access) => access.branch.code).join(', ')}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-3 py-3">
                     <StatusBadge status={u.status} />

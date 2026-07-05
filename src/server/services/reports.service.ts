@@ -2,7 +2,9 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { canAccessBranch } from '@/server/auth/branch-access';
 import type { AppSession } from '@/server/auth/session';
+import { ForbiddenError } from '@/lib/errors';
 
 const ZERO = new Prisma.Decimal(0);
 
@@ -12,6 +14,19 @@ export interface RangeFilter {
   to?: Date;
 }
 
+function resolveScopedBranchId(session: AppSession | null, branchId?: string) {
+  if (!session) return branchId;
+  if (branchId) {
+    if (!canAccessBranch(session, branchId)) {
+      throw new ForbiddenError(`Branch access denied: ${branchId}`);
+    }
+    return branchId;
+  }
+  return session.branchAccessType === 'ALL_BRANCHES'
+    ? undefined
+    : session.activeBranchId ?? session.defaultBranchId ?? session.allowedBranchIds[0] ?? undefined;
+}
+
 export const reportsService = {
   /**
    * Sales summary — totals by channel (POS / Wholesale / Corporate) for a
@@ -19,12 +34,13 @@ export const reportsService = {
    */
   async salesSummary(session: AppSession | null, f: RangeFilter = {}) {
     await authorize(session, 'reports:read');
+    const branchId = resolveScopedBranchId(session, f.branchId);
     const dateFilter = { gte: f.from, lte: f.to };
 
     const [posAgg, wholesaleAgg, corporateAgg] = await Promise.all([
       prisma.posSale.aggregate({
         where: {
-          branchId: f.branchId,
+          branchId,
           saleDate: dateFilter,
           status: { not: 'VOIDED' },
         },
@@ -33,7 +49,7 @@ export const reportsService = {
       }),
       prisma.wholesaleInvoice.aggregate({
         where: {
-          branchId: f.branchId,
+          branchId,
           invoiceDate: dateFilter,
           status: { notIn: ['VOIDED'] },
         },
@@ -42,7 +58,7 @@ export const reportsService = {
       }),
       prisma.corporateInvoice.aggregate({
         where: {
-          branchId: f.branchId,
+          branchId,
           invoiceDate: dateFilter,
         },
         _sum: { grandTotal: true, discountTotal: true, taxTotal: true, paidTotal: true, balanceDue: true },
@@ -104,6 +120,7 @@ export const reportsService = {
    */
   async topProducts(session: AppSession | null, f: RangeFilter & { limit?: number } = {}) {
     await authorize(session, 'reports:read');
+    const branchId = resolveScopedBranchId(session, f.branchId);
     const limit = f.limit ?? 20;
     const dateFilter = { gte: f.from, lte: f.to };
 
@@ -111,20 +128,20 @@ export const reportsService = {
       prisma.posSaleItem.groupBy({
         by: ['productId'],
         where: {
-          sale: { branchId: f.branchId, saleDate: dateFilter, status: { not: 'VOIDED' } },
+          sale: { branchId, saleDate: dateFilter, status: { not: 'VOIDED' } },
         },
         _sum: { quantity: true, lineTotal: true },
       }),
       prisma.wholesaleInvoiceItem.groupBy({
         by: ['productId'],
         where: {
-          invoice: { branchId: f.branchId, invoiceDate: dateFilter, status: { notIn: ['VOIDED'] } },
+          invoice: { branchId, invoiceDate: dateFilter, status: { notIn: ['VOIDED'] } },
         },
         _sum: { quantity: true, lineTotal: true },
       }),
       prisma.corporateInvoiceItem.groupBy({
         by: ['productId'],
-        where: { invoice: { branchId: f.branchId, invoiceDate: dateFilter } },
+        where: { invoice: { branchId, invoiceDate: dateFilter } },
         _sum: { quantity: true, lineTotal: true },
       }),
     ]);
@@ -160,21 +177,22 @@ export const reportsService = {
    */
   async purchaseSummary(session: AppSession | null, f: RangeFilter = {}) {
     await authorize(session, 'reports:read');
+    const branchId = resolveScopedBranchId(session, f.branchId);
     const dateFilter = { gte: f.from, lte: f.to };
 
     const [poAgg, invAgg, unpaid] = await Promise.all([
       prisma.purchaseOrder.aggregate({
-        where: { branchId: f.branchId, orderDate: dateFilter },
+        where: { branchId, orderDate: dateFilter },
         _sum: { grandTotal: true },
         _count: { _all: true },
       }),
       prisma.purchaseInvoice.aggregate({
-        where: { branchId: f.branchId, invoiceDate: dateFilter },
+        where: { branchId, invoiceDate: dateFilter },
         _sum: { grandTotal: true, paidAmount: true },
         _count: { _all: true },
       }),
       prisma.purchaseInvoice.aggregate({
-        where: { branchId: f.branchId, status: { notIn: ['PAID', 'CANCELLED'] } },
+        where: { branchId, status: { notIn: ['PAID', 'CANCELLED'] } },
         _sum: { grandTotal: true, paidAmount: true },
       }),
     ]);
@@ -202,8 +220,9 @@ export const reportsService = {
    */
   async inventoryValuation(session: AppSession | null, f: { branchId?: string } = {}) {
     await authorize(session, 'reports:read');
+    const branchId = resolveScopedBranchId(session, f.branchId);
 
-    const branchFilter = f.branchId ? Prisma.sql`AND "branchId" = ${f.branchId}` : Prisma.empty;
+    const branchFilter = branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty;
     const grouped = await prisma.$queryRaw<{ productId: string; balance: string }[]>(
       Prisma.sql`SELECT "productId",
                SUM(CASE WHEN direction = 'IN' THEN quantity ELSE -quantity END)::text AS balance
@@ -264,13 +283,14 @@ export const reportsService = {
    */
   async hrSummary(session: AppSession | null, f: { branchId?: string } = {}) {
     await authorize(session, 'reports:read');
+    const branchId = resolveScopedBranchId(session, f.branchId);
 
     const [active, onLeave, terminated, lastRun] = await Promise.all([
-      prisma.employee.count({ where: { branchId: f.branchId, status: 'ACTIVE' } }),
-      prisma.employee.count({ where: { branchId: f.branchId, status: 'ON_LEAVE' } }),
-      prisma.employee.count({ where: { branchId: f.branchId, status: 'TERMINATED' } }),
+      prisma.employee.count({ where: { branchId, status: 'ACTIVE' } }),
+      prisma.employee.count({ where: { branchId, status: 'ON_LEAVE' } }),
+      prisma.employee.count({ where: { branchId, status: 'TERMINATED' } }),
       prisma.payrollRun.findFirst({
-        where: { branchId: f.branchId, status: { in: ['APPROVED', 'PAID', 'LOCKED'] } },
+        where: { branchId, status: { in: ['APPROVED', 'PAID', 'LOCKED'] } },
         orderBy: { period: 'desc' },
         include: { branch: true },
       }),
@@ -298,11 +318,12 @@ export const reportsService = {
    */
   async dashboardKpis(session: AppSession | null, f: RangeFilter = {}) {
     await authorize(session, 'reports:read');
+    const branchId = resolveScopedBranchId(session, f.branchId);
     const [sales, purchase, inv, pendingApprovals, lowStock] = await Promise.all([
-      this.salesSummary(session, f),
-      this.purchaseSummary(session, f),
-      this.inventoryValuation(session, { branchId: f.branchId }),
-      prisma.approvalRequest.count({ where: { status: 'PENDING' } }),
+      this.salesSummary(session, { ...f, branchId }),
+      this.purchaseSummary(session, { ...f, branchId }),
+      this.inventoryValuation(session, { branchId }),
+      prisma.approvalRequest.count({ where: { status: 'PENDING', branchId } }),
       prisma.product.count({
         where: { isActive: true, reorderLevel: { gt: 0 } },
       }),
@@ -327,6 +348,7 @@ export const reportsService = {
    */
   async cashFlow(session: AppSession | null, f: RangeFilter = {}) {
     await authorize(session, 'reports:read');
+    const branchId = resolveScopedBranchId(session, f.branchId);
 
     const [
       posAgg,
@@ -341,7 +363,7 @@ export const reportsService = {
       // ── Income aggregates ─────────────────────────────────────────────────
       prisma.posSale.aggregate({
         where: {
-          branchId: f.branchId,
+          branchId,
           saleDate: { gte: f.from, lte: f.to },
           status: { not: 'VOIDED' },
         },
@@ -351,7 +373,7 @@ export const reportsService = {
       prisma.wholesalePayment.aggregate({
         where: {
           paidAt: { gte: f.from, lte: f.to },
-          invoice: { branchId: f.branchId },
+          invoice: { branchId },
         },
         _sum: { amount: true },
         _count: { _all: true },
@@ -359,7 +381,7 @@ export const reportsService = {
       prisma.corporateInvoicePayment.aggregate({
         where: {
           paidAt: { gte: f.from, lte: f.to },
-          invoice: { branchId: f.branchId },
+          invoice: { branchId },
         },
         _sum: { amount: true },
         _count: { _all: true },
@@ -367,7 +389,7 @@ export const reportsService = {
       // ── Outcome aggregates ────────────────────────────────────────────────
       prisma.supplierPayment.aggregate({
         where: {
-          branchId: f.branchId,
+          branchId,
           paymentDate: { gte: f.from, lte: f.to },
         },
         _sum: { amount: true },
@@ -376,7 +398,7 @@ export const reportsService = {
       // ── Income detail rows ─────────────────────────────────────────────────
       prisma.posSale.findMany({
         where: {
-          branchId: f.branchId,
+          branchId,
           saleDate: { gte: f.from, lte: f.to },
           status: { not: 'VOIDED' },
         },
@@ -393,7 +415,7 @@ export const reportsService = {
       prisma.wholesalePayment.findMany({
         where: {
           paidAt: { gte: f.from, lte: f.to },
-          invoice: { branchId: f.branchId },
+          invoice: { branchId },
         },
         select: {
           id: true,
@@ -415,7 +437,7 @@ export const reportsService = {
       prisma.corporateInvoicePayment.findMany({
         where: {
           paidAt: { gte: f.from, lte: f.to },
-          invoice: { branchId: f.branchId },
+          invoice: { branchId },
         },
         select: {
           id: true,
@@ -436,7 +458,7 @@ export const reportsService = {
       }),
       prisma.supplierPayment.findMany({
         where: {
-          branchId: f.branchId,
+          branchId,
           paymentDate: { gte: f.from, lte: f.to },
         },
         select: {

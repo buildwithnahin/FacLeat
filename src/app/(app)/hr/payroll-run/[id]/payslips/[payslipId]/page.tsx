@@ -18,11 +18,16 @@ export default async function PayslipDetailsPage({
     where: { id: payslipId },
     include: {
       employee: {
-        include: {
-          branch: true,
+        select: {
+          firstName: true,
+          lastName: true,
+          code: true,
+          bankName: true,
+          bankAccount: true,
           department: true,
           designation: true,
-        }
+          branch: true,
+        },
       },
       payrollRun: {
         include: {
@@ -85,10 +90,10 @@ export default async function PayslipDetailsPage({
             <div className="space-y-1">
               <div className="flex justify-between"><span className="text-muted-foreground">Employee Name:</span> <span className="font-semibold">{employee.firstName} {employee.lastName}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Employee Code:</span> <span>{employee.code}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Designation:</span> <span>{employee.designation?.name || 'N/A'}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Designation:</span> <span>{employee.designation || 'N/A'}</span></div>
             </div>
             <div className="space-y-1">
-              <div className="flex justify-between"><span className="text-muted-foreground">Department:</span> <span>{employee.department?.name || 'N/A'}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Department:</span> <span>{employee.department || 'N/A'}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Bank Name:</span> <span>{employee.bankName || 'N/A'}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Account No:</span> <span>{employee.bankAccount || 'N/A'}</span></div>
             </div>

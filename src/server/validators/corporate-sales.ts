@@ -67,8 +67,15 @@ export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;
 export const recordDeliverySchema = z.object({
   orderId: z.string().cuid(),
   warehouseId: z.string().cuid(),
+  expectedDate: z.coerce.date().optional(),
+  deliveryAddress: z.string().trim().max(500).optional().or(z.literal('')),
   trackingNo: z.string().trim().max(100).optional().or(z.literal('')),
   carrier: z.string().trim().max(100).optional().or(z.literal('')),
+  transportCompany: z.string().trim().max(100).optional().or(z.literal('')),
+  vehicleNo: z.string().trim().max(100).optional().or(z.literal('')),
+  driverName: z.string().trim().max(100).optional().or(z.literal('')),
+  driverPhone: z.string().trim().max(50).optional().or(z.literal('')),
+  gatePassNo: z.string().trim().max(100).optional().or(z.literal('')),
   notes: z.string().trim().max(500).optional().or(z.literal('')),
   items: z
     .array(
@@ -80,6 +87,21 @@ export const recordDeliverySchema = z.object({
     .min(1),
 });
 export type RecordDeliveryInput = z.infer<typeof recordDeliverySchema>;
+
+export const updateDeliveryWorkflowSchema = z.object({
+  deliveryId: z.string().cuid(),
+  status: z.enum(['APPROVED', 'PICKING', 'PACKED', 'DISPATCHED', 'DELIVERED', 'CLOSED']),
+  trackingNo: z.string().trim().max(100).optional().or(z.literal('')),
+  gatePassNo: z.string().trim().max(100).optional().or(z.literal('')),
+  transportCompany: z.string().trim().max(100).optional().or(z.literal('')),
+  vehicleNo: z.string().trim().max(100).optional().or(z.literal('')),
+  driverName: z.string().trim().max(100).optional().or(z.literal('')),
+  driverPhone: z.string().trim().max(50).optional().or(z.literal('')),
+  customerSignature: z.string().trim().max(200).optional().or(z.literal('')),
+  podAttachment: z.string().trim().max(500).optional().or(z.literal('')),
+  notes: z.string().trim().max(500).optional().or(z.literal('')),
+});
+export type UpdateDeliveryWorkflowInput = z.infer<typeof updateDeliveryWorkflowSchema>;
 
 export const createInvoiceSchema = z.object({
   orderId: z.string().cuid(),

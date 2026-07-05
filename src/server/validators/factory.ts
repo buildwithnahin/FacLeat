@@ -144,3 +144,117 @@ export const productionOverheadRateSchema = z.object({
   overheadRate: z.coerce.number().min(0, 'Rate cannot be negative').max(100, 'Rate cannot exceed 100%'),
 });
 export type ProductionOverheadRateInput = z.infer<typeof productionOverheadRateSchema>;
+
+export const PRODUCTION_ISSUE_STATUS = [
+  'DRAFT',
+  'REQUESTED',
+  'APPROVED',
+  'ISSUED',
+  'REJECTED',
+] as const;
+
+export const PROCESS_TRACKING_STATUS = [
+  'PENDING',
+  'RUNNING',
+  'PAUSED',
+  'COMPLETED',
+  'CANCELLED',
+] as const;
+
+export const QUALITY_CHECK_STATUS = [
+  'PENDING',
+  'PASSED',
+  'FAILED',
+  'REWORK',
+] as const;
+
+const productionIssueItemSchema = z.object({
+  productId: z.string().cuid(),
+  batchNo: z.string().trim().max(120).optional().or(z.literal('')),
+  lotNo: z.string().trim().max(120).optional().or(z.literal('')),
+  requiredQty: z.coerce.number().min(0),
+  issuedQty: z.coerce.number().positive('Issued qty must be > 0'),
+  uom: z.enum(UNITS).default('PCS'),
+});
+
+export const productionIssueCreateSchema = z.object({
+  orderId: z.string().cuid(),
+  date: z.coerce.date(),
+  warehouseId: z.string().cuid(),
+  remarks: z.string().trim().max(1000).optional().or(z.literal('')),
+  items: z.array(productionIssueItemSchema).min(1, 'At least one item is required'),
+});
+export type ProductionIssueCreateInput = z.infer<typeof productionIssueCreateSchema>;
+
+export const productionIssueStatusSchema = z.object({
+  voucherId: z.string().cuid(),
+  status: z.enum(PRODUCTION_ISSUE_STATUS),
+});
+export type ProductionIssueStatusInput = z.infer<typeof productionIssueStatusSchema>;
+
+export const processTrackingCreateSchema = z.object({
+  trackingId: z.string().cuid().optional().or(z.literal('')),
+  orderId: z.string().cuid(),
+  productId: z.string().cuid(),
+  stageId: z.string().cuid(),
+  operatorId: z.string().cuid().optional().or(z.literal('')),
+  machine: z.string().trim().max(120).optional().or(z.literal('')),
+  batchNo: z.string().trim().max(120).optional().or(z.literal('')),
+  inputQty: z.coerce.number().min(0),
+  outputQty: z.coerce.number().min(0).default(0),
+  rejectedQty: z.coerce.number().min(0).default(0),
+  scrapQty: z.coerce.number().min(0).default(0),
+  reworkQty: z.coerce.number().min(0).default(0),
+  startTime: z.string().optional().or(z.literal('')),
+  endTime: z.string().optional().or(z.literal('')),
+  status: z.enum(PROCESS_TRACKING_STATUS),
+}).superRefine((val, ctx) => {
+  if (val.outputQty + val.rejectedQty + val.scrapQty > val.inputQty && val.inputQty > 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Output + rejected + scrap cannot exceed input qty',
+      path: ['outputQty'],
+    });
+  }
+});
+export type ProcessTrackingCreateInput = z.infer<typeof processTrackingCreateSchema>;
+
+export const productionReceiveCreateSchema = z.object({
+  date: z.coerce.date(),
+  orderId: z.string().cuid(),
+  fromStageId: z.string().cuid(),
+  toStageId: z.string().cuid(),
+  productId: z.string().cuid(),
+  receivedQty: z.coerce.number().positive('Received qty must be > 0'),
+  rejectedQty: z.coerce.number().min(0).default(0),
+  scrapQty: z.coerce.number().min(0).default(0),
+  operatorId: z.string().cuid().optional().or(z.literal('')),
+  remarks: z.string().trim().max(1000).optional().or(z.literal('')),
+}).superRefine((val, ctx) => {
+  if (val.fromStageId === val.toStageId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'From process and to process must be different',
+      path: ['toStageId'],
+    });
+  }
+});
+export type ProductionReceiveCreateInput = z.infer<typeof productionReceiveCreateSchema>;
+
+const finishedGoodsReceiveItemSchema = z.object({
+  productId: z.string().cuid(),
+  batchNo: z.string().trim().max(120).optional().or(z.literal('')),
+  quantity: z.coerce.number().positive('Received qty must be > 0'),
+  uom: z.enum(UNITS).default('PCS'),
+  qualityStatus: z.enum(QUALITY_CHECK_STATUS).default('PENDING'),
+});
+
+export const finishedGoodsReceiveCreateSchema = z.object({
+  date: z.coerce.date(),
+  orderId: z.string().cuid(),
+  warehouseId: z.string().cuid(),
+  sourceStageId: z.string().cuid().optional().or(z.literal('')),
+  remarks: z.string().trim().max(1000).optional().or(z.literal('')),
+  items: z.array(finishedGoodsReceiveItemSchema).min(1, 'At least one item is required'),
+});
+export type FinishedGoodsReceiveCreateInput = z.infer<typeof finishedGoodsReceiveCreateSchema>;

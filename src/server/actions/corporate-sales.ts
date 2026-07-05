@@ -10,6 +10,7 @@ import {
   createOrderSchema,
   cancelOrderSchema,
   recordDeliverySchema,
+  updateDeliveryWorkflowSchema,
   createInvoiceSchema,
   recordInvoicePaymentSchema,
 } from '@/server/validators/corporate-sales';
@@ -102,7 +103,22 @@ export async function recordCorporateDeliveryAction(input: unknown) {
     const session = await getSession();
     const d = await corporateService.recordDelivery(session, parsed.data);
     revalidatePath(`/corporate-sales/orders/${parsed.data.orderId}`);
+    revalidatePath('/warehouse/dispatch');
     return { success: true, deliveryId: d.id, deliveryNumber: d.number };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function updateCorporateDeliveryWorkflowAction(input: unknown) {
+  const parsed = updateDeliveryWorkflowSchema.safeParse(input);
+  if (!parsed.success)
+    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+  try {
+    const session = await getSession();
+    await corporateService.updateDeliveryWorkflow(session, parsed.data);
+    revalidatePath('/warehouse/dispatch');
+    return { success: true };
   } catch (e) {
     return fail(e);
   }

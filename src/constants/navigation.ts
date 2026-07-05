@@ -111,6 +111,10 @@ export const MODULES: NavModule[] = [
       { label: 'Overview', href: '/warehouse', permission: 'warehouse:read' },
       { label: 'Receive', href: '/warehouse/receive', permission: 'warehouse:receive' },
       { label: 'Issue / adjust out', href: '/warehouse/issue', permission: 'warehouse:issue' },
+      { label: 'Dispatch', href: '/warehouse/dispatch', permission: 'corporate-sales:deliver' },
+      { label: 'Showroom requisitions', href: '/warehouse/requisitions', permission: 'warehouse:transfer' },
+      { label: 'Requisition dispatch', href: '/warehouse/requisitions/dispatch', permission: 'warehouse:transfer' },
+      { label: 'Showroom receive', href: '/warehouse/requisitions/receive', permission: 'warehouse:transfer' },
       { label: 'Customer returns', href: '/warehouse/returns', permission: 'inventory:return' },
       { label: 'Faulty stock', href: '/warehouse/faulty', permission: 'inventory:damage' },
       { label: 'Transfer', href: '/warehouse/transfer', permission: 'warehouse:transfer' },
@@ -127,6 +131,10 @@ export const MODULES: NavModule[] = [
     items: [
       { label: 'Production orders', href: '/factory', permission: 'factory:read' },
       { label: 'New production order', href: '/factory/new', permission: 'factory:plan' },
+      { label: 'Production issue', href: '/factory/production-issue', permission: 'factory:execute' },
+      { label: 'Process tracking', href: '/factory/process-tracking', permission: 'factory:execute' },
+      { label: 'Production receive', href: '/factory/production-receive', permission: 'factory:execute' },
+      { label: 'FG receive', href: '/factory/finished-goods-receive', permission: 'factory:execute' },
     ],
   },
   {
@@ -307,7 +315,7 @@ export const MODULES: NavModule[] = [
     permission: 'hr:read',
     section: 'HR',
     items: [
-      { label: 'Dashboard', href: '/hr', permission: 'hr:read' },
+      { label: 'Overview', href: '/hr', permission: 'hr:read' },
       {
         label: 'Recruitment',
         permission: 'hr:read',

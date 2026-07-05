@@ -75,6 +75,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.name,
+          defaultBranchId: user.defaultBranchId ?? null,
           activeBranchId: user.defaultBranchId ?? null,
         };
       },

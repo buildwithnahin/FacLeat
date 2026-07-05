@@ -5,8 +5,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { markAttendanceAction } from '@/server/actions/hr';
-import { ATTENDANCE_STATUSES } from '@/server/validators/hr';
+import { AttendanceRow } from './attendance-row';
 
 export const metadata = { title: 'Attendance' };
 
@@ -119,74 +118,29 @@ export default async function AttendancePage({
                 }
 
                 return (
-                  <tr key={e.id} className="hover:bg-muted/30">
-                    <td className="px-3 py-3 font-mono text-xs">{e.code}</td>
-                    <td className="px-3 py-3 font-medium">
-                      {e.firstName} {e.lastName}
-                    </td>
-                    <td className="px-3 py-3">
-                      {canMark ? (
-                        <input
-                          form={formId}
-                          name="checkIn"
-                          type="time"
-                          defaultValue={formatTimeValue(r?.checkIn)}
-                          className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-2 py-1 text-sm"
-                        />
-                      ) : (
-                        <span className="font-mono text-xs">{formatTimeValue(r?.checkIn) || '-'}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3">
-                      {canMark ? (
-                        <input
-                          form={formId}
-                          name="checkOut"
-                          type="time"
-                          defaultValue={formatTimeValue(r?.checkOut)}
-                          className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-2 py-1 text-sm"
-                        />
-                      ) : (
-                        <span className="font-mono text-xs">{formatTimeValue(r?.checkOut) || '-'}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-xs font-medium text-primary">
-                      {otDisplay}
-                    </td>
-                    <td className="px-3 py-3">
-                      {canMark ? (
-                        <select
-                          form={formId}
-                          name="status"
-                          defaultValue={r?.status ?? (holiday ? 'HOLIDAY' : 'PRESENT')}
-                          className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-2 text-xs"
-                        >
-                          {ATTENDANCE_STATUSES.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
-                      ) : r ? (
-                        <Badge variant={STATUS_VARIANT[r.status] ?? 'outline'}>{r.status}</Badge>
-                      ) : holiday ? (
-                        <Badge variant="outline">HOLIDAY</Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Not marked</span>
-                      )}
-                    </td>
-                    {canMark && (
-                      <td className="px-3 py-3">
-                        <form id={formId} action={markAttendanceAction}>
-                          <input type="hidden" name="employeeId" value={e.id} />
-                          <input type="hidden" name="date" value={dateStr} />
-                          <Button type="submit" size="sm" variant="outline" className="w-full">
-                            Save
-                          </Button>
-                        </form>
-                      </td>
-                    )}
-                  </tr>
+                  <AttendanceRow
+                    key={e.id}
+                    employee={{
+                      id: e.id,
+                      code: e.code,
+                      firstName: e.firstName,
+                      lastName: e.lastName,
+                    }}
+                    record={
+                      r
+                        ? {
+                            id: r.id,
+                            status: r.status,
+                            checkIn: formatTimeValue(r.checkIn),
+                            checkOut: formatTimeValue(r.checkOut),
+                          }
+                        : null
+                    }
+                    otDisplay={otDisplay}
+                    holiday={holiday}
+                    dateStr={dateStr}
+                    canMark={canMark}
+                  />
                 );
               })}
             </tbody>

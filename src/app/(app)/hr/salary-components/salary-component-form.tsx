@@ -4,7 +4,6 @@ import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { SalaryComponent, SalaryComponentCategory, SalaryComponentType, SalaryCalculationType, SalaryComponentStatus } from '@prisma/client';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -17,6 +16,33 @@ import { Textarea } from '@/components/ui/textarea';
 import { salaryComponentFormSchema, SalaryComponentFormValues } from '@/server/validators/salary-components';
 import { createSalaryComponent, updateSalaryComponent } from '@/server/actions/salary-components';
 
+type SalaryComponentFormInitial = {
+  id: string;
+  name: string;
+  code: string;
+  description: string | null;
+  category: string;
+  type: string;
+  calculationType: string;
+  value: number | null;
+  formula: string | null;
+  baseComponent: string | null;
+  isTaxable: boolean;
+  includeInGross: boolean;
+  includeInNet: boolean;
+  showInPayslip: boolean;
+  isSystemGenerated: boolean;
+  isMandatory: boolean;
+  isEditableDuringPayroll: boolean;
+  allowNegativeValue: boolean;
+  maxAmount: number | null;
+  minAmount: number | null;
+  status: string;
+  applicableEmploymentTypes: string[];
+  applicableDepartments: string[];
+  applicableDesignations: string[];
+};
+
 export function SalaryComponentForm({
   mode,
   initial,
@@ -27,11 +53,11 @@ export function SalaryComponentForm({
   path,
 }: {
   mode: 'create' | 'edit';
-  initial: SalaryComponent | null;
+  initial: SalaryComponentFormInitial | null;
   departments: string[];
   designations: string[];
   employmentTypes: string[];
-  components: SalaryComponent[];
+  components: SalaryComponentFormInitial[];
   path: string;
 }) {
   const router = useRouter();

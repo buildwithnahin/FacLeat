@@ -1,0 +1,150 @@
+import { PageHeader } from '@/components/shared/page-header';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { prisma } from '@/server/db';
+import { getSession } from '@/server/auth/session';
+import { authorize } from '@/server/auth/authorize';
+import { factoryWorkflowService } from '@/server/services/factory-workflow.service';
+import { ProductionIssueForm } from './production-issue-form';
+import { updateProductionIssueStatusAction } from '@/server/actions/factory';
+
+export const metadata = { title: 'Production Issue' };
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Draft',
+  REQUESTED: 'Submitted',
+  APPROVED: 'Approved',
+  ISSUED: 'Issued',
+  REJECTED: 'Rejected',
+};
+
+export default async function ProductionIssuePage() {
+  const session = await getSession();
+  await authorize(session, 'factory:read');
+  const branchId = session?.activeBranchId;
+
+  const [orders, warehouses, issues] = await Promise.all([
+    prisma.productionOrder.findMany({
+      where: {
+        branchId: branchId || undefined,
+        status: { in: ['PLANNED', 'IN_PROGRESS'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        product: { select: { id: true, name: true, sku: true } },
+        materials: {
+          include: { product: { select: { id: true, name: true, sku: true } } },
+        },
+      },
+    }),
+    prisma.warehouse.findMany({
+      where: { branchId: branchId || undefined, isActive: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, code: true, type: true },
+    }),
+    factoryWorkflowService.listProductionIssues(session, branchId),
+  ]);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="WIP Production Issue"
+        description="Issue raw materials from RM warehouse into production against a production order."
+      />
+
+      <ProductionIssueForm
+        orders={orders.map((order) => ({
+          id: order.id,
+          number: order.number,
+          productLabel: `${order.product.name} (${order.product.sku})`,
+          department: order.notes || '-',
+          materials: order.materials.map((material) => ({
+            productId: material.productId,
+            label: `${material.product.name} (${material.product.sku})`,
+            plannedQty: material.plannedQty.toString(),
+            consumedQty: material.consumedQty.toString(),
+            unit: material.unit,
+          })),
+        }))}
+        warehouses={warehouses.map((warehouse) => ({
+          id: warehouse.id,
+          label: `${warehouse.name} (${warehouse.code})`,
+        }))}
+      />
+
+      <Card className="p-0">
+        <div className="px-4 py-3 border-b text-sm font-medium">Issue Vouchers</div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3 text-left">Issue No</th>
+                <th className="px-4 py-3 text-left">Production Order</th>
+                <th className="px-4 py-3 text-left">Warehouse</th>
+                <th className="px-4 py-3 text-left">Date</th>
+                <th className="px-4 py-3 text-left">Items</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {issues.map((issue) => (
+                <tr key={issue.id} className="border-t align-top">
+                  <td className="px-4 py-3 font-medium">{issue.voucherNo}</td>
+                  <td className="px-4 py-3">
+                    <div>{issue.order.number}</div>
+                    <div className="text-xs text-muted-foreground">{issue.order.product.name}</div>
+                  </td>
+                  <td className="px-4 py-3">{issue.warehouse.name}</td>
+                  <td className="px-4 py-3">{issue.date.toISOString().slice(0, 10)}</td>
+                  <td className="px-4 py-3">
+                    <div className="space-y-1">
+                      {issue.items.map((item) => (
+                        <div key={item.id} className="text-xs">
+                          {item.product.name} • {item.issuedQty.toString()} {item.uom}
+                        </div>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">{STATUS_LABELS[issue.status] ?? issue.status}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-2">
+                      {issue.status === 'DRAFT' ? (
+                        <form action={updateProductionIssueStatusAction}>
+                          <input type="hidden" name="voucherId" value={issue.id} />
+                          <input type="hidden" name="status" value="REQUESTED" />
+                          <Button size="sm" variant="outline" type="submit">Submit</Button>
+                        </form>
+                      ) : null}
+                      {issue.status === 'REQUESTED' ? (
+                        <form action={updateProductionIssueStatusAction}>
+                          <input type="hidden" name="voucherId" value={issue.id} />
+                          <input type="hidden" name="status" value="APPROVED" />
+                          <Button size="sm" variant="outline" type="submit">Approve</Button>
+                        </form>
+                      ) : null}
+                      {issue.status === 'APPROVED' ? (
+                        <form action={updateProductionIssueStatusAction}>
+                          <input type="hidden" name="voucherId" value={issue.id} />
+                          <input type="hidden" name="status" value="ISSUED" />
+                          <Button size="sm" type="submit">Issue</Button>
+                        </form>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {issues.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                    No production issue vouchers yet.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}

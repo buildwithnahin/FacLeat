@@ -11,8 +11,29 @@ import { NotFoundError, ValidationError } from '@/lib/errors';
 const USER_INCLUDE = {
   employee: { select: { id: true, code: true, firstName: true, lastName: true, designation: true, department: true } },
   defaultBranch: { select: { id: true, name: true, code: true } },
+  branchAccesses: { include: { branch: { select: { id: true, name: true, code: true } } } },
   roles: { include: { role: { select: { id: true, name: true } } } },
 } as const;
+
+function normalizeAssignedBranchIds(input: {
+  branchAccessType: 'ALL_BRANCHES' | 'ASSIGNED_BRANCHES' | 'OWN_BRANCH_ONLY';
+  defaultBranchId?: string | null;
+  assignedBranchIds?: string[];
+  fallbackBranchId?: string | null;
+}) {
+  if (input.branchAccessType === 'ALL_BRANCHES') {
+    return [] as string[];
+  }
+
+  if (input.branchAccessType === 'ASSIGNED_BRANCHES') {
+    const ids = new Set<string>(input.assignedBranchIds ?? []);
+    if (input.defaultBranchId) ids.add(input.defaultBranchId);
+    return [...ids];
+  }
+
+  const branchId = input.defaultBranchId || input.fallbackBranchId;
+  return branchId ? [branchId] : [];
+}
 
 export const userService = {
   async list(session: AppSession | null) {
@@ -43,6 +64,13 @@ export const userService = {
     if (employee.user) throw new ValidationError('Employee already has a user account');
 
     const passwordHash = await bcrypt.hash(input.password, 10);
+    const defaultBranchId = input.defaultBranchId || employee.branchId;
+    const assignedBranchIds = normalizeAssignedBranchIds({
+      branchAccessType: input.branchAccessType,
+      defaultBranchId,
+      assignedBranchIds: input.assignedBranchIds,
+      fallbackBranchId: employee.branchId,
+    });
 
     const user = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -53,7 +81,15 @@ export const userService = {
           phone: employee.phone,
           passwordHash,
           status: input.status,
-          defaultBranchId: input.defaultBranchId || employee.branchId,
+          branchAccessType: input.branchAccessType,
+          defaultBranchId,
+          branchAccesses: assignedBranchIds.length
+            ? {
+                createMany: {
+                  data: assignedBranchIds.map((branchId) => ({ branchId })),
+                },
+              }
+            : undefined,
           roles: {
             create: [{ roleId: input.roleId }],
           },
@@ -76,6 +112,9 @@ export const userService = {
             employeeId: input.employeeId,
             designation: employee.designation,
             roleId: input.roleId,
+            branchAccessType: input.branchAccessType,
+            defaultBranchId,
+            assignedBranchIds,
           },
         },
         tx,
@@ -107,9 +146,17 @@ export const userService = {
     if (input.employeeId !== existing.employeeId && employee.user) {
       throw new ValidationError('Employee already has a user account');
     }
+    const defaultBranchId = input.defaultBranchId || employee.branchId;
+    const assignedBranchIds = normalizeAssignedBranchIds({
+      branchAccessType: input.branchAccessType,
+      defaultBranchId,
+      assignedBranchIds: input.assignedBranchIds,
+      fallbackBranchId: employee.branchId,
+    });
 
     const updated = await prisma.$transaction(async (tx) => {
       await tx.userRole.deleteMany({ where: { userId: input.id } });
+      await tx.userBranchAccess.deleteMany({ where: { userId: input.id } });
 
       const data: {
         employeeId: string;
@@ -117,8 +164,10 @@ export const userService = {
         email: string;
         phone: string | null;
         status: UserUpdateInput['status'];
+        branchAccessType: UserUpdateInput['branchAccessType'];
         defaultBranchId: string | null;
         passwordHash?: string;
+        branchAccesses?: { createMany: { data: { branchId: string }[] } };
         roles: { create: { roleId: string }[] };
       } = {
         employeeId: input.employeeId,
@@ -126,9 +175,17 @@ export const userService = {
         email: input.email,
         phone: employee.phone,
         status: input.status,
-        defaultBranchId: input.defaultBranchId || employee.branchId,
+        branchAccessType: input.branchAccessType,
+        defaultBranchId,
         roles: { create: [{ roleId: input.roleId }] },
       };
+      if (assignedBranchIds.length) {
+        data.branchAccesses = {
+          createMany: {
+            data: assignedBranchIds.map((branchId) => ({ branchId })),
+          },
+        };
+      }
       if (input.password) data.passwordHash = await bcrypt.hash(input.password, 10);
 
       const updated = await tx.user.update({
@@ -159,6 +216,9 @@ export const userService = {
             employeeId: input.employeeId,
             designation: employee.designation,
             roleId: input.roleId,
+            branchAccessType: input.branchAccessType,
+            defaultBranchId,
+            assignedBranchIds,
           },
         },
         tx,

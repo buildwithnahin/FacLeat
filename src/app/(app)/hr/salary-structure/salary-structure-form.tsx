@@ -1,10 +1,9 @@
 'use client';
 
-import { useTransition, useMemo } from 'react';
+import { useEffect, useMemo, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { SalaryComponent, SalaryStructureStatus, PayrollFrequency, SalaryStructure } from '@prisma/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -19,6 +18,43 @@ import { salaryStructureFormSchema, SalaryStructureFormValues } from '@/server/v
 import { createSalaryStructure, updateSalaryStructure } from '@/server/actions/salary-structures';
 import { Trash } from 'lucide-react';
 
+type SalaryComponentOption = {
+  id: string;
+  name: string;
+  code: string;
+  category: string;
+  type: string;
+  calculationType: string;
+  value: number | null;
+  baseComponent?: string | null;
+  includeInGross?: boolean;
+  includeInNet?: boolean;
+};
+
+type SalaryStructureInitial = {
+  id: string;
+  name: string;
+  code: string;
+  description: string | null;
+  status: string;
+  grossSalary: number;
+  netSalary: number | null;
+  effectiveFrom: string | Date;
+  effectiveTo: string | Date | null;
+  payrollFrequency: string;
+  currency: string;
+  employmentTypes: string[];
+  departmentIds: string[];
+  designationIds: string[];
+  branchIds: string[];
+  notes: string | null;
+  components: Array<{
+    salaryComponentId: string;
+    value: number;
+    isAutoCalculated: boolean;
+  }>;
+};
+
 export function SalaryStructureForm({
   mode,
   initial,
@@ -30,12 +66,12 @@ export function SalaryStructureForm({
   path,
 }: {
   mode: 'create' | 'edit';
-  initial: any | null;
+  initial: SalaryStructureInitial | null;
   departments: string[];
   designations: string[];
   employmentTypes: string[];
   branches: { id: string, name: string, code: string }[];
-  salaryComponents: SalaryComponent[];
+  salaryComponents: SalaryComponentOption[];
   path: string;
 }) {
   const router = useRouter();
@@ -72,34 +108,107 @@ export function SalaryStructureForm({
     name: 'components',
   });
 
-  const watchComponents = form.watch('components');
+  const watchComponents = useWatch({
+    control: form.control,
+    name: 'components',
+    defaultValue: form.getValues('components'),
+  });
 
-  const { grossSalary, totalEarnings, totalFixedDeductions } = useMemo(() => {
+  const { grossSalary, totalEarnings, totalFixedDeductions, computedAmounts } = useMemo(() => {
+    const computed = new Map<string, number>();
+
+    const getComponentDefinition = (salaryComponentId: string) =>
+      salaryComponents.find((component) => component.id === salaryComponentId);
+
+    const getResolvedAmount = (salaryComponentId: string, fallbackValue: number | null | undefined) =>
+      computed.get(salaryComponentId) ?? Number(fallbackValue ?? 0);
+
+    const resolveBaseAmount = (baseComponent: string | null | undefined) => {
+      if (!baseComponent) return 0;
+
+      if (baseComponent === 'BASIC') {
+        const basicEntry = watchComponents.find((component) => {
+          const def = getComponentDefinition(component.salaryComponentId);
+          return def?.code === 'BASIC';
+        });
+        return basicEntry ? getResolvedAmount(basicEntry.salaryComponentId, basicEntry.value) : 0;
+      }
+
+      if (baseComponent === 'GROSS') {
+        let gross = 0;
+        watchComponents.forEach((component) => {
+          const def = getComponentDefinition(component.salaryComponentId);
+          if (def?.category === 'EARNINGS' && def.includeInGross !== false) {
+            gross += getResolvedAmount(component.salaryComponentId, component.value);
+          }
+        });
+        return gross;
+      }
+
+      if (baseComponent === 'NET') {
+        let earnings = 0;
+        let deductions = 0;
+        watchComponents.forEach((component) => {
+          const def = getComponentDefinition(component.salaryComponentId);
+          const amount = getResolvedAmount(component.salaryComponentId, component.value);
+          if (def?.category === 'EARNINGS' && def.includeInNet !== false) earnings += amount;
+          if (def?.category === 'DEDUCTION') deductions += amount;
+        });
+        return earnings - deductions;
+      }
+
+      const matchingEntry = watchComponents.find((component) => {
+        const def = getComponentDefinition(component.salaryComponentId);
+        return def?.code === baseComponent;
+      });
+      return matchingEntry ? getResolvedAmount(matchingEntry.salaryComponentId, matchingEntry.value) : 0;
+    };
+
+    watchComponents.forEach((component) => {
+      const def = getComponentDefinition(component.salaryComponentId);
+      if (!def) return;
+
+      let amount = Number(component.value) || 0;
+
+      if (def.calculationType === 'PERCENTAGE') {
+        amount = (resolveBaseAmount(def.baseComponent) * amount) / 100;
+      }
+
+      computed.set(component.salaryComponentId, amount);
+    });
+
     let earnings = 0;
     let deductions = 0;
 
-    watchComponents.forEach(comp => {
-      const componentDef = salaryComponents.find(sc => sc.id === comp.salaryComponentId);
-      if (componentDef) {
-        if (componentDef.category === 'EARNINGS') {
-          earnings += Number(comp.value) || 0;
-        } else if (componentDef.category === 'DEDUCTION' && componentDef.type === 'FIXED') {
-          deductions += Number(comp.value) || 0;
-        }
+    watchComponents.forEach((component) => {
+      const def = getComponentDefinition(component.salaryComponentId);
+      const amount = computed.get(component.salaryComponentId) ?? 0;
+      if (!def) return;
+
+      if (def.category === 'EARNINGS') {
+        earnings += amount;
+      } else if (def.category === 'DEDUCTION' && def.type === 'FIXED') {
+        deductions += amount;
       }
     });
 
-    return { 
+    return {
       grossSalary: earnings,
       totalEarnings: earnings,
       totalFixedDeductions: deductions,
+      computedAmounts: computed,
     };
   }, [watchComponents, salaryComponents]);
 
-  // Update gross salary automatically
-  if (form.getValues('grossSalary') !== grossSalary) {
-    form.setValue('grossSalary', grossSalary);
-  }
+  useEffect(() => {
+    if (form.getValues('grossSalary') !== grossSalary) {
+      form.setValue('grossSalary', grossSalary, {
+        shouldDirty: true,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+    }
+  }, [form, grossSalary]);
 
   function onSubmit(data: SalaryStructureFormValues) {
     startTransition(async () => {
@@ -208,6 +317,7 @@ export function SalaryStructureForm({
                   {fields.map((field, index) => {
                     const compDef = salaryComponents.find(sc => sc.id === field.salaryComponentId);
                     if (!compDef) return null;
+                    const computedAmount = computedAmounts.get(field.salaryComponentId) ?? 0;
 
                     return (
                       <div key={field.id} className="flex items-center gap-4 p-3 border rounded-md bg-slate-50 dark:bg-slate-900/40">
@@ -230,17 +340,24 @@ export function SalaryStructureForm({
                               <FormItem className="flex-1 max-w-[200px] mb-0">
                                 <FormControl>
                                   <div className="relative">
-                                    <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">৳</span>
+                                    <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">
+                                      {compDef.calculationType === 'PERCENTAGE' ? '%' : '৳'}
+                                    </span>
                                     <Input 
                                       type="number" 
                                       step="0.01" 
                                       className="pl-7"
-                                      placeholder="Value"
+                                      placeholder={compDef.calculationType === 'PERCENTAGE' ? 'Percent' : 'Value'}
                                       {...field} 
                                       onChange={e => field.onChange(Number(e.target.value))} 
                                     />
                                   </div>
                                 </FormControl>
+                                {compDef.calculationType === 'PERCENTAGE' ? (
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    Computed amount: ৳ {computedAmount.toFixed(2)}
+                                  </div>
+                                ) : null}
                                 <FormMessage />
                               </FormItem>
                             )}

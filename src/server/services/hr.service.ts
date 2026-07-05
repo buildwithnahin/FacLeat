@@ -993,7 +993,7 @@ export const hrService = {
 
     // Helper to get minutes from midnight for a Date
     const dateToMinutes = (d: Date): number => {
-      return d.getUTCHours() * 60 + d.getUTCMinutes();
+      return d.getHours() * 60 + d.getMinutes();
     };
 
     // Format minutes to "HH:MM" display
@@ -1122,8 +1122,8 @@ export const hrService = {
         shiftStart: shift.startTime,
         shiftEnd: shift.endTime,
         date: dateStr,
-        checkIn: rec.checkIn ? rec.checkIn.toISOString().slice(11, 16) : '-',
-        checkOut: rec.checkOut ? rec.checkOut.toISOString().slice(11, 16) : '-',
+        checkIn: rec.checkIn ? `${String(rec.checkIn.getHours()).padStart(2, '0')}:${String(rec.checkIn.getMinutes()).padStart(2, '0')}` : '-',
+        checkOut: rec.checkOut ? `${String(rec.checkOut.getHours()).padStart(2, '0')}:${String(rec.checkOut.getMinutes()).padStart(2, '0')}` : '-',
         lateMinutes,
         earlyMinutes,
         workedHours: fmtMinutesToHHMM(Math.round(workedMinutes)),

@@ -12,6 +12,47 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SalaryStructureForm } from './salary-structure-form';
 import { formatCurrency } from '@/lib/utils';
 
+function serializeSalaryComponent(component: Awaited<ReturnType<typeof SalaryComponentsService.getSalaryComponents>>[number]) {
+  return {
+    id: component.id,
+    name: component.name,
+    code: component.code,
+    category: component.category,
+    type: component.type,
+    calculationType: component.calculationType,
+    value: component.value ? Number(component.value) : null,
+    baseComponent: component.baseComponent,
+    includeInGross: component.includeInGross,
+    includeInNet: component.includeInNet,
+  };
+}
+
+function serializeSalaryStructure(initial: Awaited<ReturnType<typeof SalaryStructuresService.getSalaryStructureById>>) {
+  return {
+    id: initial.id,
+    name: initial.name,
+    code: initial.code,
+    description: initial.description,
+    status: initial.status,
+    grossSalary: Number(initial.grossSalary),
+    netSalary: initial.netSalary ? Number(initial.netSalary) : null,
+    effectiveFrom: initial.effectiveFrom,
+    effectiveTo: initial.effectiveTo,
+    payrollFrequency: initial.payrollFrequency,
+    currency: initial.currency,
+    employmentTypes: initial.employmentTypes,
+    departmentIds: initial.departmentIds,
+    designationIds: initial.designationIds,
+    branchIds: initial.branchIds,
+    notes: initial.notes,
+    components: initial.components.map((component) => ({
+      salaryComponentId: component.salaryComponentId,
+      value: Number(component.value),
+      isAutoCalculated: component.isAutoCalculated,
+    })),
+  };
+}
+
 export const metadata = { title: 'Salary Structure' };
 
 const EMPLOYMENT_TYPE_OPTIONS = [
@@ -62,6 +103,7 @@ export default async function SalaryStructuresPage({
 
   const initialId = sp.edit && sp.edit !== 'new' ? sp.edit : null;
   const initial = initialId ? await SalaryStructuresService.getSalaryStructureById(initialId).catch(() => null) : null;
+  const serializedSalaryComponents = salaryComponents.map(serializeSalaryComponent);
   
   const departments = Array.from(new Set([...departmentRows.map((row) => row.id), ...employees.map((row) => row.department).filter(Boolean) as string[]]));
   const designations = Array.from(new Set([...designationRows.map((row) => row.id), ...employees.map((row) => row.designation).filter(Boolean) as string[]]));
@@ -178,12 +220,12 @@ export default async function SalaryStructuresPage({
       {canWrite && sp.edit ? (
         <SalaryStructureForm
           mode={sp.edit === 'new' ? 'create' : 'edit'}
-          initial={sp.edit === 'new' ? null : initial}
+          initial={sp.edit === 'new' ? null : initial ? serializeSalaryStructure(initial) : null}
           departments={departments}
           designations={designations}
           employmentTypes={employmentTypes}
           branches={branches}
-          salaryComponents={salaryComponents}
+          salaryComponents={serializedSalaryComponents}
           path="/hr/salary-structure"
         />
       ) : null}

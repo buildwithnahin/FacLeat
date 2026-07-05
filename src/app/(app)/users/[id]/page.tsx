@@ -34,6 +34,8 @@ export default async function EditUserPage({ params }: { params: Promise<{ id: s
           email: user.email,
           status: user.status,
           defaultBranchId: user.defaultBranchId,
+          branchAccessType: user.branchAccessType,
+          assignedBranchIds: user.branchAccesses.map((access) => access.branchId),
           roleId: user.roles[0]?.role.id ?? null,
         }}
         roles={roles

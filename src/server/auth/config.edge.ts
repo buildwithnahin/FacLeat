@@ -5,17 +5,20 @@ declare module 'next-auth' {
     user: {
       id: string;
       activeBranchId: string | null;
+      defaultBranchId?: string | null;
     } & DefaultSession['user'];
   }
 
   interface User {
     activeBranchId?: string | null;
+    defaultBranchId?: string | null;
   }
 }
 
 interface AppToken {
   id?: string;
   activeBranchId?: string | null;
+  defaultBranchId?: string | null;
   [key: string]: unknown;
 }
 
@@ -32,6 +35,7 @@ export const authConfig = {
       if (user) {
         t.id = user.id as string;
         t.activeBranchId = user.activeBranchId ?? null;
+        t.defaultBranchId = user.defaultBranchId ?? null;
       }
       return t;
     },
@@ -39,6 +43,7 @@ export const authConfig = {
       const t = token as AppToken;
       if (t.id) session.user.id = t.id;
       session.user.activeBranchId = t.activeBranchId ?? null;
+      session.user.defaultBranchId = t.defaultBranchId ?? null;
       return session;
     },
   },

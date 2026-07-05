@@ -1,4 +1,5 @@
 import 'server-only';
+import { canAccessBranch } from './branch-access';
 import { ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import type { Permission } from '@/lib/permissions';
 import type { AppSession } from './session';
@@ -12,8 +13,8 @@ export async function authorize(
   if (!session.permissions.includes(permission)) {
     throw new ForbiddenError(`Missing permission: ${permission}`);
   }
-  if (ctx?.branchId && session.activeBranchId && ctx.branchId !== session.activeBranchId) {
-    throw new ForbiddenError(`Branch mismatch: active=${session.activeBranchId}`);
+  if (ctx?.branchId && !canAccessBranch(session, ctx.branchId)) {
+    throw new ForbiddenError(`Branch access denied: ${ctx.branchId}`);
   }
   return session;
 }

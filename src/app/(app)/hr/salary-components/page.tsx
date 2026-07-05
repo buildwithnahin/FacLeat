@@ -10,6 +10,35 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SalaryComponentForm } from './salary-component-form';
 
+function serializeSalaryComponent(component: Awaited<ReturnType<typeof SalaryComponentsService.getSalaryComponents>>[number]) {
+  return {
+    id: component.id,
+    name: component.name,
+    code: component.code,
+    description: component.description,
+    category: component.category,
+    type: component.type,
+    calculationType: component.calculationType,
+    value: component.value ? Number(component.value) : null,
+    formula: component.formula,
+    baseComponent: component.baseComponent,
+    isTaxable: component.isTaxable,
+    includeInGross: component.includeInGross,
+    includeInNet: component.includeInNet,
+    showInPayslip: component.showInPayslip,
+    isSystemGenerated: component.isSystemGenerated,
+    isMandatory: component.isMandatory,
+    isEditableDuringPayroll: component.isEditableDuringPayroll,
+    allowNegativeValue: component.allowNegativeValue,
+    maxAmount: component.maxAmount ? Number(component.maxAmount) : null,
+    minAmount: component.minAmount ? Number(component.minAmount) : null,
+    status: component.status,
+    applicableEmploymentTypes: component.applicableEmploymentTypes,
+    applicableDepartments: component.applicableDepartments,
+    applicableDesignations: component.applicableDesignations,
+  };
+}
+
 export const metadata = { title: 'Salary Components' };
 
 const EMPLOYMENT_TYPE_OPTIONS = [
@@ -55,6 +84,7 @@ export default async function SalaryComponentsPage({
     }),
   ]);
 
+  const serializedComponents = components.map(serializeSalaryComponent);
   const initial = sp.edit ? components.find((row) => row.id === sp.edit) ?? null : null;
   const departments = Array.from(new Set([...departmentRows.map((row) => row.name), ...employees.map((row) => row.department).filter(Boolean) as string[]])).sort();
   const designations = Array.from(new Set([...designationRows.map((row) => row.name), ...employees.map((row) => row.designation).filter(Boolean) as string[]])).sort();
@@ -65,11 +95,7 @@ export default async function SalaryComponentsPage({
       <PageHeader
         title="Salary Components"
         description="Define all earnings and deductions that can be used throughout the payroll system."
-      >
-        <Button asChild variant="outline">
-          <Link href="/hr/salary-structure">Salary Structure</Link>
-        </Button>
-      </PageHeader>
+      />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -196,11 +222,11 @@ export default async function SalaryComponentsPage({
       {canWrite && sp.edit ? (
         <SalaryComponentForm
           mode={sp.edit === 'new' ? 'create' : 'edit'}
-          initial={sp.edit === 'new' ? null : initial}
+          initial={sp.edit === 'new' ? null : initial ? serializeSalaryComponent(initial) : null}
           departments={departments}
           designations={designations}
           employmentTypes={employmentTypes}
-          components={components}
+          components={serializedComponents}
           path="/hr/salary-components"
         />
       ) : null}

@@ -2,6 +2,89 @@ import { prisma } from '@/server/db';
 import { Prisma, PayrollRunStatus } from '@prisma/client';
 import { CalculatePayrollFormValues } from '../validators/payroll-run';
 
+function resolveSalaryFromStructure(
+  assignment:
+    | {
+        salaryStructure: {
+          grossSalary: Prisma.Decimal;
+          netSalary: Prisma.Decimal | null;
+          components: Array<{
+            value: Prisma.Decimal;
+            salaryComponent: {
+              code: string;
+              category: string;
+              calculationType: string;
+              baseComponent: string | null;
+            };
+          }>;
+        };
+      }
+    | undefined,
+) {
+  if (!assignment) return null;
+
+  const componentValues = new Map<string, number>();
+  const components = assignment.salaryStructure.components;
+
+  const getResolvedByCode = (code: string) => componentValues.get(code) ?? 0;
+
+  const resolveBase = (baseComponent: string | null) => {
+    if (!baseComponent) return 0;
+    if (baseComponent === 'GROSS') {
+      return components.reduce((sum, component) => {
+        if (component.salaryComponent.category === 'EARNINGS') {
+          return sum + (componentValues.get(component.salaryComponent.code) ?? 0);
+        }
+        return sum;
+      }, 0);
+    }
+    if (baseComponent === 'NET') {
+      const earnings = components.reduce((sum, component) => {
+        if (component.salaryComponent.category === 'EARNINGS') {
+          return sum + (componentValues.get(component.salaryComponent.code) ?? 0);
+        }
+        return sum;
+      }, 0);
+      const deductions = components.reduce((sum, component) => {
+        if (component.salaryComponent.category === 'DEDUCTION') {
+          return sum + (componentValues.get(component.salaryComponent.code) ?? 0);
+        }
+        return sum;
+      }, 0);
+      return earnings - deductions;
+    }
+    return getResolvedByCode(baseComponent);
+  };
+
+  for (const component of components) {
+    let amount = Number(component.value);
+    if (component.salaryComponent.calculationType === 'PERCENTAGE') {
+      amount = (resolveBase(component.salaryComponent.baseComponent) * amount) / 100;
+    }
+    componentValues.set(component.salaryComponent.code, amount);
+  }
+
+  const basic = getResolvedByCode('BASIC');
+  const houseAllowance = getResolvedByCode('HRA');
+  const medicalAllowance = getResolvedByCode('MEDICAL');
+  const transportAllowance = getResolvedByCode('TRANSPORT');
+  const otherAllowance = getResolvedByCode('OTHER_ALLOWANCE');
+  const taxDeduction = getResolvedByCode('TAX_DEDUCTION');
+  const providentFund = getResolvedByCode('PROVIDENT_FUND');
+
+  return {
+    basic,
+    houseAllowance,
+    medicalAllowance,
+    transportAllowance,
+    otherAllowance,
+    taxDeduction,
+    providentFund,
+    gross: Number(assignment.salaryStructure.grossSalary),
+    net: assignment.salaryStructure.netSalary ? Number(assignment.salaryStructure.netSalary) : null,
+  };
+}
+
 export class PayrollRunService {
   static async getDashboardStats() {
     const currentPeriod = await prisma.payrollPeriod.findFirst({
@@ -108,8 +191,32 @@ export class PayrollRunService {
         where: employeeWhere,
         include: {
           salaryStructureAssignments: {
-            where: { status: 'ACTIVE' },
-            include: { salaryStructure: true },
+            where: {
+              effectiveFrom: { lte: period.endDate },
+              OR: [
+                { effectiveTo: null },
+                { effectiveTo: { gte: period.startDate } },
+              ],
+            },
+            include: {
+              salaryStructure: {
+                include: {
+                  components: {
+                    include: {
+                      salaryComponent: {
+                        select: {
+                          code: true,
+                          category: true,
+                          calculationType: true,
+                          baseComponent: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            orderBy: { effectiveFrom: 'desc' },
             take: 1
           },
           bonuses: {
@@ -167,19 +274,14 @@ export class PayrollRunService {
       // 5. Calculate for each employee
       for (const emp of employees) {
         const assignment = emp.salaryStructureAssignments[0];
-        
-        if (!assignment) {
-          throw new Error(`Employee ${emp.code} (${emp.firstName}) has no active salary structure.`);
-        }
-
-        const structure = assignment.salaryStructure;
+        const structuredSalary = resolveSalaryFromStructure(assignment);
 
         // Base Earnings
-        let basic = Number(structure.basicSalary);
-        let houseAllowance = Number(structure.houseAllowance);
-        let medicalAllowance = Number(structure.medicalAllowance);
-        let transportAllowance = Number(structure.transportAllowance);
-        let otherAllowance = Number(structure.otherAllowance);
+        let basic = structuredSalary?.basic ?? Number(emp.basicSalary);
+        let houseAllowance = structuredSalary?.houseAllowance ?? Number(emp.houseAllowance);
+        let medicalAllowance = structuredSalary?.medicalAllowance ?? Number(emp.medicalAllowance);
+        let transportAllowance = structuredSalary?.transportAllowance ?? Number(emp.transportAllowance);
+        let otherAllowance = structuredSalary?.otherAllowance ?? Number(emp.otherAllowance);
 
         // OT (Mocking 0 for now as Attendance module is not fully integrated here)
         let overtimeAmount = 0;
@@ -199,8 +301,8 @@ export class PayrollRunService {
         });
 
         // Tax & PF
-        let taxDeduction = Number(structure.taxDeduction);
-        let providentFund = Number(structure.providentFund);
+        let taxDeduction = structuredSalary?.taxDeduction ?? Number(emp.taxDeduction);
+        let providentFund = structuredSalary?.providentFund ?? Number(emp.providentFund);
 
         // Adjustments
         let adjustmentsAddition = 0;

@@ -79,7 +79,9 @@ function hasWorkflowDelegates(client: PrismaClient | undefined): client is Prism
     'payrollAdjustment' in client &&
     typeof client.payrollAdjustment === 'object' &&
     'finalSettlement' in client &&
-    typeof client.finalSettlement === 'object'
+    typeof client.finalSettlement === 'object' &&
+    'userBranchAccess' in client &&
+    typeof client.userBranchAccess === 'object'
   );
 }
 

@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { getSession } from '@/server/auth/session';
+import { getSession, invalidateRbacCache } from '@/server/auth/session';
 import { userService } from '@/server/services/user.service';
 import { userCreateSchema, userUpdateSchema } from '@/server/validators/users';
 import { ApiError } from '@/lib/errors';
@@ -15,6 +15,11 @@ function parseForm(formData: FormData) {
     email: formData.get('email'),
     password: formData.get('password') ?? '',
     defaultBranchId: formData.get('defaultBranchId') ?? '',
+    branchAccessType: formData.get('branchAccessType') ?? 'OWN_BRANCH_ONLY',
+    assignedBranchIds: formData
+      .getAll('assignedBranchIds')
+      .map((value) => String(value))
+      .filter(Boolean),
     status: formData.get('status') ?? 'ACTIVE',
     roleId: formData.get('roleId'),
   };
@@ -48,6 +53,7 @@ export async function updateUserAction(_prev: UserFormState, formData: FormData)
     throw e;
   }
 
+  invalidateRbacCache();
   revalidatePath('/users');
   redirect('/users');
 }
@@ -58,5 +64,6 @@ export async function setUserStatusAction(formData: FormData) {
   if (!id || (status !== 'ACTIVE' && status !== 'DISABLED')) return;
   const session = await getSession();
   await userService.setStatus(session, id, status);
+  invalidateRbacCache();
   revalidatePath('/users');
 }

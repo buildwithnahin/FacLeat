@@ -148,7 +148,7 @@ export default async function PayslipsPage({
                       <td className="px-4 py-3 font-medium">{row.no || `PS-${row.id.substring(0, 6)}`}</td>
                       <td className="px-4 py-3">
                         <div className="font-medium">{row.employee.firstName} {row.employee.lastName}</div>
-                        <div className="text-xs text-muted-foreground">{row.employee.code} | {row.employee.designation?.name || 'Staff'}</div>
+                        <div className="text-xs text-muted-foreground">{row.employee.code} | {row.employee.designation || 'Staff'}</div>
                       </td>
                       <td className="px-4 py-3">{row.payrollRun.payrollPeriod?.name || row.payrollRun.period}</td>
                       <td className="px-4 py-3 text-right">{formatCurrency(Number(row.gross))}</td>

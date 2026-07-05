@@ -473,11 +473,17 @@ async function main() {
     if (!role) continue;
 
     const passwordHash = await bcrypt.hash('Demo@123', 10);
+    const branchAccessType = 
+      userData.role === 'Super Admin' || userData.role === 'Admin'
+        ? 'ALL_BRANCHES'
+        : 'OWN_BRANCH_ONLY';
+
     const user = await prisma.user.upsert({
       where: { email: userData.email },
       update: {
         name: userData.name,
         defaultBranchId: branchMap.get(userData.branch),
+        branchAccessType,
         passwordHash,
       },
       create: {
@@ -485,6 +491,7 @@ async function main() {
         name: userData.name,
         passwordHash,
         defaultBranchId: branchMap.get(userData.branch),
+        branchAccessType,
       },
     });
     await prisma.userRole.upsert({

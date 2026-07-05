@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { getSession } from '@/server/auth/session';
+import { getSession, invalidateRbacCache } from '@/server/auth/session';
 import { roleService } from '@/server/services/role.service';
 import { roleCreateSchema, roleUpdateSchema } from '@/server/validators/roles';
 import { ApiError } from '@/lib/errors';
@@ -45,6 +45,7 @@ export async function updateRoleAction(_prev: RoleFormState, formData: FormData)
     throw e;
   }
 
+  invalidateRbacCache();
   revalidatePath('/roles');
   redirect('/roles');
 }
@@ -59,5 +60,6 @@ export async function deleteRoleAction(formData: FormData) {
     if (e instanceof ApiError) throw new Error(e.message);
     throw e;
   }
+  invalidateRbacCache();
   revalidatePath('/roles');
 }

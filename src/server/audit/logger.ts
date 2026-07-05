@@ -23,5 +23,18 @@ export async function recordAudit(
   input: AuditInput,
   tx: Prisma.TransactionClient | typeof prisma = prisma,
 ) {
-  await tx.auditLog.create({ data: input });
+  const data: Prisma.AuditLogCreateInput = {
+    module: input.module,
+    action: input.action,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    before: input.before,
+    after: input.after,
+    ip: input.ip,
+    userAgent: input.userAgent,
+    actor: input.actorId ? { connect: { id: input.actorId } } : undefined,
+    branch: input.branchId ? { connect: { id: input.branchId } } : undefined,
+  };
+
+  await tx.auditLog.create({ data });
 }

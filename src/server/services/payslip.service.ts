@@ -50,11 +50,16 @@ export class PayslipService {
       where: { id },
       include: {
         employee: {
-          include: {
-            branch: true,
+          select: {
+            firstName: true,
+            lastName: true,
+            code: true,
+            bankName: true,
+            bankAccount: true,
             department: true,
             designation: true,
-          }
+            branch: true,
+          },
         },
         payrollRun: {
           include: {

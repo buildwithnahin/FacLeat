@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,8 @@ export interface UserFormProps {
     email: string;
     status: 'ACTIVE' | 'DISABLED' | 'PENDING';
     defaultBranchId: string | null;
+    branchAccessType: 'ALL_BRANCHES' | 'ASSIGNED_BRANCHES' | 'OWN_BRANCH_ONLY';
+    assignedBranchIds: string[];
     roleId: string | null;
   };
   roles: { id: string; name: string; description: string | null }[];
@@ -26,6 +28,9 @@ export interface UserFormProps {
 export function UserForm({ mode, initial, roles, branches, employees }: UserFormProps) {
   const action = mode === 'create' ? createUserAction : updateUserAction;
   const [state, formAction, pending] = useActionState<UserFormState, FormData>(action, undefined);
+  const [branchAccessType, setBranchAccessType] = useState<
+    'ALL_BRANCHES' | 'ASSIGNED_BRANCHES' | 'OWN_BRANCH_ONLY'
+  >(initial?.branchAccessType ?? 'OWN_BRANCH_ONLY');
 
   return (
     <form action={formAction} className="space-y-6">
@@ -51,6 +56,22 @@ export function UserForm({ mode, initial, roles, branches, employees }: UserForm
               <p className="text-xs text-destructive">{state.fieldErrors.employeeId[0]}</p>
             ) : null}
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="branchAccessType">Branch access</Label>
+            <select
+              id="branchAccessType"
+              name="branchAccessType"
+              value={branchAccessType}
+              onChange={(event) =>
+                setBranchAccessType(event.target.value as 'ALL_BRANCHES' | 'ASSIGNED_BRANCHES' | 'OWN_BRANCH_ONLY')
+              }
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              <option value="OWN_BRANCH_ONLY">Own branch only</option>
+              <option value="ASSIGNED_BRANCHES">Assigned branches</option>
+              <option value="ALL_BRANCHES">All branches</option>
+            </select>
+          </div>
           <Field
             label="Username / Email"
             name="email"
@@ -67,7 +88,10 @@ export function UserForm({ mode, initial, roles, branches, employees }: UserForm
             errors={state?.fieldErrors?.password}
           />
           <div className="space-y-2">
-            <Label htmlFor="defaultBranchId">Default branch</Label>
+            <Label htmlFor="defaultBranchId">
+              Default branch
+              {branchAccessType === 'OWN_BRANCH_ONLY' && <span className="text-destructive"> *</span>}
+            </Label>
             <select
               id="defaultBranchId"
               name="defaultBranchId"
@@ -81,7 +105,34 @@ export function UserForm({ mode, initial, roles, branches, employees }: UserForm
                 </option>
               ))}
             </select>
+            {state?.fieldErrors?.defaultBranchId?.length ? (
+              <p className="text-xs text-destructive">{state.fieldErrors.defaultBranchId[0]}</p>
+            ) : null}
           </div>
+          {branchAccessType === 'ASSIGNED_BRANCHES' ? (
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="assignedBranchIds">Assigned branches</Label>
+              <select
+                id="assignedBranchIds"
+                name="assignedBranchIds"
+                multiple
+                defaultValue={initial?.assignedBranchIds ?? []}
+                className="flex min-h-36 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm"
+              >
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name} ({branch.code})
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Hold Ctrl/Cmd to select multiple branches. The default branch should be one of these branches.
+              </p>
+              {state?.fieldErrors?.assignedBranchIds?.length ? (
+                <p className="text-xs text-destructive">{state.fieldErrors.assignedBranchIds[0]}</p>
+              ) : null}
+            </div>
+          ) : null}
           <div className="space-y-2">
             <Label htmlFor="roleId">Role <span className="text-destructive">*</span></Label>
             <select

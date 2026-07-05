@@ -24,8 +24,16 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/utils';
 
+type BonusFormEmployee = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  code: string;
+  basicSalary: number;
+};
+
 interface BonusFormProps {
-  employees: any[];
+  employees: BonusFormEmployee[];
   initialData?: any;
   mode?: 'create' | 'edit';
   onClose?: () => void;
