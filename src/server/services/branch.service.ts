@@ -24,7 +24,10 @@ export const branchService = {
   async listAccessible(session: AppSession | null) {
     if (!session) return [];
 
-    const branches = await cachedActiveBranches();
+    let branches = await cachedActiveBranches();
+    if (session.activeCompanyId) {
+      branches = branches.filter((branch) => branch.companyId === session.activeCompanyId);
+    }
     if (session.branchAccessType === 'ALL_BRANCHES') {
       return branches;
     }
@@ -44,7 +47,10 @@ export const branchService = {
 
   async listAll(session: AppSession | null) {
     await authorize(session, 'branches:read');
-    const branches = await cachedAllBranches();
+    let branches = await cachedAllBranches();
+    if (session?.activeCompanyId) {
+      branches = branches.filter((branch) => branch.companyId === session.activeCompanyId);
+    }
     if (session?.branchAccessType === 'ALL_BRANCHES') return branches;
     const allowed = new Set(getAllowedBranchIds(session));
     return branches.filter((branch) => allowed.has(branch.id));
@@ -66,12 +72,14 @@ export const branchService = {
 
   async create(session: AppSession | null, input: BranchCreateInput) {
     const actor = await authorize(session, 'branches:write');
+    if (!actor.activeCompanyId) throw new ValidationError('No active company selected');
     const dup = await prisma.branch.findUnique({ where: { code: input.code } });
     if (dup) throw new ValidationError('Branch code already exists');
 
     const branch = await prisma.$transaction(async (tx) => {
       const branch = await tx.branch.create({
         data: {
+          companyId: actor.activeCompanyId!,
           code: input.code,
           name: input.name,
           type: input.type,

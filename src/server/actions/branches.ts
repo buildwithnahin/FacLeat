@@ -65,6 +65,8 @@ export async function setActiveBranchAction(formData: FormData) {
   // validate the branch exists + is active
   const branch = await branchService.getById(session, branchId);
   if (!branch.isActive) return;
+  // don't allow switching to a branch outside the currently active company
+  if (session.activeCompanyId && branch.companyId !== session.activeCompanyId) return;
   const store = await cookies();
   store.set(ACTIVE_BRANCH_COOKIE, branchId, {
     httpOnly: true,

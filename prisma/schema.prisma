@@ -520,6 +520,8 @@ model User {
   branchAccessType BranchAccessType @default(OWN_BRANCH_ONLY)
   defaultBranchId  String?
   defaultBranch    Branch?          @relation("UserDefaultBranch", fields: [defaultBranchId], references: [id])
+  defaultCompanyId String?
+  defaultCompany   Company?         @relation("UserDefaultCompany", fields: [defaultCompanyId], references: [id])
 
   roles          UserRole[]
   branchAccesses UserBranchAccess[]
@@ -605,6 +607,8 @@ model RolePermission {
 
 model Branch {
   id                 String       @id @default(cuid())
+  companyId          String
+  company            Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
   code               String       @unique
   name               String
   type               String       @default("MAIN") // MAIN / FACTORY / SHOWROOM / WAREHOUSE
@@ -696,8 +700,33 @@ model Branch {
   corporateSalesReturns        CorporateSalesReturn[]
   debitNotes                   DebitNote[]
   productionPlans              ProductionPlan[]
-  outboundStockTransfers       StockTransfer[]           @relation("StockTransferFromBranch")
-  inboundStockTransfers        StockTransfer[]           @relation("StockTransferToBranch")
+  outboundStockTransfers       StockTransfer[]               @relation("StockTransferFromBranch")
+  inboundStockTransfers        StockTransfer[]               @relation("StockTransferToBranch")
+
+  @@index([isActive])
+  @@index([companyId])
+}
+
+model Company {
+  id       String       @id @default(cuid())
+  code     String       @unique
+  name     String
+  address  String?
+  phone    String?
+  email    String?
+  currency CurrencyCode @default(BDT)
+  isActive Boolean      @default(true)
+
+  branches           Branch[]
+  products           Product[]
+  productCategories  ProductCategory[]
+  productBrands      ProductBrand[]
+  assetCategories    AssetCategory[]
+  customerCategories CustomerCategory[]
+  defaultForUsers    User[]             @relation("UserDefaultCompany")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([isActive])
 }
@@ -782,7 +811,9 @@ model Notification {
 
 model ProductCategory {
   id          String            @id @default(cuid())
-  name        String            @unique
+  companyId   String
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  name        String
   description String?
   parentId    String?
   parent      ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
@@ -792,22 +823,31 @@ model ProductCategory {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([companyId, name])
   @@index([parentId])
+  @@index([companyId])
 }
 
 model ProductBrand {
-  id       String    @id @default(cuid())
-  name     String    @unique
-  products Product[]
+  id        String    @id @default(cuid())
+  companyId String
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  name      String
+  products  Product[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([companyId, name])
+  @@index([companyId])
 }
 
 model Product {
   id                        String                     @id @default(cuid())
-  sku                       String                     @unique
-  barcode                   String?                    @unique
+  companyId                 String
+  company                   Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sku                       String
+  barcode                   String?
   name                      String
   description               String?
   size                      String?
@@ -859,10 +899,13 @@ model Product {
   productionPlans           ProductionPlan[]
   stockTransferItems        StockTransferItem[]
 
+  @@unique([companyId, sku])
+  @@unique([companyId, barcode])
   @@index([categoryId])
   @@index([brandId])
   @@index([isActive])
   @@index([name])
+  @@index([companyId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -902,10 +945,10 @@ model Warehouse {
   productionIssueVouchers      ProductionIssueVoucher[]
   finishedGoodsReceiveVouchers FinishedGoodsReceiveVoucher[]
   corporateSalesReturns        CorporateSalesReturn[]
-  showroomStockRequisitions    StockRequisition[]        @relation("StockRequisitionShowroomWarehouse")
-  sourceStockRequisitions      StockRequisition[]        @relation("StockRequisitionSourceWarehouse")
-  outboundStockTransfers       StockTransfer[]           @relation("StockTransferSourceWarehouse")
-  inboundStockTransfers        StockTransfer[]           @relation("StockTransferDestinationWarehouse")
+  showroomStockRequisitions    StockRequisition[]            @relation("StockRequisitionShowroomWarehouse")
+  sourceStockRequisitions      StockRequisition[]            @relation("StockRequisitionSourceWarehouse")
+  outboundStockTransfers       StockTransfer[]               @relation("StockTransferSourceWarehouse")
+  inboundStockTransfers        StockTransfer[]               @relation("StockTransferDestinationWarehouse")
 
   @@unique([branchId, code])
   @@index([branchId, isActive])
@@ -969,17 +1012,17 @@ model StockRequisition {
 }
 
 model StockRequisitionItem {
-  id              String           @id @default(cuid())
-  requisitionId   String
-  requisition     StockRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
-  productId       String
-  product         Product          @relation(fields: [productId], references: [id])
-  unit            UnitOfMeasure    @default(PCS)
-  requestedQty    Decimal          @db.Decimal(18, 4)
-  approvedQty     Decimal          @default(0) @db.Decimal(18, 4)
-  dispatchedQty   Decimal          @default(0) @db.Decimal(18, 4)
-  receivedQty     Decimal          @default(0) @db.Decimal(18, 4)
-  note            String?
+  id            String           @id @default(cuid())
+  requisitionId String
+  requisition   StockRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product          @relation(fields: [productId], references: [id])
+  unit          UnitOfMeasure    @default(PCS)
+  requestedQty  Decimal          @db.Decimal(18, 4)
+  approvedQty   Decimal          @default(0) @db.Decimal(18, 4)
+  dispatchedQty Decimal          @default(0) @db.Decimal(18, 4)
+  receivedQty   Decimal          @default(0) @db.Decimal(18, 4)
+  note          String?
 
   transferItems StockTransferItem[]
 
@@ -1162,7 +1205,7 @@ model Supplier {
   branchId       String
   branch         Branch         @relation(fields: [branchId], references: [id])
   /// Human supplier code (e.g. SUP-001)
-  code           String         @unique
+  code           String
   name           String
   contactPerson  String?
   phone          String?
@@ -1190,6 +1233,7 @@ model Supplier {
   updatedAt  DateTime    @updatedAt
   debitNotes DebitNote[]
 
+  @@unique([branchId, code])
   @@index([branchId, status])
   @@index([name])
 }
@@ -1873,7 +1917,9 @@ model FinishedGoodsReceiveItem {
 
 model AssetCategory {
   id                 String             @id @default(cuid())
-  name               String             @unique
+  companyId          String
+  company            Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  name               String
   description        String?
   depreciationMethod DepreciationMethod @default(STRAIGHT_LINE)
   /// Default useful life (months) used when creating assets in this category
@@ -1884,6 +1930,9 @@ model AssetCategory {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([companyId, name])
+  @@index([companyId])
 }
 
 model Asset {
@@ -1893,7 +1942,7 @@ model Asset {
   categoryId              String?
   category                AssetCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   /// Human asset code (e.g. AST-0001)
-  code                    String             @unique
+  code                    String
   name                    String
   description             String?
   serialNumber            String?
@@ -1919,6 +1968,7 @@ model Asset {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([branchId, code])
   @@index([branchId, status])
   @@index([categoryId])
   @@index([serialNumber])
@@ -2084,7 +2134,9 @@ model DocumentLink {
 
 model CustomerCategory {
   id          String  @id @default(cuid())
-  name        String  @unique
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  name        String
   description String?
   /// Default discount % for this category (0–100)
   discountPct Decimal @default(0) @db.Decimal(5, 2)
@@ -2094,6 +2146,9 @@ model CustomerCategory {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([companyId, name])
+  @@index([companyId])
 }
 
 model Customer {
@@ -2101,7 +2156,7 @@ model Customer {
   branchId       String
   branch         Branch            @relation(fields: [branchId], references: [id])
   /// Human customer code (e.g. CUS-001)
-  code           String            @unique
+  code           String
   name           String
   type           CustomerType      @default(RETAIL)
   categoryId     String?
@@ -2138,6 +2193,7 @@ model Customer {
   updatedAt             DateTime               @updatedAt
   corporateSalesReturns CorporateSalesReturn[]
 
+  @@unique([branchId, code])
   @@index([branchId, status])
   @@index([type])
   @@index([name])
@@ -3482,7 +3538,7 @@ model Employee {
   systemRoleId       String?
   systemRole         Role?            @relation(fields: [systemRoleId], references: [id], onDelete: SetNull)
   user               User?
-  code               String           @unique
+  code               String
   firstName          String
   lastName           String
   email              String?          @unique
@@ -3545,6 +3601,7 @@ model Employee {
   updatedAt   DateTime    @updatedAt
   workOrders  WorkOrder[]
 
+  @@unique([branchId, code])
   @@index([branchId, status])
   @@index([department])
   @@index([designation])

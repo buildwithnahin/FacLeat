@@ -57,7 +57,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email },
-          select: { id: true, email: true, name: true, passwordHash: true, status: true, defaultBranchId: true },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            passwordHash: true,
+            status: true,
+            defaultBranchId: true,
+            defaultCompanyId: true,
+          },
         });
 
         if (!user || user.status !== 'ACTIVE') {
@@ -77,6 +85,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           name: user.name,
           defaultBranchId: user.defaultBranchId ?? null,
           activeBranchId: user.defaultBranchId ?? null,
+          defaultCompanyId: user.defaultCompanyId ?? null,
+          activeCompanyId: user.defaultCompanyId ?? null,
         };
       },
     }),

@@ -2,6 +2,7 @@ import { LogOut } from 'lucide-react';
 import { getModulesForAccess } from '@/constants/navigation';
 import { logoutAction } from '@/server/actions/auth';
 import { BranchSwitcher } from '@/components/shared/branch-switcher';
+import { CompanySwitcher } from '@/components/shared/company-switcher';
 import { NotificationBell } from '@/components/shared/notification-bell';
 import { SearchCommand } from '@/components/shared/search-command';
 import { SidebarNav, type ClientNavItem, type ClientNavModule } from '@/components/shared/sidebar-nav';
@@ -109,6 +110,7 @@ export async function AppShell({
             <div className="flex-1 max-w-xl">
               <SearchCommand modules={visibleModules} />
             </div>
+            <CompanySwitcher session={session} />
             <BranchSwitcher session={session} />
             {await renderBell(session)}
             <div className="h-9 w-9 rounded-full bg-primary text-primary-foreground grid place-items-center text-xs font-semibold">

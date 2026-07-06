@@ -26,10 +26,12 @@ function generateBarcode(): string {
   return `ANX-${y}${m}${day}-${rand}`;
 }
 
-async function generateUniqueBarcode() {
+async function generateUniqueBarcode(companyId: string) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const candidate = generateBarcode();
-    const collision = await prisma.product.findUnique({ where: { barcode: candidate } });
+    const collision = await prisma.product.findUnique({
+      where: { companyId_barcode: { companyId, barcode: candidate } },
+    });
     if (!collision) return candidate;
   }
   throw new ValidationError('Could not generate a unique barcode after 5 attempts');
@@ -44,6 +46,7 @@ export const productService = {
     const [products, ledgerAgg] = await Promise.all([
       prisma.product.findMany({
         where: {
+          companyId: session?.activeCompanyId ?? undefined,
           type: filters.type,
         },
         orderBy: { createdAt: 'desc' },
@@ -75,6 +78,7 @@ export const productService = {
   async listForBarcodeOverview(session: AppSession | null) {
     await authorize(session, 'barcode:read');
     return prisma.product.findMany({
+      where: { companyId: session?.activeCompanyId ?? undefined },
       orderBy: [{ barcode: 'asc' }, { name: 'asc' }],
       select: {
         id: true,
@@ -90,7 +94,11 @@ export const productService = {
   async listForBarcodePrint(session: AppSession | null) {
     await authorize(session, 'barcode:print');
     return prisma.product.findMany({
-      where: { barcode: { not: null }, isActive: true },
+      where: {
+        companyId: session?.activeCompanyId ?? undefined,
+        barcode: { not: null },
+        isActive: true,
+      },
       orderBy: { name: 'asc' },
       select: {
         id: true,
@@ -111,7 +119,7 @@ export const productService = {
     if (!existing) throw new NotFoundError('Product not found');
     if (existing.barcode) throw new ValidationError('Product already has a barcode');
 
-    const candidate = await generateUniqueBarcode();
+    const candidate = await generateUniqueBarcode(existing.companyId);
     return prisma.$transaction(async (tx) => {
       const updated = await tx.product.update({
         where: { id },
@@ -143,17 +151,19 @@ export const productService = {
 
   async create(session: AppSession | null, input: ProductCreateInput) {
     const actor = await authorize(session, 'inventory:write');
+    if (!actor.activeCompanyId) throw new ValidationError('No active company selected');
+    const companyId = actor.activeCompanyId;
 
-    const dup = await prisma.product.findUnique({ where: { sku: input.sku } });
+    const dup = await prisma.product.findUnique({ where: { companyId_sku: { companyId, sku: input.sku } } });
     if (dup) throw new ValidationError('SKU already exists');
     let barcode = input.barcode || null;
     if (input.barcodeMode === 'generate') {
-      barcode = await generateUniqueBarcode();
+      barcode = await generateUniqueBarcode(companyId);
     } else if (!barcode) {
       throw new ValidationError('Barcode is required when manual mode is selected');
     }
     if (barcode) {
-      const bDup = await prisma.product.findUnique({ where: { barcode } });
+      const bDup = await prisma.product.findUnique({ where: { companyId_barcode: { companyId, barcode } } });
       if (bDup) throw new ValidationError('Barcode already in use');
     }
     const category = input.categoryId
@@ -169,6 +179,7 @@ export const productService = {
     return prisma.$transaction(async (tx) => {
       const product = await tx.product.create({
         data: {
+          companyId,
           sku: input.sku,
           barcode,
           name: input.name,
@@ -210,19 +221,23 @@ export const productService = {
     if (!existing) throw new NotFoundError('Product not found');
 
     if (input.sku !== existing.sku) {
-      const dup = await prisma.product.findUnique({ where: { sku: input.sku } });
+      const dup = await prisma.product.findUnique({
+        where: { companyId_sku: { companyId: existing.companyId, sku: input.sku } },
+      });
       if (dup) throw new ValidationError('SKU already exists');
     }
     let barcode = input.barcode || null;
     if (input.barcodeMode === 'generate' && !existing.barcode) {
-      barcode = await generateUniqueBarcode();
+      barcode = await generateUniqueBarcode(existing.companyId);
     } else if (input.barcodeMode === 'manual' && !barcode) {
       throw new ValidationError('Barcode is required when manual mode is selected');
     } else if (existing.barcode && input.barcodeMode === 'generate') {
       barcode = existing.barcode;
     }
     if (barcode && barcode !== existing.barcode) {
-      const bDup = await prisma.product.findUnique({ where: { barcode } });
+      const bDup = await prisma.product.findUnique({
+        where: { companyId_barcode: { companyId: existing.companyId, barcode } },
+      });
       if (bDup) throw new ValidationError('Barcode already in use');
     }
     const category = input.categoryId

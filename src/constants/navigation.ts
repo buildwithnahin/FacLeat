@@ -459,4 +459,12 @@ export const MODULES: NavModule[] = [
     permission: 'documents:read',
     section: 'Administration',
   },
+  {
+    number: 26,
+    label: 'Companies',
+    href: '/companies',
+    iconName: 'Landmark',
+    permission: 'companies:read',
+    section: 'Administration',
+  },
 ];

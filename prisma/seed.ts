@@ -13,6 +13,8 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
       'dashboard:read',
       'users:read',
       'users:write',
+      'companies:read',
+      'companies:write',
       'branches:read',
       'approvals:read',
       'approvals:approve',
@@ -404,6 +406,14 @@ async function main() {
   }
   console.log(`  ✓ ${permKeys.length} permissions upserted`);
 
+  // 1a. Default company
+  const defaultCompany = await prisma.company.upsert({
+    where: { code: 'DEFAULT' },
+    update: {},
+    create: { code: 'DEFAULT', name: 'Annex Leather', currency: 'BDT' },
+  });
+  console.log(`  ✓ Company: ${defaultCompany.name}`);
+
   // 2. Default branch
   const hqBranch = await prisma.branch.upsert({
     where: { code: 'HQ' },
@@ -416,6 +426,7 @@ async function main() {
       address: '123 Leather Road, Dhaka 1000, Bangladesh',
       phone: '+880 2 12345678',
       email: 'hq@annex.local',
+      companyId: defaultCompany.id,
     },
   });
   console.log(`  ✓ Branch: ${hqBranch.name}`);
@@ -425,7 +436,7 @@ async function main() {
     await prisma.branch.upsert({
       where: { code: b.code },
       update: {},
-      create: b,
+      create: { ...b, companyId: defaultCompany.id },
     });
   }
   console.log(`  ✓ ${ADDITIONAL_BRANCHES.length} additional branches`);
@@ -483,6 +494,7 @@ async function main() {
       update: {
         name: userData.name,
         defaultBranchId: branchMap.get(userData.branch),
+        defaultCompanyId: defaultCompany.id,
         branchAccessType,
         passwordHash,
       },
@@ -491,6 +503,7 @@ async function main() {
         name: userData.name,
         passwordHash,
         defaultBranchId: branchMap.get(userData.branch),
+        defaultCompanyId: defaultCompany.id,
         branchAccessType,
       },
     });
@@ -537,9 +550,9 @@ async function main() {
   // 7. Product categories
   for (const name of PRODUCT_CATEGORIES) {
     await prisma.productCategory.upsert({
-      where: { name },
+      where: { companyId_name: { companyId: defaultCompany.id, name } },
       update: {},
-      create: { name },
+      create: { name, companyId: defaultCompany.id },
     });
   }
   console.log(`  ✓ ${PRODUCT_CATEGORIES.length} product categories`);
@@ -547,9 +560,9 @@ async function main() {
   // 8. Product brands
   for (const name of PRODUCT_BRANDS) {
     await prisma.productBrand.upsert({
-      where: { name },
+      where: { companyId_name: { companyId: defaultCompany.id, name } },
       update: {},
-      create: { name },
+      create: { name, companyId: defaultCompany.id },
     });
   }
   console.log(`  ✓ ${PRODUCT_BRANDS.length} brands`);
@@ -577,7 +590,7 @@ async function main() {
     const brandName = p.type === 'RAW_MATERIAL' ? 'Generic' : 'Annex';
 
     await prisma.product.upsert({
-      where: { sku: p.sku },
+      where: { companyId_sku: { companyId: defaultCompany.id, sku: p.sku } },
       update: {
         name: p.name,
         type: p.type,
@@ -587,6 +600,7 @@ async function main() {
         brandId: brandMap.get(brandName),
       },
       create: {
+        companyId: defaultCompany.id,
         sku: p.sku,
         barcode: `BR${p.sku}`,
         name: p.name,
@@ -656,7 +670,7 @@ async function main() {
   // 12. Suppliers
   for (const s of SAMPLE_SUPPLIERS) {
     await prisma.supplier.upsert({
-      where: { code: s.code },
+      where: { branchId_code: { branchId: hqBranch.id, code: s.code } },
       update: {},
       create: {
         branchId: hqBranch.id,
@@ -675,9 +689,9 @@ async function main() {
   // 13. Customer categories
   for (const c of CUSTOMER_CATEGORIES) {
     await prisma.customerCategory.upsert({
-      where: { name: c.name },
+      where: { companyId_name: { companyId: defaultCompany.id, name: c.name } },
       update: {},
-      create: { name: c.name, discountPct: new Prisma.Decimal(c.discountPct) },
+      create: { name: c.name, companyId: defaultCompany.id, discountPct: new Prisma.Decimal(c.discountPct) },
     });
   }
   console.log(`  ✓ ${CUSTOMER_CATEGORIES.length} customer categories`);
@@ -695,7 +709,7 @@ async function main() {
 
   for (const c of SAMPLE_CUSTOMERS) {
     await prisma.customer.upsert({
-      where: { code: c.code },
+      where: { branchId_code: { branchId: hqBranch.id, code: c.code } },
       update: {},
       create: {
         branchId: hqBranch.id,
@@ -715,10 +729,11 @@ async function main() {
   // 15. Asset categories
   for (const a of ASSET_CATEGORIES) {
     await prisma.assetCategory.upsert({
-      where: { name: a.name },
+      where: { companyId_name: { companyId: defaultCompany.id, name: a.name } },
       update: {},
       create: {
         name: a.name,
+        companyId: defaultCompany.id,
         depreciationMethod: a.depreciationMethod,
         defaultLifeMonths: a.defaultLifeMonths,
         defaultSalvageRate: new Prisma.Decimal(a.defaultSalvageRate),
@@ -730,7 +745,7 @@ async function main() {
   // 16. Employees
   for (const e of SAMPLE_EMPLOYEES) {
     await prisma.employee.upsert({
-      where: { code: e.code },
+      where: { branchId_code: { branchId: hqBranch.id, code: e.code } },
       update: {
         email: e.email ?? null,
       },

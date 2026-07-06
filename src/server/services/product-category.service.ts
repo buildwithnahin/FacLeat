@@ -15,6 +15,7 @@ export const categoryService = {
   async list(session: AppSession | null) {
     await authorize(session, 'inventory:read');
     return prisma.productCategory.findMany({
+      where: { companyId: session?.activeCompanyId ?? undefined },
       orderBy: { name: 'asc' },
       include: CATEGORY_INCLUDE,
     });
@@ -22,7 +23,10 @@ export const categoryService = {
 
   async listFlat(session: AppSession | null) {
     await authorize(session, 'inventory:read');
-    return prisma.productCategory.findMany({ orderBy: { name: 'asc' } });
+    return prisma.productCategory.findMany({
+      where: { companyId: session?.activeCompanyId ?? undefined },
+      orderBy: { name: 'asc' },
+    });
   },
 
   async getById(session: AppSession | null, id: string) {
@@ -34,12 +38,16 @@ export const categoryService = {
 
   async create(session: AppSession | null, input: CategoryCreateInput) {
     const actor = await authorize(session, 'inventory:write');
-    const dup = await prisma.productCategory.findUnique({ where: { name: input.name } });
+    if (!actor.activeCompanyId) throw new ValidationError('No active company selected');
+    const dup = await prisma.productCategory.findUnique({
+      where: { companyId_name: { companyId: actor.activeCompanyId, name: input.name } },
+    });
     if (dup) throw new ValidationError('Category name already exists');
 
     return prisma.$transaction(async (tx) => {
       const cat = await tx.productCategory.create({
         data: {
+          companyId: actor.activeCompanyId!,
           name: input.name,
           description: input.description || null,
           parentId: input.parentId || null,
@@ -67,7 +75,9 @@ export const categoryService = {
     if (!existing) throw new NotFoundError('Category not found');
     if (input.parentId === input.id) throw new ValidationError('A category cannot be its own parent');
     if (input.name !== existing.name) {
-      const dup = await prisma.productCategory.findUnique({ where: { name: input.name } });
+      const dup = await prisma.productCategory.findUnique({
+        where: { companyId_name: { companyId: existing.companyId, name: input.name } },
+      });
       if (dup) throw new ValidationError('Category name already exists');
     }
 

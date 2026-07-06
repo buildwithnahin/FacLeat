@@ -88,6 +88,7 @@ export const assetService = {
   async listCategories(session: AppSession | null) {
     await authorize(session, 'assets:read');
     return prisma.assetCategory.findMany({
+      where: { companyId: session?.activeCompanyId ?? undefined },
       orderBy: { name: 'asc' },
       include: { _count: { select: { assets: true } } },
     });
@@ -106,9 +107,13 @@ export const assetService = {
       defaultLifeMonths: input.defaultLifeMonths,
       defaultSalvageRate: new Prisma.Decimal(input.defaultSalvageRate),
     };
-    const cat = id
-      ? await prisma.assetCategory.update({ where: { id }, data })
-      : await prisma.assetCategory.create({ data });
+    let cat;
+    if (id) {
+      cat = await prisma.assetCategory.update({ where: { id }, data });
+    } else {
+      if (!actor.activeCompanyId) throw new ValidationError('No active company selected');
+      cat = await prisma.assetCategory.create({ data: { ...data, companyId: actor.activeCompanyId } });
+    }
     await recordAudit({
       actorId: actor.userId,
       branchId: null,

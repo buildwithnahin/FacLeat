@@ -4,8 +4,9 @@ import { unstable_cache, revalidateTag } from 'next/cache';
 import { cookies } from 'next/headers';
 import { auth } from './config';
 import { resolveSessionActiveBranchId, type SessionBranchAccessType } from './branch-access';
+import { getAllowedCompanyIds, resolveSessionActiveCompanyId } from './company-access';
 import { prisma } from '@/server/db';
-import { ACTIVE_BRANCH_COOKIE } from '@/lib/cookies';
+import { ACTIVE_BRANCH_COOKIE, ACTIVE_COMPANY_COOKIE } from '@/lib/cookies';
 
 export interface AppSession {
   userId: string;
@@ -17,6 +18,9 @@ export interface AppSession {
   defaultBranchId: string | null;
   allowedBranchIds: string[];
   activeBranchId: string | null;
+  defaultCompanyId: string | null;
+  allowedCompanyIds: string[];
+  activeCompanyId: string | null;
 }
 
 function isRecoverableSessionError(error: unknown) {
@@ -38,9 +42,12 @@ const getCachedUserWithRoles = unstable_cache(
         name: true,
         branchAccessType: true,
         defaultBranchId: true,
+        defaultCompanyId: true,
+        defaultBranch: { select: { companyId: true } },
         branchAccesses: {
           select: {
             branchId: true,
+            branch: { select: { companyId: true } },
           },
         },
         roles: {
@@ -94,6 +101,22 @@ export const getSession = cache(async (): Promise<AppSession | null> => {
             ),
           );
 
+    const branchCompanyMap = new Map<string, string>();
+    for (const access of userWithRoles.branchAccesses) {
+      branchCompanyMap.set(access.branchId, access.branch.companyId);
+    }
+    if (userWithRoles.defaultBranchId && userWithRoles.defaultBranch) {
+      branchCompanyMap.set(userWithRoles.defaultBranchId, userWithRoles.defaultBranch.companyId);
+    }
+
+    const allowedCompanyIds = getAllowedCompanyIds(
+      userWithRoles.branchAccessType,
+      allowedBranchIds,
+      branchCompanyMap,
+    );
+
+    const companyOverride = cookieStore.get(ACTIVE_COMPANY_COOKIE)?.value;
+
     return {
       userId: userWithRoles.id,
       email: userWithRoles.email,
@@ -108,6 +131,14 @@ export const getSession = cache(async (): Promise<AppSession | null> => {
         allowedBranchIds,
         defaultBranchId: userWithRoles.defaultBranchId ?? null,
         activeBranchId: override ?? s.user.activeBranchId ?? userWithRoles.defaultBranchId ?? null,
+      }),
+      defaultCompanyId: userWithRoles.defaultCompanyId ?? null,
+      allowedCompanyIds,
+      activeCompanyId: resolveSessionActiveCompanyId({
+        branchAccessType: userWithRoles.branchAccessType,
+        allowedCompanyIds,
+        defaultCompanyId: userWithRoles.defaultCompanyId ?? null,
+        activeCompanyId: companyOverride ?? s.user.activeCompanyId ?? userWithRoles.defaultCompanyId ?? null,
       }),
     };
   } catch (error) {

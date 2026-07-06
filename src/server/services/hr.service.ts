@@ -84,7 +84,9 @@ export const hrService = {
 
   async createEmployee(session: AppSession | null, input: EmployeeCreateInput) {
     const actor = await authorize(session, 'hr:write');
-    const dup = await prisma.employee.findUnique({ where: { code: input.code } });
+    const dup = await prisma.employee.findUnique({
+      where: { branchId_code: { branchId: input.branchId, code: input.code } },
+    });
     if (dup) throw new ValidationError('Employee code already exists');
     if (input.email) {
       const dupEmail = await prisma.employee.findUnique({ where: { email: input.email } });
@@ -155,8 +157,10 @@ export const hrService = {
     if (!existing) throw new NotFoundError('Employee not found');
     const nextReportingManagerId = input.reportingManagerId || null;
     const reportingManagerChanged = existing.reportingManagerId !== nextReportingManagerId;
-    if (input.code !== existing.code) {
-      const dup = await prisma.employee.findUnique({ where: { code: input.code } });
+    if (input.code !== existing.code || input.branchId !== existing.branchId) {
+      const dup = await prisma.employee.findUnique({
+        where: { branchId_code: { branchId: input.branchId, code: input.code } },
+      });
       if (dup && dup.id !== existing.id) throw new ValidationError('Employee code already exists');
     }
     if (input.shiftId) {

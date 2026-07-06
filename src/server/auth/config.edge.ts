@@ -6,12 +6,16 @@ declare module 'next-auth' {
       id: string;
       activeBranchId: string | null;
       defaultBranchId?: string | null;
+      activeCompanyId: string | null;
+      defaultCompanyId?: string | null;
     } & DefaultSession['user'];
   }
 
   interface User {
     activeBranchId?: string | null;
     defaultBranchId?: string | null;
+    activeCompanyId?: string | null;
+    defaultCompanyId?: string | null;
   }
 }
 
@@ -19,6 +23,8 @@ interface AppToken {
   id?: string;
   activeBranchId?: string | null;
   defaultBranchId?: string | null;
+  activeCompanyId?: string | null;
+  defaultCompanyId?: string | null;
   [key: string]: unknown;
 }
 
@@ -36,6 +42,8 @@ export const authConfig = {
         t.id = user.id as string;
         t.activeBranchId = user.activeBranchId ?? null;
         t.defaultBranchId = user.defaultBranchId ?? null;
+        t.activeCompanyId = user.activeCompanyId ?? null;
+        t.defaultCompanyId = user.defaultCompanyId ?? null;
       }
       return t;
     },
@@ -44,6 +52,8 @@ export const authConfig = {
       if (t.id) session.user.id = t.id;
       session.user.activeBranchId = t.activeBranchId ?? null;
       session.user.defaultBranchId = t.defaultBranchId ?? null;
+      session.user.activeCompanyId = t.activeCompanyId ?? null;
+      session.user.defaultCompanyId = t.defaultCompanyId ?? null;
       return session;
     },
   },

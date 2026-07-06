@@ -272,15 +272,22 @@ export const customerService = {
 
   async listCategories(session: AppSession | null) {
     await authorize(session, 'crm:read');
-    return prisma.customerCategory.findMany({ orderBy: { name: 'asc' } });
+    return prisma.customerCategory.findMany({
+      where: { companyId: session?.activeCompanyId ?? undefined },
+      orderBy: { name: 'asc' },
+    });
   },
 
   async createCategory(session: AppSession | null, input: CustomerCategoryInput) {
     const actor = await authorize(session, 'crm:write');
-    const existing = await prisma.customerCategory.findUnique({ where: { name: input.name } });
+    if (!actor.activeCompanyId) throw new ValidationError('No active company selected');
+    const existing = await prisma.customerCategory.findUnique({
+      where: { companyId_name: { companyId: actor.activeCompanyId, name: input.name } },
+    });
     if (existing) throw new ValidationError('Category name already exists');
     const category = await prisma.customerCategory.create({
       data: {
+        companyId: actor.activeCompanyId,
         name: input.name,
         description: input.description || null,
         discountPct: new Prisma.Decimal(input.discountPct),

@@ -6,6 +6,7 @@ export const PERMISSIONS = {
   // Phase 1
   users: ['read', 'write', 'delete', 'assign-role'],
   roles: ['read', 'write', 'delete'],
+  companies: ['read', 'write', 'delete'],
   branches: ['read', 'write', 'delete'],
   approvals: ['read', 'approve', 'reject', 'configure'],
   audit: ['read'],

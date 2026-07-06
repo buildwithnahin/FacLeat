@@ -38,6 +38,7 @@ import {
   PackageCheck,
   Receipt,
   Wallet,
+  Landmark,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -75,6 +76,7 @@ const ICONS: Record<string, LucideIcon> = {
   PackageCheck,
   Receipt,
   Wallet,
+  Landmark,
 };
 
 export interface ClientNavItem {
