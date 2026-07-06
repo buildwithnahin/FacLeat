@@ -1,8 +1,0 @@
-{
-  "/icon.svg/route": "app/icon.svg/route.js",
-  "/api/sse/notifications/route": "app/api/sse/notifications/route.js",
-  "/(app)/hr/employees/page": "app/(app)/hr/employees/page.js",
-  "/(auth)/login/page": "app/(auth)/login/page.js",
-  "/(app)/dashboard/page": "app/(app)/dashboard/page.js",
-  "/(app)/warehouse/requisitions/page": "app/(app)/warehouse/requisitions/page.js"
-}
