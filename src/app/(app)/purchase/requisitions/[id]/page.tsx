@@ -10,6 +10,7 @@ import { purchaseService } from '@/server/services/purchase.service';
 import { decideRequisitionAction } from '@/server/actions/purchase';
 import { getSession } from '@/server/auth/session';
 import { NotFoundError } from '@/lib/errors';
+import { ApprovalStatusBanner } from '../../_components/approval-status-banner';
 
 const PRIORITY_TONE = {
   URGENT: 'red',
@@ -87,6 +88,13 @@ export default async function RequisitionDetailPage({
           </Button>
         )}
       </PageHeader>
+
+      <ApprovalStatusBanner
+        session={session}
+        module="purchase"
+        entityType="PurchaseRequisition"
+        entityId={pr.id}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="p-5">

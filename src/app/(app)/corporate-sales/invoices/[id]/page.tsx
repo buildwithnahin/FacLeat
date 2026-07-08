@@ -6,11 +6,13 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/shared/data-table';
 import { Pill, type PillTone } from '@/components/shared/pill';
+import { StepIndicator } from '@/components/shared/step-indicator';
 import { getSession } from '@/server/auth/session';
 import { corporateService } from '@/server/services/corporate-sales.service';
 import { formatCurrency, type CurrencyCode } from '@/lib/money';
 import { NotFoundError } from '@/lib/errors';
 import { PaymentForm } from './payment-form';
+import { invoiceSteps } from '../../_components/steps';
 
 export const metadata = { title: 'Invoice' };
 
@@ -57,6 +59,11 @@ export default async function InvoiceDetailPage({
           </Link>
         </Button>
       </PageHeader>
+
+      <div className="flex items-center gap-3">
+        <StepIndicator steps={invoiceSteps(invoice.status)} className="flex-1" />
+        {invoice.status === 'OVERDUE' && <Pill tone="red">Overdue</Pill>}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6">
         <div className="space-y-4">

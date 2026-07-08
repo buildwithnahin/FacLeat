@@ -184,6 +184,12 @@ export const MODULES: NavModule[] = [
     iconName: 'Globe',
     permission: 'ecommerce:read',
     section: 'Sales',
+    items: [
+      { label: 'Overview', href: '/ecommerce', permission: 'ecommerce:read' },
+      { label: 'Channels', href: '/ecommerce/channels', permission: 'ecommerce:read' },
+      { label: 'Orders', href: '/ecommerce/orders', permission: 'ecommerce:read' },
+      { label: 'Reconciliation', href: '/ecommerce/reconcile', permission: 'ecommerce:reconcile' },
+    ],
   },
   {
     number: 10,
@@ -239,6 +245,7 @@ export const MODULES: NavModule[] = [
       { label: 'Orders', href: '/purchase/orders', permission: 'purchase:read' },
       { label: 'Goods receive', href: '/purchase/grn', permission: 'purchase:receive' },
       { label: 'Invoices', href: '/purchase/invoices', permission: 'purchase:read' },
+      { label: 'Returns', href: '/purchase/returns', permission: 'purchase:return' },
     ],
   },
   {

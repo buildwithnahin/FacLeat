@@ -31,6 +31,7 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
       'purchase:receive',
       'purchase:invoice',
       'purchase:pay',
+      'purchase:return',
       'accounts:read',
       'reports:read',
       'reports:export',
@@ -71,6 +72,10 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
       'purchase:read',
       'purchase:invoice',
       'purchase:pay',
+      'purchase:return',
+      'approvals:read',
+      'approvals:approve',
+      'approvals:reject',
       'reports:read',
       'reports:export',
       'audit:read',
@@ -91,11 +96,14 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
       'purchase:receive',
       'purchase:invoice',
       'purchase:pay',
+      'purchase:return',
       'inventory:read',
       'warehouse:read',
       'warehouse:receive',
       'notifications:read',
       'approvals:read',
+      'approvals:approve',
+      'approvals:reject',
     ],
   },
   {
@@ -217,6 +225,7 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
 // Sample users with different roles
 const SAMPLE_USERS = [
   { email: 'admin@annex.local', name: 'Admin User', role: 'Super Admin', branch: 'HQ' },
+  { email: 'branchadmin@annex.local', name: 'Farida Islam', role: 'Admin', branch: 'HQ' },
   { email: 'accountant@annex.local', name: 'Rahim Ahmed', role: 'Accounts', branch: 'HQ' },
   { email: 'purchase@annex.local', name: 'Karim Hassan', role: 'Purchase', branch: 'HQ' },
   { email: 'warehouse@annex.local', name: 'Ali Miah', role: 'Store', branch: 'HQ' },
@@ -384,6 +393,8 @@ const APPROVAL_RULES = [
   { module: 'pos', action: 'discount-override', minAmount: new Prisma.Decimal(0), approverRoles: ['Admin', 'Management'] },
   { module: 'purchase', action: 'approve', minAmount: new Prisma.Decimal(50000), approverRoles: ['Admin', 'Purchase'] },
   { module: 'purchase', action: 'approve', minAmount: new Prisma.Decimal(200000), approverRoles: ['Admin'] },
+  { module: 'purchase', action: 'requisition-approve', minAmount: new Prisma.Decimal(0), approverRoles: ['Admin', 'Purchase'] },
+  { module: 'purchase', action: 'invoice-approve', minAmount: new Prisma.Decimal(100000), approverRoles: ['Accounts', 'Admin'] },
   { module: 'accounts', action: 'post', minAmount: new Prisma.Decimal(100000), approverRoles: ['Accounts', 'Admin'] },
   { module: 'assets', action: 'dispose', minAmount: new Prisma.Decimal(50000), approverRoles: ['Admin'] },
   { module: 'factory', action: 'cost-entry', minAmount: new Prisma.Decimal(25000), approverRoles: ['Admin', 'Production'] },
@@ -1087,7 +1098,7 @@ async function main() {
 
   console.log('\n🎉 Seed complete!');
   console.log('\n📋 Login credentials:');
-  console.log('   Admin: admin@annex.local / Admin@12345');
+  console.log('   Admin: admin@annex.local / Demo@123');
   console.log('   Accountant: accountant@annex.local / Demo@123');
   console.log('   Cashier: cashier@annex.local / Demo@123');
   console.log('   (All users have default password: Demo@123)');

@@ -6,12 +6,14 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/shared/data-table';
 import { Pill, type PillTone } from '@/components/shared/pill';
+import { StepIndicator } from '@/components/shared/step-indicator';
 import { getSession } from '@/server/auth/session';
 import { corporateService } from '@/server/services/corporate-sales.service';
 import { prisma } from '@/server/db';
 import { formatCurrency, type CurrencyCode } from '@/lib/money';
 import { NotFoundError } from '@/lib/errors';
 import { QuoteActions } from './actions';
+import { quoteSteps } from '../../_components/steps';
 
 export const metadata = { title: 'Quote' };
 
@@ -57,6 +59,8 @@ export default async function QuoteDetailPage({
           </Link>
         </Button>
       </PageHeader>
+
+      <StepIndicator steps={quoteSteps(quote.status)} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6">
         <div className="space-y-4">

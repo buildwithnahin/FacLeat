@@ -3,6 +3,7 @@ import { reportsService } from '@/server/services/reports.service';
 import { branchService } from '@/server/services/branch.service';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent } from '@/components/ui/card';
+import { DataTable } from '@/components/shared/data-table';
 import { defaultRange, RangeFilter } from '../_components/range-filter';
 
 export const metadata = { title: 'Purchase report' };
@@ -46,6 +47,25 @@ export default async function PurchaseReportPage({
         <Kpi label="Paid to suppliers" value={data.invoicePaid.toString()} />
         <Kpi label="Outstanding payable" value={data.openPayable.toString()} accent />
       </div>
+
+      <Card className="p-0">
+        <div className="px-4 py-3 border-b text-sm font-medium">Purchase orders by department</div>
+        <DataTable
+          rows={data.byDepartment}
+          rowKey={(r) => r.department}
+          empty="No purchase orders in this range."
+          columns={[
+            { key: 'department', header: 'Department', cell: (r) => r.department },
+            { key: 'count', header: 'Orders', align: 'right', cell: (r) => <span className="tabular">{r.count}</span> },
+            {
+              key: 'total',
+              header: 'Total value',
+              align: 'right',
+              cell: (r) => <span className="tabular font-medium">{r.total.toString()}</span>,
+            },
+          ]}
+        />
+      </Card>
     </div>
   );
 }

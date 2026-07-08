@@ -6,11 +6,13 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/shared/data-table';
 import { Pill, type PillTone } from '@/components/shared/pill';
+import { StepIndicator } from '@/components/shared/step-indicator';
 import { getSession } from '@/server/auth/session';
 import { corporateService } from '@/server/services/corporate-sales.service';
 import { formatCurrency, type CurrencyCode } from '@/lib/money';
 import { NotFoundError } from '@/lib/errors';
 import { OrderActions } from './actions';
+import { orderSteps } from '../../_components/steps';
 
 export const metadata = { title: 'Order' };
 
@@ -52,6 +54,8 @@ export default async function OrderDetailPage({
           </Link>
         </Button>
       </PageHeader>
+
+      <StepIndicator steps={orderSteps(order.status, order.deliveries.length > 0)} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-6">
         <div className="space-y-4">

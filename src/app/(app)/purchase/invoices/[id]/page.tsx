@@ -1,18 +1,21 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, CreditCard } from 'lucide-react';
+import { ArrowLeft, Check, CreditCard } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Pill } from '@/components/shared/pill';
 import { DataTable } from '@/components/shared/data-table';
 import { purchaseService } from '@/server/services/purchase.service';
+import { approveInvoiceAction } from '@/server/actions/purchase';
 import { getSession } from '@/server/auth/session';
 import { NotFoundError } from '@/lib/errors';
 import { formatCurrency } from '@/lib/money';
 import type { CurrencyCode } from '@/lib/money';
+import { ApprovalStatusBanner } from '../../_components/approval-status-banner';
 
 const STATUS_TONE = {
+  DRAFT: 'blue',
   PENDING: 'amber',
   PARTIALLY_PAID: 'orange',
   PAID: 'green',
@@ -35,6 +38,8 @@ export default async function InvoiceDetailPage({
   }
   const currency = invoice.currency as CurrencyCode;
   const outstanding = invoice.grandTotal.minus(invoice.paidAmount);
+  const canApprove = invoice.status === 'DRAFT';
+  const canPay = invoice.status !== 'DRAFT' && outstanding.gt(0);
 
   return (
     <div className="space-y-6">
@@ -50,7 +55,16 @@ export default async function InvoiceDetailPage({
         title={invoice.number}
         description={`${invoice.supplier.name} · Due ${new Date(invoice.dueDate).toLocaleDateString()}`}
       >
-        {outstanding.gt(0) && (
+        {canApprove && (
+          <form action={approveInvoiceAction}>
+            <input type="hidden" name="id" value={invoice.id} />
+            <Button type="submit" variant="dark">
+              <Check className="h-4 w-4" />
+              Approve
+            </Button>
+          </form>
+        )}
+        {canPay && (
           <Button variant="dark" asChild>
             <Link href={`/suppliers/${invoice.supplierId}/pay?invoiceId=${invoice.id}`}>
               <CreditCard className="h-4 w-4" />
@@ -59,6 +73,13 @@ export default async function InvoiceDetailPage({
           </Button>
         )}
       </PageHeader>
+
+      <ApprovalStatusBanner
+        session={session}
+        module="purchase"
+        entityType="PurchaseInvoice"
+        entityId={invoice.id}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="p-5">
@@ -74,7 +95,7 @@ export default async function InvoiceDetailPage({
           <div className="mt-2">
             <Pill
               tone={
-                invoice.matching === 'MATCHED' ? 'green' : invoice.matching === 'DISPUTED' ? 'red' : 'grey'
+                invoice.matching === 'MATCHED' ? 'green' : invoice.matching === 'MISMATCH' ? 'red' : 'grey'
               }
             >
               {invoice.matching.toLowerCase()}

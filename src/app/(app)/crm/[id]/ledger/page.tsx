@@ -5,11 +5,30 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/shared/data-table';
+import { Pill, type PillTone } from '@/components/shared/pill';
 import { customerService } from '@/server/services/customer.service';
 import { getSession } from '@/server/auth/session';
 import { NotFoundError } from '@/lib/errors';
 import { formatCurrency } from '@/lib/money';
 import type { CurrencyCode } from '@/lib/money';
+
+const REF_TYPE_TONE: Record<string, PillTone> = {
+  PosSale: 'blue',
+  PosReturn: 'blue',
+  WholesaleInvoice: 'amber',
+  WholesaleReturn: 'amber',
+  CorporateInvoice: 'green',
+  CUSTOMER: 'grey',
+};
+
+const REF_TYPE_LABEL: Record<string, string> = {
+  PosSale: 'POS',
+  PosReturn: 'POS',
+  WholesaleInvoice: 'Wholesale',
+  WholesaleReturn: 'Wholesale',
+  CorporateInvoice: 'Corporate',
+  CUSTOMER: 'Opening balance',
+};
 
 export default async function CustomerLedgerPage({
   params,
@@ -53,7 +72,18 @@ export default async function CustomerLedgerPage({
               header: 'Date',
               cell: (r) => new Date(r.entryDate).toLocaleDateString(),
             },
-            { key: 'type', header: 'Type', cell: (r) => r.entryType.toLowerCase() },
+            {
+              key: 'type',
+              header: 'Type',
+              cell: (r) => (
+                <div className="space-y-1">
+                  <div>{r.entryType.toLowerCase()}</div>
+                  <Pill tone={REF_TYPE_TONE[r.refType] ?? 'grey'} className="text-[10px]">
+                    {REF_TYPE_LABEL[r.refType] ?? r.refType}
+                  </Pill>
+                </div>
+              ),
+            },
             { key: 'desc', header: 'Description', cell: (r) => r.description },
             {
               key: 'debit',

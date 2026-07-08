@@ -92,6 +92,52 @@ async function syncEmployeeTransferApprovalState(args: {
   });
 }
 
+/**
+ * PurchaseOrder and PurchaseInvoice have no dedicated "rejected" status —
+ * reusing CANCELLED on rejection is a deliberate modeling compromise, not an oversight.
+ */
+async function syncPurchaseApprovalState(args: {
+  approvalStatus: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED';
+  entityType: 'PurchaseRequisition' | 'PurchaseOrder' | 'PurchaseInvoice';
+  entityId: string;
+  actorUserId: string;
+  note?: string | null;
+}) {
+  if (args.approvalStatus === 'CHANGES_REQUESTED') return;
+  const now = new Date();
+  const approved = args.approvalStatus === 'APPROVED';
+
+  if (args.entityType === 'PurchaseRequisition') {
+    await prisma.purchaseRequisition.update({
+      where: { id: args.entityId },
+      data: approved
+        ? { status: 'APPROVED', approvedById: args.actorUserId, approvedAt: now, rejectedReason: null }
+        : {
+            status: 'REJECTED',
+            approvedById: args.actorUserId,
+            approvedAt: now,
+            rejectedReason: args.note || 'Rejected',
+          },
+    });
+    return;
+  }
+
+  if (args.entityType === 'PurchaseOrder') {
+    await prisma.purchaseOrder.update({
+      where: { id: args.entityId },
+      data: approved
+        ? { status: 'APPROVED', approvedById: args.actorUserId, approvedAt: now }
+        : { status: 'CANCELLED' },
+    });
+    return;
+  }
+
+  await prisma.purchaseInvoice.update({
+    where: { id: args.entityId },
+    data: { status: approved ? 'PENDING' : 'CANCELLED' },
+  });
+}
+
 export const approvalService = {
   async listRules(session: AppSession | null) {
     await authorize(session, 'approvals:read');
@@ -268,6 +314,23 @@ export const approvalService = {
     });
     if (!req) throw new NotFoundError('Approval request not found');
     return req;
+  },
+
+  /** Latest non-approved request for an entity, for surfacing "pending approval" banners. */
+  async findLatestForEntity(
+    session: AppSession | null,
+    filter: { module: string; entityType: string; entityId: string },
+  ) {
+    await authorize(session, 'approvals:read');
+    return prisma.approvalRequest.findFirst({
+      where: {
+        module: filter.module,
+        entityType: filter.entityType,
+        entityId: filter.entityId,
+        status: { in: ['PENDING', 'CHANGES_REQUESTED', 'ESCALATED'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   },
 
   async approve(session: AppSession | null, input: ApprovalDecisionInput) {
@@ -460,6 +523,21 @@ export const approvalService = {
         await syncEmployeeTransferApprovalState({
           approvalStatus: result.updated.status as 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED',
           transferId: result.entityId,
+          actorUserId: result.actorUserId,
+          note: input.note,
+        });
+      }
+      if (
+        ['APPROVED', 'REJECTED', 'CHANGES_REQUESTED'].includes(result.updated.status) &&
+        result.module === 'purchase' &&
+        ['requisition-approve', 'approve', 'invoice-approve'].includes(result.action) &&
+        ['PurchaseRequisition', 'PurchaseOrder', 'PurchaseInvoice'].includes(result.entityType) &&
+        result.entityId
+      ) {
+        await syncPurchaseApprovalState({
+          approvalStatus: result.updated.status as 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED',
+          entityType: result.entityType as 'PurchaseRequisition' | 'PurchaseOrder' | 'PurchaseInvoice',
+          entityId: result.entityId,
           actorUserId: result.actorUserId,
           note: input.note,
         });

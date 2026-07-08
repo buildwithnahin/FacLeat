@@ -37,7 +37,7 @@ export const reportsService = {
     const branchId = resolveScopedBranchId(session, f.branchId);
     const dateFilter = { gte: f.from, lte: f.to };
 
-    const [posAgg, wholesaleAgg, corporateAgg] = await Promise.all([
+    const [posAgg, wholesaleAgg, corporateAgg, ecomAgg, tradeAgg, tradePayAgg] = await Promise.all([
       prisma.posSale.aggregate({
         where: {
           branchId,
@@ -64,7 +64,37 @@ export const reportsService = {
         _sum: { grandTotal: true, discountTotal: true, taxTotal: true, paidTotal: true, balanceDue: true },
         _count: { _all: true },
       }),
+      prisma.ecommerceOrder.aggregate({
+        where: {
+          branchId,
+          orderDate: dateFilter,
+          status: { notIn: ['CANCELLED', 'RETURNED'] },
+        },
+        _sum: { grandTotal: true, discountTotal: true, taxTotal: true, paidTotal: true },
+        _count: { _all: true },
+      }),
+      prisma.tradeOrder.aggregate({
+        where: {
+          branchId,
+          type: 'EXPORT',
+          status: { not: 'CANCELLED' },
+          createdAt: dateFilter,
+        },
+        _sum: { totalValue: true },
+        _count: { _all: true },
+      }),
+      prisma.tradePayment.aggregate({
+        where: {
+          tradeOrder: { branchId, type: 'EXPORT' },
+          paymentDate: dateFilter,
+        },
+        _sum: { localAmount: true },
+      }),
     ]);
+
+    const ecomOutstanding = (ecomAgg._sum.grandTotal ?? ZERO).minus(ecomAgg._sum.paidTotal ?? ZERO);
+    const tradeGross = tradeAgg._sum.totalValue ?? ZERO;
+    const tradePaid = tradePayAgg._sum.localAmount ?? ZERO;
 
     const channels = [
       {
@@ -97,6 +127,26 @@ export const reportsService = {
         paid: corporateAgg._sum.paidTotal ?? ZERO,
         outstanding: corporateAgg._sum.balanceDue ?? ZERO,
       },
+      {
+        key: 'ecommerce',
+        label: 'E-commerce',
+        count: ecomAgg._count._all,
+        gross: ecomAgg._sum.grandTotal ?? ZERO,
+        discount: ecomAgg._sum.discountTotal ?? ZERO,
+        tax: ecomAgg._sum.taxTotal ?? ZERO,
+        paid: ecomAgg._sum.paidTotal ?? ZERO,
+        outstanding: ecomOutstanding,
+      },
+      {
+        key: 'trade',
+        label: 'Trade (Export)',
+        count: tradeAgg._count._all,
+        gross: tradeGross,
+        discount: ZERO,
+        tax: ZERO,
+        paid: tradePaid,
+        outstanding: tradeGross.minus(tradePaid),
+      },
     ];
 
     const totals = channels.reduce(
@@ -124,7 +174,7 @@ export const reportsService = {
     const limit = f.limit ?? 20;
     const dateFilter = { gte: f.from, lte: f.to };
 
-    const [pos, ws, corp] = await Promise.all([
+    const [pos, ws, corp, ecom, trade] = await Promise.all([
       prisma.posSaleItem.groupBy({
         by: ['productId'],
         where: {
@@ -144,11 +194,28 @@ export const reportsService = {
         where: { invoice: { branchId, invoiceDate: dateFilter } },
         _sum: { quantity: true, lineTotal: true },
       }),
+      prisma.ecommerceOrderItem.groupBy({
+        by: ['productId'],
+        where: {
+          productId: { not: null },
+          order: { branchId, orderDate: dateFilter, status: { notIn: ['CANCELLED', 'RETURNED'] } },
+        },
+        _sum: { quantity: true, lineTotal: true },
+      }),
+      prisma.tradeOrderItem.groupBy({
+        by: ['productId'],
+        where: {
+          productId: { not: null },
+          tradeOrder: { branchId, type: 'EXPORT', status: { not: 'CANCELLED' }, createdAt: dateFilter },
+        },
+        _sum: { quantity: true, lineTotal: true },
+      }),
     ]);
 
     const map = new Map<string, { productId: string; qty: Prisma.Decimal; revenue: Prisma.Decimal }>();
-    for (const rows of [pos, ws, corp]) {
+    for (const rows of [pos, ws, corp, ecom, trade]) {
       for (const r of rows) {
+        if (!r.productId) continue;
         const prev = map.get(r.productId) ?? { productId: r.productId, qty: ZERO, revenue: ZERO };
         prev.qty = prev.qty.plus(r._sum.quantity ?? ZERO);
         prev.revenue = prev.revenue.plus(r._sum.lineTotal ?? ZERO);
@@ -180,7 +247,7 @@ export const reportsService = {
     const branchId = resolveScopedBranchId(session, f.branchId);
     const dateFilter = { gte: f.from, lte: f.to };
 
-    const [poAgg, invAgg, unpaid] = await Promise.all([
+    const [poAgg, invAgg, unpaid, byDepartmentAgg] = await Promise.all([
       prisma.purchaseOrder.aggregate({
         where: { branchId, orderDate: dateFilter },
         _sum: { grandTotal: true },
@@ -195,12 +262,25 @@ export const reportsService = {
         where: { branchId, status: { notIn: ['PAID', 'CANCELLED'] } },
         _sum: { grandTotal: true, paidAmount: true },
       }),
+      prisma.purchaseOrder.groupBy({
+        by: ['department'],
+        where: { branchId, orderDate: dateFilter },
+        _sum: { grandTotal: true },
+        _count: { _all: true },
+      }),
     ]);
 
     const invoiceTotal = invAgg._sum.grandTotal ?? ZERO;
     const invoicePaid = invAgg._sum.paidAmount ?? ZERO;
     const openTotal = unpaid._sum.grandTotal ?? ZERO;
     const openPaid = unpaid._sum.paidAmount ?? ZERO;
+    const byDepartment = byDepartmentAgg
+      .map((r) => ({
+        department: r.department ?? 'Unassigned',
+        count: r._count._all,
+        total: r._sum.grandTotal ?? ZERO,
+      }))
+      .sort((a, b) => b.total.cmp(a.total));
 
     return {
       poCount: poAgg._count._all,
@@ -210,6 +290,7 @@ export const reportsService = {
       invoicePaid,
       invoiceOutstanding: invoiceTotal.minus(invoicePaid),
       openPayable: openTotal.minus(openPaid),
+      byDepartment,
     };
   },
 
@@ -354,10 +435,14 @@ export const reportsService = {
       posAgg,
       wholesalePayAgg,
       corporatePayAgg,
+      ecomPayAgg,
+      tradePayAgg,
       supplierPayAgg,
       posRows,
       wholesalePayRows,
       corporatePayRows,
+      ecomPayRows,
+      tradePayRows,
       supplierPayRows,
     ] = await Promise.all([
       // ── Income aggregates ─────────────────────────────────────────────────
@@ -384,6 +469,22 @@ export const reportsService = {
           invoice: { branchId },
         },
         _sum: { amount: true },
+        _count: { _all: true },
+      }),
+      prisma.ecommercePayment.aggregate({
+        where: {
+          receivedAt: { gte: f.from, lte: f.to },
+          branchId,
+        },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+      prisma.tradePayment.aggregate({
+        where: {
+          paymentDate: { gte: f.from, lte: f.to },
+          tradeOrder: { branchId, type: 'EXPORT' },
+        },
+        _sum: { localAmount: true },
         _count: { _all: true },
       }),
       // ── Outcome aggregates ────────────────────────────────────────────────
@@ -456,6 +557,49 @@ export const reportsService = {
         orderBy: { paidAt: 'desc' },
         take: 500,
       }),
+      prisma.ecommercePayment.findMany({
+        where: {
+          receivedAt: { gte: f.from, lte: f.to },
+          branchId,
+        },
+        select: {
+          id: true,
+          amount: true,
+          method: true,
+          receivedAt: true,
+          order: {
+            select: {
+              number: true,
+              customerName: true,
+              branch: { select: { code: true } },
+              customer: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { receivedAt: 'desc' },
+        take: 500,
+      }),
+      prisma.tradePayment.findMany({
+        where: {
+          paymentDate: { gte: f.from, lte: f.to },
+          tradeOrder: { branchId, type: 'EXPORT' },
+        },
+        select: {
+          id: true,
+          number: true,
+          localAmount: true,
+          paymentDate: true,
+          tradeOrder: {
+            select: {
+              number: true,
+              branch: { select: { code: true } },
+              customer: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { paymentDate: 'desc' },
+        take: 500,
+      }),
       prisma.supplierPayment.findMany({
         where: {
           branchId,
@@ -494,6 +638,18 @@ export const reportsService = {
         label: 'Corporate payments',
         count: corporatePayAgg._count._all,
         amount: corporatePayAgg._sum.amount ?? ZERO,
+      },
+      {
+        key: 'ecommerce',
+        label: 'E-commerce payments',
+        count: ecomPayAgg._count._all,
+        amount: ecomPayAgg._sum.amount ?? ZERO,
+      },
+      {
+        key: 'trade',
+        label: 'Trade export payments',
+        count: tradePayAgg._count._all,
+        amount: tradePayAgg._sum.localAmount ?? ZERO,
       },
     ];
 
@@ -556,6 +712,28 @@ export const reportsService = {
         method: r.method,
         amount: r.amount,
         branch: r.invoice.branch.code,
+      })),
+      ...ecomPayRows.map((r) => ({
+        id: r.id,
+        date: r.receivedAt,
+        flow: 'IN' as const,
+        source: 'E-commerce',
+        ref: r.order.number,
+        party: r.order.customer?.name ?? r.order.customerName ?? 'Guest',
+        method: r.method,
+        amount: r.amount,
+        branch: r.order.branch.code,
+      })),
+      ...tradePayRows.map((r) => ({
+        id: r.id,
+        date: r.paymentDate!,
+        flow: 'IN' as const,
+        source: 'Trade Export',
+        ref: r.tradeOrder.number,
+        party: r.tradeOrder.customer?.name ?? '—',
+        method: 'Bank Transfer',
+        amount: r.localAmount,
+        branch: r.tradeOrder.branch.code,
       })),
       ...supplierPayRows.map((r) => ({
         id: r.id,

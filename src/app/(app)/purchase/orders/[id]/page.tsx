@@ -16,6 +16,7 @@ import { getSession } from '@/server/auth/session';
 import { NotFoundError } from '@/lib/errors';
 import { formatCurrency } from '@/lib/money';
 import type { CurrencyCode } from '@/lib/money';
+import { ApprovalStatusBanner } from '../../_components/approval-status-banner';
 
 const STATUS_TONE = {
   DRAFT: 'blue',
@@ -112,6 +113,13 @@ export default async function PurchaseOrderDetailPage({
           </form>
         )}
       </PageHeader>
+
+      <ApprovalStatusBanner
+        session={session}
+        module="purchase"
+        entityType="PurchaseOrder"
+        entityId={po.id}
+      />
 
       <StepIndicator
         steps={[

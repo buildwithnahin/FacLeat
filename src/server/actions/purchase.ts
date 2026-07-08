@@ -10,6 +10,7 @@ import {
   poCreateSchema,
   grnCreateSchema,
   invoiceCreateSchema,
+  debitNoteCreateSchema,
 } from '@/server/validators/purchase';
 import { ApiError } from '@/lib/errors';
 
@@ -63,7 +64,13 @@ export async function decideRequisitionAction(formData: FormData) {
   });
   if (!parsed.success) throw new Error('Invalid decision payload');
   const session = await getSession();
-  await purchaseService.decideRequisition(session, parsed.data);
+  try {
+    await purchaseService.decideRequisition(session, parsed.data);
+  } catch (e) {
+    // Approval was requested/pending instead of applied outright — the
+    // ApprovalStatusBanner on the detail page surfaces this, no need to crash.
+    if (!(e instanceof ApiError)) throw e;
+  }
   revalidatePath('/purchase/requisitions');
   revalidatePath(`/purchase/requisitions/${parsed.data.id}`);
 }
@@ -100,7 +107,11 @@ export async function approvePurchaseOrderAction(formData: FormData) {
   const id = formData.get('id');
   if (typeof id !== 'string') throw new Error('Invalid PO id');
   const session = await getSession();
-  await purchaseService.approvePurchaseOrder(session, id);
+  try {
+    await purchaseService.approvePurchaseOrder(session, id);
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e;
+  }
   revalidatePath('/purchase/orders');
   revalidatePath(`/purchase/orders/${id}`);
 }
@@ -168,4 +179,46 @@ export async function createInvoiceAction(
   }
   revalidatePath('/purchase/invoices');
   redirect('/purchase/invoices');
+}
+
+export async function approveInvoiceAction(formData: FormData) {
+  const id = formData.get('id');
+  if (typeof id !== 'string') throw new Error('Invalid invoice id');
+  const session = await getSession();
+  try {
+    await purchaseService.approveInvoice(session, id);
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e;
+  }
+  revalidatePath('/purchase/invoices');
+  revalidatePath(`/purchase/invoices/${id}`);
+}
+
+// ─── Debit Note (Purchase Return) ──────────────────────────────────────────
+
+export async function createDebitNoteAction(
+  _prev: PurchaseFormState,
+  formData: FormData,
+): Promise<PurchaseFormState> {
+  const parsed = debitNoteCreateSchema.safeParse({
+    branchId: formData.get('branchId'),
+    supplierId: formData.get('supplierId'),
+    warehouseId: formData.get('warehouseId'),
+    invoiceId: formData.get('invoiceId') ?? '',
+    grnId: formData.get('grnId') ?? '',
+    returnDate: formData.get('returnDate'),
+    reason: formData.get('reason') ?? '',
+    vatAdjustment: formData.get('vatAdjustment') ?? 0,
+    items: parseItems(formData),
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  try {
+    const session = await getSession();
+    await purchaseService.createDebitNote(session, parsed.data);
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    throw e;
+  }
+  revalidatePath('/purchase/returns');
+  redirect('/purchase/returns');
 }

@@ -14,7 +14,7 @@ export default function LoginPage() {
         <LoginForm />
       </Suspense>
       <p className="mt-6 text-xs text-muted-foreground">
-        Seed admin: <code className="font-mono">admin@annex.local</code> / <code className="font-mono">Admin@12345</code>
+        Seed admin: <code className="font-mono">admin@annex.local</code> / <code className="font-mono">Demo@123</code>
       </p>
     </div>
   );

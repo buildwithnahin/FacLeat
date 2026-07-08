@@ -12,6 +12,7 @@ import type {
   PurchaseOrderCreateInput,
   GrnCreateInput,
   InvoiceCreateInput,
+  DebitNoteCreateInput,
 } from '@/server/validators/purchase';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 import { nextDocumentNumber } from '@/lib/document-number';
@@ -84,7 +85,7 @@ export const purchaseService = {
     const actor = await authorize(session, 'purchase:write');
 
     return prisma.$transaction(async (tx) => {
-      await assertOpenPeriod(tx, po.branchId, input.receivedDate);
+      await assertOpenPeriod(tx, input.branchId, input.requiredDate);
 
       const year = new Date().getFullYear();
       const yearCount = await tx.purchaseRequisition.count({
@@ -145,12 +146,34 @@ export const purchaseService = {
     );
     const existing = await prisma.purchaseRequisition.findUnique({
       where: { id: input.id },
+      include: {
+        items: { select: { quantity: true, estimatedPrice: true } },
+        branch: { select: { currency: true } },
+      },
     });
     if (!existing) throw new NotFoundError('Requisition not found');
     if (existing.status !== 'PENDING' && existing.status !== 'DRAFT') {
       throw new ValidationError(
         `Cannot ${input.decision.toLowerCase()} requisition in ${existing.status} state`,
       );
+    }
+
+    if (input.decision === 'APPROVE') {
+      const amount = existing.items.reduce(
+        (sum, it) => sum.plus(it.quantity.mul(it.estimatedPrice)),
+        new Prisma.Decimal(0),
+      );
+      await approvalService.ensureApprovedOrRequest(session, {
+        module: 'purchase',
+        action: 'requisition-approve',
+        entityType: 'PurchaseRequisition',
+        entityId: existing.id,
+        title: `Purchase requisition ${existing.number}`,
+        summary: `Approval required before approving PR ${existing.number}`,
+        amount: amount.toNumber(),
+        currency: existing.branch.currency,
+        branchId: existing.branchId,
+      });
     }
 
     return prisma.$transaction(async (tx) => {
@@ -244,6 +267,14 @@ export const purchaseService = {
       select: { id: true, category: { select: { name: true } }, size: true },
     });
     const productById = new Map(products.map((p) => [p.id, p]));
+    const department = input.requisitionId
+      ? (
+          await prisma.purchaseRequisition.findUnique({
+            where: { id: input.requisitionId },
+            select: { department: true },
+          })
+        )?.department ?? null
+      : null;
 
     return prisma.$transaction(async (tx) => {
       const year = new Date().getFullYear();
@@ -292,6 +323,7 @@ export const purchaseService = {
           number,
           supplierId: input.supplierId,
           requisitionId: input.requisitionId || null,
+          department,
           status: 'PENDING',
           orderDate: input.orderDate ?? new Date(),
           deliveryDate: input.deliveryDate,
@@ -661,7 +693,7 @@ export const purchaseService = {
           supplierId: supplier.id,
           purchaseOrderId: input.purchaseOrderId || null,
           grnId: input.grnId || null,
-          status: 'PENDING',
+          status: 'DRAFT',
           matching,
           invoiceDate: input.invoiceDate,
           dueDate: input.dueDate,
@@ -712,6 +744,183 @@ export const purchaseService = {
       );
 
       return invoice;
+    });
+  },
+
+  async approveInvoice(session: AppSession | null, id: string) {
+    const actor = await authorize(session, 'purchase:approve');
+    const existing = await prisma.purchaseInvoice.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundError('Invoice not found');
+    if (existing.status !== 'DRAFT') {
+      throw new ValidationError(`Cannot approve invoice in ${existing.status} state`);
+    }
+    await approvalService.ensureApprovedOrRequest(session, {
+      module: 'purchase',
+      action: 'invoice-approve',
+      entityType: 'PurchaseInvoice',
+      entityId: existing.id,
+      title: `Purchase invoice ${existing.number}`,
+      summary: `Approval required before posting invoice ${existing.number}`,
+      amount: existing.grandTotal.toNumber(),
+      currency: existing.currency,
+      branchId: existing.branchId,
+    });
+    return prisma.$transaction(async (tx) => {
+      const invoice = await tx.purchaseInvoice.update({
+        where: { id },
+        data: { status: 'PENDING' },
+      });
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: invoice.branchId,
+          module: 'purchase',
+          action: 'invoice.approve',
+          entityType: 'PurchaseInvoice',
+          entityId: invoice.id,
+          before: { status: existing.status },
+          after: { status: invoice.status },
+        },
+        tx,
+      );
+      return invoice;
+    });
+  },
+
+  // ─── Debit Note (Purchase Return) ─────────────────────────────────────────
+  async listDebitNotes(session: AppSession | null, filters: { supplierId?: string } = {}) {
+    await authorize(session, 'purchase:read');
+    return prisma.debitNote.findMany({
+      where: { supplierId: filters.supplierId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        supplier: { select: { id: true, code: true, name: true, currency: true } },
+        items: { select: { id: true } },
+      },
+    });
+  },
+
+  async getDebitNote(session: AppSession | null, id: string) {
+    await authorize(session, 'purchase:read');
+    const debitNote = await prisma.debitNote.findUnique({
+      where: { id },
+      include: {
+        supplier: true,
+        invoice: { select: { id: true, number: true } },
+        grn: { select: { id: true, number: true } },
+        items: { include: { product: { select: { id: true, sku: true, name: true } } } },
+      },
+    });
+    if (!debitNote) throw new NotFoundError('Debit note not found');
+    return debitNote;
+  },
+
+  async createDebitNote(session: AppSession | null, input: DebitNoteCreateInput) {
+    const actor = await authorize(session, 'purchase:return');
+
+    const supplier = await prisma.supplier.findUnique({ where: { id: input.supplierId } });
+    if (!supplier) throw new NotFoundError('Supplier not found');
+    const warehouse = await prisma.warehouse.findUnique({ where: { id: input.warehouseId } });
+    if (!warehouse || warehouse.branchId !== supplier.branchId) {
+      throw new ValidationError('Warehouse does not belong to this branch');
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, supplier.branchId, input.returnDate);
+
+      const year = new Date().getFullYear();
+      const yearCount = await tx.debitNote.count({
+        where: { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } },
+      });
+      const number = nextDocumentNumber('DN', year, yearCount);
+
+      let totalAmount = new Prisma.Decimal(0);
+      const itemRows = input.items.map((it) => {
+        const qty = new Prisma.Decimal(it.returnedQty);
+        const price = new Prisma.Decimal(it.unitPrice);
+        const total = qty.mul(price);
+        totalAmount = totalAmount.plus(total);
+        return {
+          productId: it.productId,
+          returnedQty: qty,
+          unitPrice: price,
+          total,
+          reason: it.reason || null,
+          condition: it.condition || null,
+        };
+      });
+      const vatAdjustment = new Prisma.Decimal(input.vatAdjustment);
+      const grandTotal = totalAmount.plus(vatAdjustment);
+
+      const debitNote = await tx.debitNote.create({
+        data: {
+          branchId: supplier.branchId,
+          number,
+          supplierId: supplier.id,
+          invoiceId: input.invoiceId || null,
+          grnId: input.grnId || null,
+          returnDate: input.returnDate,
+          status: 'POSTED',
+          totalAmount: grandTotal,
+          vatAdjustment,
+          reason: input.reason || null,
+          createdById: actor.userId,
+          items: { create: itemRows },
+        },
+        include: { items: true },
+      });
+
+      await tx.supplierLedger.create({
+        data: {
+          branchId: supplier.branchId,
+          supplierId: supplier.id,
+          entryType: 'ADJUSTMENT',
+          refType: 'DEBIT_NOTE',
+          refId: debitNote.id,
+          description: `Purchase return ${number}`,
+          debit: new Prisma.Decimal(0),
+          credit: grandTotal,
+          entryDate: input.returnDate,
+          createdById: actor.userId,
+        },
+      });
+
+      for (const item of debitNote.items) {
+        await tx.inventoryLedger.create({
+          data: {
+            branchId: supplier.branchId,
+            warehouseId: input.warehouseId,
+            productId: item.productId,
+            direction: 'OUT',
+            quantity: item.returnedQty,
+            costPerUnit: item.unitPrice,
+            refType: 'DEBIT_NOTE',
+            refId: debitNote.id,
+            note: `${number} (return)`,
+            createdById: actor.userId,
+          },
+        });
+      }
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: supplier.branchId,
+          module: 'purchase',
+          action: 'debitnote.create',
+          entityType: 'DebitNote',
+          entityId: debitNote.id,
+          after: {
+            number,
+            supplierId: supplier.id,
+            totalAmount: grandTotal.toString(),
+            itemCount: itemRows.length,
+          },
+        },
+        tx,
+      );
+
+      return debitNote;
     });
   },
 

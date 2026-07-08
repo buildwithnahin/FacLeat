@@ -134,6 +134,16 @@ export const ecommerceService = {
     });
   },
 
+  async listReconciliationRuns(session: AppSession | null, branchId?: string) {
+    await authorize(session, 'ecommerce:read');
+    return prisma.ecommerceReconciliationRun.findMany({
+      where: { branchId },
+      include: { channel: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+  },
+
   async listOrders(session: AppSession | null, filters: { branchId?: string; status?: string } = {}) {
     await authorize(session, 'ecommerce:read');
     return prisma.ecommerceOrder.findMany({

@@ -271,6 +271,7 @@ enum GoodsReceivingStatus {
 
 enum PurchaseInvoiceStatus {
   DRAFT
+  PENDING
   SUBMITTED
   ON_HOLD
   APPROVED
@@ -1299,6 +1300,7 @@ model PurchaseOrder {
   supplier      Supplier             @relation(fields: [supplierId], references: [id])
   requisitionId String?
   requisition   PurchaseRequisition? @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
+  department    String?
   status        PurchaseOrderStatus  @default(DRAFT)
   orderDate     DateTime             @default(now())
   deliveryDate  DateTime

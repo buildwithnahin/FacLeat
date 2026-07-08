@@ -1,41 +1,78 @@
-import { getSession } from '@/server/auth/session';
-import { authorize } from '@/server/auth/authorize';
+import Link from 'next/link';
+import { PackageOpen, Truck, RotateCcw, AlertTriangle, Boxes } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { KpiCard } from '@/components/shared/kpi-card';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { getSession } from '@/server/auth/session';
+import { ecommerceService } from '@/server/services/ecommerce.service';
 
 export const metadata = { title: 'E-commerce' };
 
 export default async function EcommerceOverviewPage() {
   const session = await getSession();
-  await authorize(session, 'ecommerce:read');
+  const branchId = session?.activeBranchId ?? undefined;
+  const stats = await ecommerceService.dashboard(session, branchId);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="E-commerce / Online Sales" description="Order sync, fulfillment, shipment tracking & reconciliation.">
-        <Badge variant="warning">Scaffold</Badge>
+      <PageHeader
+        title="E-commerce / Online Sales"
+        description="Order sync, fulfillment, shipment tracking & reconciliation."
+      >
+        <Button variant="outline" asChild>
+          <Link href="/ecommerce/channels">Channels</Link>
+        </Button>
+        <Button variant="dark" asChild>
+          <Link href="/ecommerce/orders">All orders</Link>
+        </Button>
       </PageHeader>
 
-      <Card>
-        <CardContent className="p-6 space-y-3 text-sm">
-          <p className="text-muted-foreground">
-            This module is scaffolded but not yet wired to a live storefront. Per CLAUDE.md §7.9
-            it will cover:
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+        <KpiCard label="Open" value={stats.open} icon={Boxes} tone="primary" description="Synced / packing" />
+        <KpiCard label="Packed" value={stats.packed} icon={PackageOpen} />
+        <KpiCard label="Shipped" value={stats.shipped} icon={Truck} tone="success" description="Shipped / delivered" />
+        <KpiCard label="Returns" value={stats.returns} icon={RotateCcw} tone={stats.returns > 0 ? 'warning' : 'default'} />
+        <KpiCard
+          label="Unreconciled"
+          value={stats.unreconciled}
+          icon={AlertTriangle}
+          tone={stats.unreconciled > 0 ? 'danger' : 'default'}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="p-5">
+          <div className="text-sm text-muted-foreground">Workflow</div>
+          <h3 className="text-base font-semibold mt-1">Channels</h3>
+          <p className="text-xs text-muted-foreground mt-2">
+            Storefronts synced from Shopify, WooCommerce, Facebook, Daraz, or manual entry.
           </p>
-          <ul className="list-disc pl-6 text-muted-foreground space-y-1">
-            <li>Order sync with external stores</li>
-            <li>Order status lifecycle (pending → packed → shipped → delivered)</li>
-            <li>Packing / fulfillment workflow (reuses warehouse + inventory)</li>
-            <li>Shipment tracking and courier integration</li>
-            <li>COD / online payment capture</li>
-            <li>Return / refund (reuses POS refund flow)</li>
-            <li>Payment reconciliation &amp; delayed-order alerts</li>
-          </ul>
-          <p className="text-xs text-muted-foreground pt-2">
-            Permissions already registered: <code>ecommerce:read</code>, <code>ecommerce:fulfill</code>, <code>ecommerce:refund</code>.
+          <Button variant="outline" size="sm" className="mt-4" asChild>
+            <Link href="/ecommerce/channels">Manage channels</Link>
+          </Button>
+        </Card>
+        <Card className="p-5">
+          <div className="text-sm text-muted-foreground">Workflow</div>
+          <h3 className="text-base font-semibold mt-1">Orders & fulfillment</h3>
+          <p className="text-xs text-muted-foreground mt-2">
+            Pack, ship, and track online orders. Stock decrements on fulfillment.
           </p>
-        </CardContent>
-      </Card>
+          <Button variant="outline" size="sm" className="mt-4" asChild>
+            <Link href="/ecommerce/orders">Manage orders</Link>
+          </Button>
+        </Card>
+        <Card className="p-5">
+          <div className="text-sm text-muted-foreground">Workflow</div>
+          <h3 className="text-base font-semibold mt-1">Reconciliation</h3>
+          <p className="text-xs text-muted-foreground mt-2">
+            Match channel settlements against orders and track collected revenue.
+          </p>
+          <Button variant="outline" size="sm" className="mt-4" asChild>
+            <Link href="/ecommerce/reconcile">Reconcile payments</Link>
+          </Button>
+        </Card>
+      </div>
     </div>
   );
 }

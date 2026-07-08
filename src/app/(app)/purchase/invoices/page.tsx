@@ -14,6 +14,7 @@ import { formatCurrency } from '@/lib/money';
 export const metadata = { title: 'Purchase Invoices' };
 
 const STATUS_TONE = {
+  DRAFT: 'blue',
   PENDING: 'amber',
   PARTIALLY_PAID: 'orange',
   PAID: 'green',
@@ -131,7 +132,7 @@ export default async function InvoicesPage() {
               key: 'matching',
               header: 'Matching',
               cell: (r) => (
-                <Pill tone={r.matching === 'MATCHED' ? 'green' : r.matching === 'DISPUTED' ? 'red' : 'grey'}>
+                <Pill tone={r.matching === 'MATCHED' ? 'green' : r.matching === 'MISMATCH' ? 'red' : 'grey'}>
                   {r.matching.toLowerCase()}
                 </Pill>
               ),

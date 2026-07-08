@@ -20,7 +20,7 @@ export const PERMISSIONS = {
 
   // Phase 3
   suppliers: ['read', 'write', 'delete'],
-  purchase: ['read', 'write', 'approve', 'receive', 'invoice', 'pay'],
+  purchase: ['read', 'write', 'approve', 'receive', 'invoice', 'pay', 'return'],
 
   // Phase 4
   factory: ['read', 'plan', 'execute', 'close'],
