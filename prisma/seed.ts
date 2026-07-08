@@ -23,6 +23,8 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
       'notifications:read',
       'inventory:read',
       'warehouse:read',
+      'factory:read',
+      'factory:approve',
       'suppliers:read',
       'suppliers:write',
       'purchase:read',
@@ -171,11 +173,15 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
       'dashboard:read',
       'factory:read',
       'factory:plan',
+      'factory:approve',
       'factory:execute',
       'factory:close',
       'inventory:read',
       'warehouse:read',
       'notifications:read',
+      'approvals:read',
+      'approvals:approve',
+      'approvals:reject',
     ],
   },
   {
@@ -231,7 +237,7 @@ const SAMPLE_USERS = [
   { email: 'warehouse@annex.local', name: 'Ali Miah', role: 'Store', branch: 'HQ' },
   { email: 'cashier@annex.local', name: 'Salman Khan', role: 'Sales', branch: 'HQ' },
   { email: 'sales@annex.local', name: 'Rashid Chowdhury', role: 'Commercial', branch: 'HQ' },
-  { email: 'factory@annex.local', name: 'Jahid Hasan', role: 'Production', branch: 'Factory' },
+  { email: 'factory@annex.local', name: 'Jahid Hasan', role: 'Production', branch: 'FACTORY' },
   { email: 'hr@annex.local', name: 'Nadia Begum', role: 'HR', branch: 'HQ' },
 ];
 
@@ -398,6 +404,7 @@ const APPROVAL_RULES = [
   { module: 'accounts', action: 'post', minAmount: new Prisma.Decimal(100000), approverRoles: ['Accounts', 'Admin'] },
   { module: 'assets', action: 'dispose', minAmount: new Prisma.Decimal(50000), approverRoles: ['Admin'] },
   { module: 'factory', action: 'cost-entry', minAmount: new Prisma.Decimal(25000), approverRoles: ['Admin', 'Production'] },
+  { module: 'factory', action: 'plan-approve', minAmount: new Prisma.Decimal(0), approverRoles: ['Admin', 'Production'] },
   { module: 'hr', action: 'approve-payroll', minAmount: new Prisma.Decimal(0), approverRoles: ['Admin', 'HR'] },
   { module: 'corporate-sales', action: 'discount-override', minAmount: new Prisma.Decimal(100000), approverRoles: ['Admin', 'Sales'] },
 ];
@@ -863,6 +870,7 @@ async function main() {
       | 'AR_CONTROL'
       | 'AP_CONTROL'
       | 'INVENTORY'
+      | 'WIP'
       | 'COGS'
       | 'SALES_REVENUE'
       | 'SALES_RETURNS'
@@ -899,6 +907,15 @@ async function main() {
       parent: '1100',
       isControl: true,
       systemKey: 'INVENTORY',
+    },
+    {
+      code: '1145',
+      name: 'Work in Progress',
+      type: 'ASSET',
+      normalSide: 'DEBIT',
+      parent: '1100',
+      isControl: true,
+      systemKey: 'WIP',
     },
     { code: '1150', name: 'Input Tax Recoverable', type: 'ASSET', normalSide: 'DEBIT', parent: '1100', systemKey: 'TAX_RECOVERABLE' },
     { code: '1200', name: 'Fixed Assets', type: 'ASSET', normalSide: 'DEBIT', parent: '1000', isPosting: false },

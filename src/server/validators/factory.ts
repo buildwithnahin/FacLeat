@@ -51,6 +51,7 @@ const stageSchema = z.object({
 export const productionOrderCreateSchema = z.object({
   branchId: z.string().cuid(),
   productId: z.string().cuid(),
+  planId: z.string().cuid().optional().or(z.literal('')),
   plannedQty: z.coerce.number().positive('Planned qty must be > 0'),
   unit: z.enum(UNITS).default('PCS'),
   plannedStartDate: z.coerce.date(),
@@ -63,6 +64,28 @@ export const productionOrderCreateSchema = z.object({
   stages: z.array(stageSchema).default([]),
 });
 export type ProductionOrderCreateInput = z.infer<typeof productionOrderCreateSchema>;
+
+export const PRODUCTION_PLAN_PRIORITY = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
+
+export const productionPlanCreateSchema = z.object({
+  branchId: z.string().cuid(),
+  productId: z.string().cuid(),
+  quantity: z.coerce.number().positive('Quantity must be > 0'),
+  planningDate: z.coerce.date(),
+  plannedStartDate: z.coerce.date(),
+  plannedEndDate: z.coerce.date(),
+  priority: z.enum(PRODUCTION_PLAN_PRIORITY).default('MEDIUM'),
+  productionLine: z.string().trim().max(120).optional().or(z.literal('')),
+  machine: z.string().trim().max(120).optional().or(z.literal('')),
+  shift: z.string().trim().max(60).optional().or(z.literal('')),
+});
+export type ProductionPlanCreateInput = z.infer<typeof productionPlanCreateSchema>;
+
+export const productionPlanDecisionSchema = z.object({
+  id: z.string().cuid(),
+  decision: z.enum(['APPROVE', 'CANCEL']),
+});
+export type ProductionPlanDecisionInput = z.infer<typeof productionPlanDecisionSchema>;
 
 export const productionConsumeSchema = z.object({
   orderId: z.string().cuid(),

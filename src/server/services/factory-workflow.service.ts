@@ -14,6 +14,8 @@ import type {
   ProductionReceiveCreateInput,
 } from '@/server/validators/factory';
 import { NotFoundError, ValidationError } from '@/lib/errors';
+import { getCostSummary } from '@/server/services/factory.service';
+import { accountsService } from '@/server/services/accounts.service';
 
 const D = (value: Prisma.Decimal.Value) => new Prisma.Decimal(value);
 
@@ -449,13 +451,30 @@ export const factoryWorkflowService = {
 
   async createFinishedGoodsReceive(session: AppSession | null, input: FinishedGoodsReceiveCreateInput) {
     const actor = await authorize(session, 'factory:execute');
-    const order = await prisma.productionOrder.findUnique({ where: { id: input.orderId } });
+    const order = await prisma.productionOrder.findUnique({
+      where: { id: input.orderId },
+      include: {
+        materials: { include: { product: { select: { costPrice: true } } } },
+        costEntries: { select: { type: true, amount: true } },
+        outputs: { select: { quantity: true, costPerUnit: true } },
+        branch: { select: { currency: true } },
+      },
+    });
     if (!order) throw new NotFoundError('Production order not found');
 
     const warehouse = await prisma.warehouse.findUnique({ where: { id: input.warehouseId } });
     if (!warehouse || warehouse.branchId !== order.branchId) {
       throw new ValidationError('Selected FG warehouse does not belong to the order branch');
     }
+
+    const costSummary = getCostSummary({
+      outputs: order.outputs,
+      materials: order.materials,
+      costEntries: order.costEntries,
+      overheadRate: order.overheadRate,
+      producedQty: order.producedQty,
+    });
+    const receiveCostPerUnit = costSummary.costPerUnit ?? D(0);
 
     return prisma.$transaction(async (tx) => {
       await assertOpenPeriod(tx, order.branchId);
@@ -484,20 +503,27 @@ export const factoryWorkflowService = {
         include: { items: true },
       });
 
+      let receivedValue = D(0);
       for (const item of voucher.items) {
-        await tx.inventoryLedger.create({
-          data: {
-            branchId: order.branchId,
-            warehouseId: input.warehouseId,
-            productId: item.productId,
-            direction: 'IN',
-            quantity: item.quantity,
-            refType: 'FINISHED_GOODS_RECEIVE',
-            refId: voucher.id,
-            note: `Finished goods receive ${voucher.receiveNo}`,
-            createdById: actor.userId,
-          },
-        });
+        // Only quality-passed goods enter sellable stock; failed/pending items are
+        // logged on the voucher but withheld from inventory until disposition.
+        if (item.qualityStatus === 'PASSED') {
+          await tx.inventoryLedger.create({
+            data: {
+              branchId: order.branchId,
+              warehouseId: input.warehouseId,
+              productId: item.productId,
+              direction: 'IN',
+              quantity: item.quantity,
+              costPerUnit: receiveCostPerUnit,
+              refType: 'FINISHED_GOODS_RECEIVE',
+              refId: voucher.id,
+              note: `Finished goods receive ${voucher.receiveNo}`,
+              createdById: actor.userId,
+            },
+          });
+          receivedValue = receivedValue.plus(item.quantity.times(receiveCostPerUnit));
+        }
 
         await tx.wipLedger.create({
           data: {
@@ -509,8 +535,42 @@ export const factoryWorkflowService = {
             voucher: voucher.receiveNo,
             outQty: item.quantity,
             balance: D(0),
-            cost: D(0),
+            cost: item.quantity.times(receiveCostPerUnit),
           },
+        });
+      }
+
+      if (receivedValue.gt(0)) {
+        const inventoryAccountId = await accountsService.resolveSystemAccount(
+          tx,
+          'INVENTORY',
+          order.branchId,
+        );
+        const wipAccountId = await accountsService.resolveSystemAccount(tx, 'WIP', order.branchId);
+        await accountsService.postSystemJournal(tx, {
+          branchId: order.branchId,
+          date: input.date,
+          memo: `Finished goods receive ${voucher.receiveNo} for ${order.number}`,
+          sourceModule: 'factory',
+          sourceRefType: 'FinishedGoodsReceiveVoucher',
+          sourceRefId: voucher.id,
+          actorUserId: actor.userId,
+          lines: [
+            {
+              accountId: inventoryAccountId,
+              debit: receivedValue.toNumber(),
+              credit: 0,
+              currency: order.branch.currency,
+              fxRate: 1,
+            },
+            {
+              accountId: wipAccountId,
+              debit: 0,
+              credit: receivedValue.toNumber(),
+              currency: order.branch.currency,
+              fxRate: 1,
+            },
+          ],
         });
       }
 

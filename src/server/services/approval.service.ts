@@ -138,6 +138,17 @@ async function syncPurchaseApprovalState(args: {
   });
 }
 
+async function syncProductionPlanApprovalState(args: {
+  approvalStatus: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED';
+  planId: string;
+}) {
+  if (args.approvalStatus === 'CHANGES_REQUESTED') return;
+  await prisma.productionPlan.update({
+    where: { id: args.planId },
+    data: { status: args.approvalStatus === 'APPROVED' ? 'APPROVED' : 'CANCELLED' },
+  });
+}
+
 export const approvalService = {
   async listRules(session: AppSession | null) {
     await authorize(session, 'approvals:read');
@@ -540,6 +551,18 @@ export const approvalService = {
           entityId: result.entityId,
           actorUserId: result.actorUserId,
           note: input.note,
+        });
+      }
+      if (
+        ['APPROVED', 'REJECTED', 'CHANGES_REQUESTED'].includes(result.updated.status) &&
+        result.module === 'factory' &&
+        result.action === 'plan-approve' &&
+        result.entityType === 'ProductionPlan' &&
+        result.entityId
+      ) {
+        await syncProductionPlanApprovalState({
+          approvalStatus: result.updated.status as 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED',
+          planId: result.entityId,
         });
       }
       if (

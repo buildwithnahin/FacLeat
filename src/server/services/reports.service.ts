@@ -750,4 +750,93 @@ export const reportsService = {
 
     return { incomeSources, outcomeSources, totalIncome, totalOutcome, net, rows };
   },
+
+  /**
+   * Production output reconciliation — planned vs actual qty and yield %
+   * per order, plus scrap/wastage aggregated by order and by scrap source,
+   * for a date range (optionally scoped to a branch).
+   */
+  async productionSummary(session: AppSession | null, f: RangeFilter = {}) {
+    await authorize(session, 'reports:read');
+    const branchId = resolveScopedBranchId(session, f.branchId);
+    const dateFilter = { gte: f.from, lte: f.to };
+
+    const [orders, scrapByOrder, scrapByType] = await Promise.all([
+      prisma.productionOrder.findMany({
+        where: { branchId, createdAt: dateFilter },
+        select: {
+          id: true,
+          number: true,
+          status: true,
+          plannedQty: true,
+          producedQty: true,
+          plannedStartDate: true,
+          plannedEndDate: true,
+          actualEndDate: true,
+          product: { select: { id: true, sku: true, name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      }),
+      prisma.scrapLedger.groupBy({
+        by: ['orderId'],
+        where: { branchId, date: dateFilter },
+        _sum: { qty: true, cost: true },
+      }),
+      prisma.scrapLedger.groupBy({
+        by: ['scrapType'],
+        where: { branchId, date: dateFilter },
+        _sum: { qty: true, cost: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const scrapByOrderId = new Map(scrapByOrder.map((s) => [s.orderId, s]));
+
+    const rows = orders.map((o) => {
+      const scrap = scrapByOrderId.get(o.id);
+      const yieldPercent = o.plannedQty.gt(0)
+        ? o.producedQty.dividedBy(o.plannedQty).times(100).toDecimalPlaces(1)
+        : ZERO;
+      return {
+        id: o.id,
+        number: o.number,
+        product: o.product,
+        status: o.status,
+        plannedQty: o.plannedQty,
+        producedQty: o.producedQty,
+        variance: o.producedQty.minus(o.plannedQty),
+        yieldPercent,
+        scrapQty: scrap?._sum.qty ?? ZERO,
+        scrapCost: scrap?._sum.cost ?? ZERO,
+        plannedEndDate: o.plannedEndDate,
+        actualEndDate: o.actualEndDate,
+        onTime: o.actualEndDate ? o.actualEndDate <= o.plannedEndDate : null,
+      };
+    });
+
+    const totals = rows.reduce(
+      (acc, r) => ({
+        plannedQty: acc.plannedQty.plus(r.plannedQty),
+        producedQty: acc.producedQty.plus(r.producedQty),
+        scrapQty: acc.scrapQty.plus(r.scrapQty),
+        scrapCost: acc.scrapCost.plus(r.scrapCost),
+      }),
+      { plannedQty: ZERO, producedQty: ZERO, scrapQty: ZERO, scrapCost: ZERO },
+    );
+    const overallYield = totals.plannedQty.gt(0)
+      ? totals.producedQty.dividedBy(totals.plannedQty).times(100).toDecimalPlaces(1)
+      : ZERO;
+
+    return {
+      rows,
+      totals: { ...totals, overallYield, orderCount: rows.length },
+      scrapByType: scrapByType.map((s) => ({
+        scrapType: s.scrapType,
+        count: s._count._all,
+        qty: s._sum.qty ?? ZERO,
+        cost: s._sum.cost ?? ZERO,
+      })),
+    };
+  },
 };

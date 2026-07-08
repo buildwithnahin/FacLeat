@@ -28,20 +28,31 @@ interface StageRow {
   notes: string;
 }
 
+interface Prefill {
+  planId: string;
+  branchId: string;
+  productId: string;
+  plannedQty: string;
+  plannedStartDate: string;
+  plannedEndDate: string;
+}
+
 export function ProductionOrderForm({
   branches,
   products,
   warehouses,
+  prefill,
 }: {
   branches: Branch[];
   products: Product[];
   warehouses: Warehouse[];
+  prefill?: Prefill;
 }) {
   const [state, action, pending] = useActionState<FactoryFormState, FormData>(
     createProductionOrderAction,
     undefined,
   );
-  const [branchId, setBranchId] = useState(branches[0]?.id ?? '');
+  const [branchId, setBranchId] = useState(prefill?.branchId ?? branches[0]?.id ?? '');
   const [materials, setMaterials] = useState<MaterialRow[]>([]);
   const [stages, setStages] = useState<StageRow[]>([
     { sequence: 1, name: 'Cutting', notes: '' },
@@ -69,6 +80,7 @@ export function ProductionOrderForm({
 
   return (
     <form action={action} className="space-y-6">
+      {prefill && <input type="hidden" name="planId" value={prefill.planId} />}
       <input type="hidden" name="materials" value={JSON.stringify(materials)} />
       <input type="hidden" name="stages" value={JSON.stringify(stages)} />
 
@@ -96,6 +108,7 @@ export function ProductionOrderForm({
             <select
               id="productId"
               name="productId"
+              defaultValue={prefill?.productId}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
             >
               {finishedProducts.map((p) => (
@@ -107,7 +120,15 @@ export function ProductionOrderForm({
           </div>
           <div>
             <Label htmlFor="plannedQty">Planned quantity *</Label>
-            <Input id="plannedQty" name="plannedQty" type="number" min="0.0001" step="0.0001" required />
+            <Input
+              id="plannedQty"
+              name="plannedQty"
+              type="number"
+              min="0.0001"
+              step="0.0001"
+              defaultValue={prefill?.plannedQty}
+              required
+            />
           </div>
           <div>
             <Label htmlFor="unit">Unit</Label>
@@ -126,11 +147,23 @@ export function ProductionOrderForm({
           </div>
           <div>
             <Label htmlFor="plannedStartDate">Planned start *</Label>
-            <Input id="plannedStartDate" name="plannedStartDate" type="date" required />
+            <Input
+              id="plannedStartDate"
+              name="plannedStartDate"
+              type="date"
+              defaultValue={prefill?.plannedStartDate}
+              required
+            />
           </div>
           <div>
             <Label htmlFor="plannedEndDate">Planned end *</Label>
-            <Input id="plannedEndDate" name="plannedEndDate" type="date" required />
+            <Input
+              id="plannedEndDate"
+              name="plannedEndDate"
+              type="date"
+              defaultValue={prefill?.plannedEndDate}
+              required
+            />
           </div>
         </div>
         <div>

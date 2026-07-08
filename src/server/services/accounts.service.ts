@@ -128,6 +128,88 @@ export const accountsService = {
     return externalTx ? run(externalTx) : prisma.$transaction(run);
   },
 
+  /**
+   * System-triggered posting for operational modules (production, etc.) that
+   * auto-post a real business event on the acting user's behalf — gated by
+   * the caller's own domain permission (e.g. factory:execute), not
+   * accounts:post, since the user isn't directly touching the ledger.
+   * Always posts immediately (no draft state) and must run inside the
+   * caller's own transaction.
+   */
+  async postSystemJournal(
+    tx: Tx,
+    input: {
+      branchId: string;
+      date: Date;
+      memo?: string;
+      sourceModule: string;
+      sourceRefType: string;
+      sourceRefId: string;
+      lines: JournalLineInput[];
+      actorUserId: string;
+    },
+  ) {
+    const debit = input.lines.reduce((s, l) => s.plus(D(l.debit || 0)), ZERO);
+    const credit = input.lines.reduce((s, l) => s.plus(D(l.credit || 0)), ZERO);
+    if (!debit.equals(credit)) throw new ValidationError('Debit total must equal credit total');
+    if (debit.lte(0)) throw new ValidationError('Journal total must be greater than zero');
+
+    const period = await findOpenPeriod(tx, input.branchId, input.date);
+    await assertAccountsPostable(tx, input.lines);
+
+    const number = await nextJournalNumber(tx, input.date);
+
+    const entry = await tx.journalEntry.create({
+      data: {
+        number,
+        branchId: input.branchId,
+        periodId: period.id,
+        date: input.date,
+        memo: input.memo || null,
+        status: 'POSTED',
+        sourceModule: input.sourceModule,
+        sourceRefType: input.sourceRefType,
+        sourceRefId: input.sourceRefId,
+        totalDebit: debit,
+        totalCredit: credit,
+        createdById: input.actorUserId,
+        postedById: input.actorUserId,
+        postedAt: new Date(),
+        lines: {
+          create: input.lines.map((l, idx) => ({
+            lineNo: idx + 1,
+            accountId: l.accountId,
+            debit: D(l.debit || 0),
+            credit: D(l.credit || 0),
+            currency: l.currency,
+            fxRate: D(l.fxRate),
+            memo: l.memo || null,
+            costCenter: l.costCenter || null,
+          })),
+        },
+      },
+    });
+
+    await recordAudit(
+      {
+        actorId: input.actorUserId,
+        branchId: input.branchId,
+        module: 'accounts',
+        action: 'system-post',
+        entityType: 'JournalEntry',
+        entityId: entry.id,
+        after: {
+          number: entry.number,
+          totalDebit: debit.toString(),
+          sourceModule: input.sourceModule,
+          sourceRefType: input.sourceRefType,
+        },
+      },
+      tx,
+    );
+    return entry;
+  },
+
   async listEntries(
     session: AppSession | null,
     filters: {

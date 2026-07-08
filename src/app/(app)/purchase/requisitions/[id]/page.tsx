@@ -10,7 +10,7 @@ import { purchaseService } from '@/server/services/purchase.service';
 import { decideRequisitionAction } from '@/server/actions/purchase';
 import { getSession } from '@/server/auth/session';
 import { NotFoundError } from '@/lib/errors';
-import { ApprovalStatusBanner } from '../../_components/approval-status-banner';
+import { ApprovalStatusBanner } from '@/components/shared/approval-status-banner';
 
 const PRIORITY_TONE = {
   URGENT: 'red',

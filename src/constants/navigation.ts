@@ -130,6 +130,7 @@ export const MODULES: NavModule[] = [
     section: 'Operations',
     items: [
       { label: 'Production orders', href: '/factory', permission: 'factory:read' },
+      { label: 'Planning', href: '/factory/planning', permission: 'factory:read' },
       { label: 'New production order', href: '/factory/new', permission: 'factory:plan' },
       { label: 'Production issue', href: '/factory/production-issue', permission: 'factory:execute' },
       { label: 'Process tracking', href: '/factory/process-tracking', permission: 'factory:execute' },
@@ -310,6 +311,7 @@ export const MODULES: NavModule[] = [
       { label: 'Sales', href: '/reports/sales', permission: 'reports:read' },
       { label: 'Top products', href: '/reports/top-products', permission: 'reports:read' },
       { label: 'Purchase', href: '/reports/purchase', permission: 'reports:read' },
+      { label: 'Production', href: '/reports/production', permission: 'reports:read' },
       { label: 'Inventory valuation', href: '/reports/inventory', permission: 'reports:read' },
       { label: 'HR summary', href: '/reports/hr', permission: 'reports:read' },
     ],

@@ -12,7 +12,7 @@ import { getSession } from '@/server/auth/session';
 import { NotFoundError } from '@/lib/errors';
 import { formatCurrency } from '@/lib/money';
 import type { CurrencyCode } from '@/lib/money';
-import { ApprovalStatusBanner } from '../../_components/approval-status-banner';
+import { ApprovalStatusBanner } from '@/components/shared/approval-status-banner';
 
 const STATUS_TONE = {
   DRAFT: 'blue',

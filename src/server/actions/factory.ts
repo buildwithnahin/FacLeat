@@ -19,6 +19,8 @@ import {
   processTrackingCreateSchema,
   productionReceiveCreateSchema,
   finishedGoodsReceiveCreateSchema,
+  productionPlanCreateSchema,
+  productionPlanDecisionSchema,
 } from '@/server/validators/factory';
 import { ApiError } from '@/lib/errors';
 
@@ -42,6 +44,7 @@ export async function createProductionOrderAction(
   const parsed = productionOrderCreateSchema.safeParse({
     branchId: formData.get('branchId'),
     productId: formData.get('productId'),
+    planId: formData.get('planId') ?? '',
     plannedQty: formData.get('plannedQty'),
     unit: formData.get('unit') ?? 'PCS',
     plannedStartDate: formData.get('plannedStartDate'),
@@ -337,4 +340,52 @@ export async function createFinishedGoodsReceiveAction(
   }
   revalidatePath('/factory/finished-goods-receive');
   return { success: true };
+}
+
+// ─── Production Plan ────────────────────────────────────────────────────────
+
+export async function createProductionPlanAction(
+  _prev: FactoryFormState,
+  formData: FormData,
+): Promise<FactoryFormState> {
+  const parsed = productionPlanCreateSchema.safeParse({
+    branchId: formData.get('branchId'),
+    productId: formData.get('productId'),
+    quantity: formData.get('quantity'),
+    planningDate: formData.get('planningDate'),
+    plannedStartDate: formData.get('plannedStartDate'),
+    plannedEndDate: formData.get('plannedEndDate'),
+    priority: formData.get('priority') ?? 'MEDIUM',
+    productionLine: formData.get('productionLine') ?? '',
+    machine: formData.get('machine') ?? '',
+    shift: formData.get('shift') ?? '',
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  let planId: string | null = null;
+  try {
+    const session = await getSession();
+    const plan = await factoryService.createPlan(session, parsed.data);
+    planId = plan.id;
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    throw e;
+  }
+  revalidatePath('/factory/planning');
+  redirect(`/factory/planning/${planId}`);
+}
+
+export async function decideProductionPlanAction(formData: FormData) {
+  const parsed = productionPlanDecisionSchema.safeParse({
+    id: formData.get('id'),
+    decision: formData.get('decision'),
+  });
+  if (!parsed.success) throw new Error('Invalid decision payload');
+  const session = await getSession();
+  try {
+    await factoryService.decidePlan(session, parsed.data);
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e;
+  }
+  revalidatePath('/factory/planning');
+  revalidatePath(`/factory/planning/${parsed.data.id}`);
 }

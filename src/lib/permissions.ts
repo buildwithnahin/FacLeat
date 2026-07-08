@@ -23,7 +23,7 @@ export const PERMISSIONS = {
   purchase: ['read', 'write', 'approve', 'receive', 'invoice', 'pay', 'return'],
 
   // Phase 4
-  factory: ['read', 'plan', 'execute', 'close'],
+  factory: ['read', 'plan', 'approve', 'execute', 'close'],
   assets: ['read', 'write', 'transfer', 'dispose', 'depreciate'],
 
   // Phase 5

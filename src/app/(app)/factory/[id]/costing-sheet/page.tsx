@@ -14,13 +14,14 @@ export default async function CostingSheetPage({ params }: { params: Promise<{ i
     notFound();
   }
 
-  const { header, costSummary, leatherTable, accessoriesTable } = data;
+  const { header, costSummary, leatherTable, accessoriesTable, otherMaterialsTable } = data;
   const fmt = (n: { toString(): string } | null | undefined) =>
     n ? Number(n.toString()).toLocaleString('en-BD', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '—';
 
   const costLines: { label: string; amount: { toString(): string } }[] = [
     { label: 'Leather', amount: costSummary.leather },
     { label: 'Accessories', amount: costSummary.accessories },
+    { label: 'Other Materials', amount: costSummary.otherMaterials },
     { label: 'Wages', amount: costSummary.wages },
     ...costSummary.otherEntries.map((e) => ({ label: e.description, amount: e.amount })),
   ];
@@ -194,6 +195,38 @@ export default async function CostingSheetPage({ params }: { params: Promise<{ i
                 </tbody>
               </table>
             </div>
+
+            {/* Other Materials (only shown if any are used on this order) */}
+            {otherMaterialsTable.rows.length > 0 && (
+              <div>
+                <table>
+                  <thead>
+                    <tr className="section-label">
+                      <th className="w-6">S.N</th>
+                      <th>Other Materials</th>
+                      <th className="text-right w-16">Quantity</th>
+                      <th className="text-right w-16">Price</th>
+                      <th className="text-right w-20">Total Tk</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {otherMaterialsTable.rows.map((row, i) => (
+                      <tr key={i}>
+                        <td>{i + 1}</td>
+                        <td>{row.name}</td>
+                        <td className="text-right">{fmt(row.quantity)}</td>
+                        <td className="text-right">{fmt(row.price)}</td>
+                        <td className="text-right">{fmt(row.total)}</td>
+                      </tr>
+                    ))}
+                    <tr className="font-semibold">
+                      <td colSpan={4}>Total Other Materials</td>
+                      <td className="text-right">{fmt(otherMaterialsTable.grandTotal)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       </div>
