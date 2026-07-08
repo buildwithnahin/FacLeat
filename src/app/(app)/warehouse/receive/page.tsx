@@ -33,6 +33,7 @@ export default async function ReceivePage() {
         barcode: true,
         name: true,
         unit: true,
+        type: true,
         costPrice: true,
         sellPrice: true,
       },
@@ -55,6 +56,7 @@ export default async function ReceivePage() {
           barcode: p.barcode,
           name: p.name,
           unit: p.unit,
+          type: p.type,
           costPrice: p.costPrice.toString(),
           sellPrice: p.sellPrice.toString(),
         }))}

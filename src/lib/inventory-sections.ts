@@ -4,6 +4,7 @@ export const INVENTORY_SECTION_SLUGS = [
   'raw-material',
   'work-in-progress',
   'finished-goods',
+  'consumables',
 ] as const;
 
 export type InventorySectionSlug = (typeof INVENTORY_SECTION_SLUGS)[number];
@@ -31,6 +32,11 @@ export const INVENTORY_SECTION_META: Record<
     shortLabel: 'FG',
     description: 'Finished-goods receive, warehouse stock, delivery, sales dispatch, and stock reports.',
   },
+  consumables: {
+    label: 'Consumables & Other',
+    shortLabel: 'Other',
+    description: 'Chemicals, accessories, packaging, tools, and other stock that isn\'t itself produced or sold.',
+  },
 };
 
 export function parseInventorySection(value?: string | null): InventorySectionSlug | null {
@@ -54,5 +60,9 @@ export function matchesInventorySection(params: {
       return warehouseType === 'WIP' || productType === 'WORK_IN_PROGRESS';
     case 'finished-goods':
       return productType === 'FINISHED_GOOD' && warehouseType !== 'WIP';
+    case 'consumables':
+      return (
+        (productType === 'CONSUMABLE' || productType === 'SERVICE') && warehouseType !== 'WIP'
+      );
   }
 }

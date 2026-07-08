@@ -282,12 +282,13 @@ const HR_MASTER_DATA = [
 const PRODUCT_CATEGORIES = [
   'Finished Leather',
   'Shoes',
+  'Leather Goods',
   'Raw Hides',
   'Synthetic Leather',
   'Chemicals',
   'Accessories',
   'Packaging',
-  ' machinery',
+  'Machinery',
   'Tools',
   'Stationery',
 ];
@@ -297,12 +298,21 @@ const PRODUCT_BRANDS = ['Annex', 'Premium Leathers', 'Imported', 'Generic', 'Loc
 
 // Sample products
 const SAMPLE_PRODUCTS = [
-  // Finished Leather
-  { sku: 'FL-001', name: 'Black Cowhide Leather', type: 'FINISHED_GOOD' as const, costPrice: 2500, sellPrice: 3500 },
-  { sku: 'FL-002', name: 'Brown Cowhide Leather', type: 'FINISHED_GOOD' as const, costPrice: 2400, sellPrice: 3400 },
-  { sku: 'FL-003', name: 'Tan Goat Leather', type: 'FINISHED_GOOD' as const, costPrice: 1800, sellPrice: 2500 },
-  { sku: 'FL-004', name: 'Red Buffalo Leather', type: 'FINISHED_GOOD' as const, costPrice: 2800, sellPrice: 3800 },
-  { sku: 'FL-005', name: 'Navy Blue Sheep Leather', type: 'FINISHED_GOOD' as const, costPrice: 2200, sellPrice: 3000 },
+  // Finished Leather (tanned leather sheets — the raw material this leather-GOODS
+  // factory cuts/stitches into bags, wallets, and shoes; not a sellable end product)
+  { sku: 'FL-001', name: 'Black Cowhide Leather', type: 'RAW_MATERIAL' as const, costPrice: 2500, sellPrice: 3500 },
+  { sku: 'FL-002', name: 'Brown Cowhide Leather', type: 'RAW_MATERIAL' as const, costPrice: 2400, sellPrice: 3400 },
+  { sku: 'FL-003', name: 'Tan Goat Leather', type: 'RAW_MATERIAL' as const, costPrice: 1800, sellPrice: 2500 },
+  { sku: 'FL-004', name: 'Red Buffalo Leather', type: 'RAW_MATERIAL' as const, costPrice: 2800, sellPrice: 3800 },
+  { sku: 'FL-005', name: 'Navy Blue Sheep Leather', type: 'RAW_MATERIAL' as const, costPrice: 2200, sellPrice: 3000 },
+  // Leather Goods (finished products the factory actually manufactures and sells)
+  { sku: 'BG-001', name: 'Leather Tote Bag', type: 'FINISHED_GOOD' as const, costPrice: 1400, sellPrice: 2800 },
+  { sku: 'BG-002', name: 'Leather Messenger Bag', type: 'FINISHED_GOOD' as const, costPrice: 1200, sellPrice: 2400 },
+  { sku: 'BG-003', name: 'Leather Bifold Wallet', type: 'FINISHED_GOOD' as const, costPrice: 280, sellPrice: 650 },
+  { sku: 'BG-004', name: 'Leather Belt (Formal)', type: 'FINISHED_GOOD' as const, costPrice: 350, sellPrice: 800 },
+  // Shoes
+  { sku: 'SH-001', name: 'Leather Formal Shoes', type: 'FINISHED_GOOD' as const, costPrice: 1600, sellPrice: 3200 },
+  { sku: 'SH-002', name: 'Leather Loafers', type: 'FINISHED_GOOD' as const, costPrice: 1400, sellPrice: 2900 },
   // Raw Hides
   { sku: 'RH-001', name: 'Raw Cow Hide (Wet Blue)', type: 'RAW_MATERIAL' as const, costPrice: 800, sellPrice: 1200 },
   { sku: 'RH-002', name: 'Raw Goat Skin', type: 'RAW_MATERIAL' as const, costPrice: 400, sellPrice: 600 },
@@ -322,9 +332,13 @@ const SAMPLE_PRODUCTS = [
   { sku: 'PK-001', name: 'Paper Bag (Medium)', type: 'CONSUMABLE' as const, costPrice: 15, sellPrice: 25 },
   { sku: 'PK-002', name: 'Carton Box (Large)', type: 'CONSUMABLE' as const, costPrice: 80, sellPrice: 120 },
   { sku: 'PK-003', name: 'Bubble Wrap Roll', type: 'CONSUMABLE' as const, costPrice: 350, sellPrice: 450 },
-  // Machinery
-  { sku: 'MA-001', name: 'Industrial Sewing Machine', type: 'FINISHED_GOOD' as const, costPrice: 45000, sellPrice: 65000 },
-  { sku: 'MA-002', name: 'Leather Splitting Machine', type: 'FINISHED_GOOD' as const, costPrice: 85000, sellPrice: 120000 },
+  // Machinery — capital equipment, not stock the factory manufactures or sells.
+  // No dedicated equipment/asset ProductType exists; CONSUMABLE is the closest
+  // fit and keeps these out of the RM/WIP/FG report sections. A cleaner home
+  // would be the Asset Management module, but migrating them there is a
+  // separate, larger change outside this pass's scope.
+  { sku: 'MA-001', name: 'Industrial Sewing Machine', type: 'CONSUMABLE' as const, costPrice: 45000, sellPrice: 65000 },
+  { sku: 'MA-002', name: 'Leather Splitting Machine', type: 'CONSUMABLE' as const, costPrice: 85000, sellPrice: 120000 },
   // Tools
   { sku: 'TL-001', name: 'Leather Cutting Knife', type: 'CONSUMABLE' as const, costPrice: 150, sellPrice: 250 },
   { sku: 'TL-002', name: 'Edge Trimming Tool', type: 'CONSUMABLE' as const, costPrice: 200, sellPrice: 320 },
@@ -594,6 +608,8 @@ async function main() {
   // Map products to categories
   const productCategoryMap: Record<string, string> = {
     'FL-': 'Finished Leather',
+    'BG-': 'Leather Goods',
+    'SH-': 'Shoes',
     'RH-': 'Raw Hides',
     'CH-': 'Chemicals',
     'AC-': 'Accessories',
@@ -661,7 +677,7 @@ async function main() {
   const warehouses = await prisma.warehouse.findMany();
   const mainWarehouse = warehouses.find((w) => w.code === 'MAIN')!;
 
-  for (const product of products.slice(0, 15)) {
+  for (const product of products) {
     // Add stock in ledger
     const qty = Math.floor(Math.random() * 200) + 50;
     await prisma.inventoryLedger.upsert({

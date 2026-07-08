@@ -18,6 +18,7 @@ export interface ProductOption {
   barcode: string | null;
   name: string;
   unit: string;
+  type: string;
   costPrice: string;
   sellPrice: string;
 }
@@ -35,9 +36,26 @@ interface Row {
   sku: string;
   name: string;
   unit: string;
+  type: string;
   quantity: string;
   costPerUnit: string;
 }
+
+const TYPE_LABEL: Record<string, string> = {
+  RAW_MATERIAL: 'Raw Material',
+  WORK_IN_PROGRESS: 'WIP',
+  FINISHED_GOOD: 'Finished Good',
+  CONSUMABLE: 'Consumable',
+  SERVICE: 'Service',
+};
+
+const TYPE_BADGE_CLASS: Record<string, string> = {
+  RAW_MATERIAL: 'bg-amber-100 text-amber-800',
+  WORK_IN_PROGRESS: 'bg-blue-100 text-blue-800',
+  FINISHED_GOOD: 'bg-emerald-100 text-emerald-800',
+  CONSUMABLE: 'bg-slate-100 text-slate-700',
+  SERVICE: 'bg-slate-100 text-slate-700',
+};
 
 export interface StockMovementFormProps {
   mode: MovementMode;
@@ -98,6 +116,7 @@ export function StockMovementForm({
           sku: p.sku,
           name: p.name,
           unit: p.unit,
+          type: p.type,
           quantity,
           costPerUnit: showCost ? p.costPrice : '0',
         },
@@ -284,6 +303,7 @@ export function StockMovementForm({
                   <th className="text-left font-semibold px-3 py-2">#</th>
                   <th className="text-left font-semibold px-3 py-2">SKU</th>
                   <th className="text-left font-semibold px-3 py-2">Name</th>
+                  <th className="text-left font-semibold px-3 py-2">Type</th>
                   <th className="text-right font-semibold px-3 py-2">Quantity</th>
                   <th className="text-left font-semibold px-3 py-2">Unit</th>
                   {showCost && <th className="text-right font-semibold px-3 py-2">Cost / unit</th>}
@@ -294,7 +314,7 @@ export function StockMovementForm({
                 {rows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={showCost ? 7 : 6}
+                      colSpan={showCost ? 8 : 7}
                       className="px-3 py-10 text-center text-muted-foreground text-sm"
                     >
                       Scan or type a barcode / SKU to add items.
@@ -306,6 +326,13 @@ export function StockMovementForm({
                     <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
                     <td className="px-3 py-2 font-mono text-xs">{r.sku}</td>
                     <td className="px-3 py-2">{r.name}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_BADGE_CLASS[r.type] ?? 'bg-slate-100 text-slate-700'}`}
+                      >
+                        {TYPE_LABEL[r.type] ?? r.type}
+                      </span>
+                    </td>
                     <td className="px-3 py-2 text-right">
                       <Input
                         value={r.quantity}
@@ -344,7 +371,7 @@ export function StockMovementForm({
               {rows.length > 0 && (
                 <tfoot>
                   <tr className="bg-muted/30">
-                    <td colSpan={3} className="px-3 py-2 font-medium">
+                    <td colSpan={4} className="px-3 py-2 font-medium">
                       Total items: {rows.length}
                     </td>
                     <td className="px-3 py-2 text-right font-semibold tabular">{totalQty}</td>

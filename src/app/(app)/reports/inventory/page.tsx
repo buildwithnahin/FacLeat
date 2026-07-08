@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { getSession } from '@/server/auth/session';
 import { reportsService } from '@/server/services/reports.service';
 import { branchService } from '@/server/services/branch.service';
@@ -6,13 +7,18 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  INVENTORY_SECTION_META,
+  INVENTORY_SECTION_SLUGS,
+  parseInventorySection,
+} from '@/lib/inventory-sections';
 
 export const metadata = { title: 'Inventory valuation' };
 
 export default async function InventoryReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ branchId?: string }>;
+  searchParams: Promise<{ branchId?: string; section?: string }>;
 }) {
   const sp = await searchParams;
   const session = await getSession();
@@ -20,6 +26,28 @@ export default async function InventoryReportPage({
     reportsService.inventoryValuation(session, { branchId: sp.branchId || undefined }),
     branchService.listAccessible(session),
   ]);
+
+  const activeSection = parseInventorySection(sp.section);
+  const rows = activeSection
+    ? data.rows.filter((r) => {
+        if (activeSection === 'raw-material') return r.type === 'RAW_MATERIAL';
+        if (activeSection === 'work-in-progress') return r.type === 'WORK_IN_PROGRESS';
+        if (activeSection === 'finished-goods') return r.type === 'FINISHED_GOOD';
+        return r.type === 'CONSUMABLE' || r.type === 'SERVICE';
+      })
+    : data.rows;
+  const rowsTotals = rows.reduce(
+    (acc, r) => ({ qty: acc.qty.plus(r.qty), value: acc.value.plus(r.value) }),
+    { qty: new Prisma.Decimal(0), value: new Prisma.Decimal(0) },
+  );
+
+  const sectionQuery = (slug?: string) => {
+    const params = new URLSearchParams();
+    if (sp.branchId) params.set('branchId', sp.branchId);
+    if (slug) params.set('section', slug);
+    const qs = params.toString();
+    return `/reports/inventory${qs ? `?${qs}` : ''}`;
+  };
 
   const exportHref = `/api/reports/inventory.csv${sp.branchId ? `?branchId=${sp.branchId}` : ''}`;
 
@@ -51,9 +79,37 @@ export default async function InventoryReportPage({
       </PageHeader>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Summary label="Products" value={`${data.rows.length}`} />
-        <Summary label="Total on-hand qty" value={data.totals.qty.toString()} />
-        <Summary label="Stock value" value={data.totals.value.toString()} accent />
+        <Summary label="Products" value={`${rows.length}`} />
+        <Summary label="Total on-hand qty" value={rowsTotals.qty.toString()} />
+        <Summary label="Stock value" value={rowsTotals.value.toString()} accent />
+      </div>
+
+      <div>
+        <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
+          Stock by production stage
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {data.bySection.map((s) => (
+            <Card key={s.section}>
+              <div className="p-4">
+                <div className="text-xs text-muted-foreground">{s.label}</div>
+                <div className="text-lg font-semibold tabular-nums mt-1">{s.value.toString()}</div>
+                <div className="text-xs text-muted-foreground tabular-nums">{s.qty.toString()} units</div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button variant={!activeSection ? 'default' : 'outline'} size="sm" asChild>
+          <a href={sectionQuery(undefined)}>All</a>
+        </Button>
+        {INVENTORY_SECTION_SLUGS.map((slug) => (
+          <Button key={slug} variant={activeSection === slug ? 'default' : 'outline'} size="sm" asChild>
+            <a href={sectionQuery(slug)}>{INVENTORY_SECTION_META[slug].label}</a>
+          </Button>
+        ))}
       </div>
 
       <Card className="overflow-hidden">
@@ -63,6 +119,7 @@ export default async function InventoryReportPage({
               <tr>
                 <th className="text-left font-semibold px-4 py-3">SKU</th>
                 <th className="text-left font-semibold px-4 py-3">Product</th>
+                <th className="text-left font-semibold px-4 py-3">Type</th>
                 <th className="text-left font-semibold px-4 py-3">Unit</th>
                 <th className="text-right font-semibold px-4 py-3 tabular-nums">Qty</th>
                 <th className="text-right font-semibold px-4 py-3 tabular-nums">Reorder</th>
@@ -72,17 +129,18 @@ export default async function InventoryReportPage({
               </tr>
             </thead>
             <tbody className="divide-y">
-              {data.rows.length === 0 && (
+              {rows.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
                     No inventory.
                   </td>
                 </tr>
               )}
-              {data.rows.map((r) => (
+              {rows.map((r) => (
                 <tr key={r.productId} className="hover:bg-muted/30">
                   <td className="px-4 py-2 font-mono text-xs">{r.sku}</td>
                   <td className="px-4 py-2">{r.name}</td>
+                  <td className="px-4 py-2 text-xs text-muted-foreground">{r.type.replace('_', ' ')}</td>
                   <td className="px-4 py-2 text-xs text-muted-foreground">{r.unit}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{r.qty.toString()}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{r.reorderLevel.toString()}</td>

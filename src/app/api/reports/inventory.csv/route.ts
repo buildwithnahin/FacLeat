@@ -8,10 +8,11 @@ export async function GET(req: NextRequest) {
   const branchId = req.nextUrl.searchParams.get('branchId') ?? undefined;
   const data = await reportsService.inventoryValuation(session, { branchId });
 
-  const headers = ['SKU', 'Name', 'Unit', 'Qty', 'Reorder', 'Cost', 'Value', 'Below reorder'];
+  const headers = ['SKU', 'Name', 'Type', 'Unit', 'Qty', 'Reorder', 'Cost', 'Value', 'Below reorder'];
   const rows = data.rows.map((r) => [
     r.sku,
     r.name,
+    r.type,
     r.unit,
     r.qty.toString(),
     r.reorderLevel.toString(),

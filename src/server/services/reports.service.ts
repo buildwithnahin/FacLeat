@@ -5,6 +5,12 @@ import { authorize } from '@/server/auth/authorize';
 import { canAccessBranch } from '@/server/auth/branch-access';
 import type { AppSession } from '@/server/auth/session';
 import { ForbiddenError } from '@/lib/errors';
+import {
+  INVENTORY_SECTION_META,
+  INVENTORY_SECTION_SLUGS,
+  matchesInventorySection,
+  type InventorySectionSlug,
+} from '@/lib/inventory-sections';
 
 const ZERO = new Prisma.Decimal(0);
 
@@ -296,42 +302,82 @@ export const reportsService = {
 
   /**
    * Inventory valuation — per-product on-hand qty & value derived from the
-   * ledger. Uses weighted-average cost snapshot from latest ledger rows
-   * (simplified: last known costPerUnit per product).
+   * ledger, plus a Raw Material / Work in Progress / Finished Goods /
+   * Consumables breakdown using the same classification as the /inventory
+   * section tabs (a product's stock counts as WIP when it physically sits
+   * in a WIP-type warehouse, regardless of the product's own type — so the
+   * breakdown is computed per product+warehouse balance, not per product).
+   * Uses weighted-average cost snapshot from latest ledger rows (simplified:
+   * last known costPerUnit per product).
    */
   async inventoryValuation(session: AppSession | null, f: { branchId?: string } = {}) {
     await authorize(session, 'reports:read');
     const branchId = resolveScopedBranchId(session, f.branchId);
 
     const branchFilter = branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty;
-    const grouped = await prisma.$queryRaw<{ productId: string; balance: string }[]>(
-      Prisma.sql`SELECT "productId",
+    const grouped = await prisma.$queryRaw<{ productId: string; warehouseId: string; balance: string }[]>(
+      Prisma.sql`SELECT "productId", "warehouseId",
                SUM(CASE WHEN direction = 'IN' THEN quantity ELSE -quantity END)::text AS balance
           FROM "InventoryLedger"
          WHERE 1=1 ${branchFilter}
-         GROUP BY "productId"`,
+         GROUP BY "productId", "warehouseId"`,
     );
 
-    const productIds = grouped.map((g) => g.productId);
-    if (productIds.length === 0) return { rows: [], totals: { qty: ZERO, value: ZERO } };
+    const productIds = [...new Set(grouped.map((g) => g.productId))];
+    if (productIds.length === 0) {
+      const emptySections = INVENTORY_SECTION_SLUGS.map((slug) => ({
+        section: slug,
+        label: INVENTORY_SECTION_META[slug].label,
+        qty: ZERO,
+        value: ZERO,
+      }));
+      return { rows: [], totals: { qty: ZERO, value: ZERO }, bySection: emptySections };
+    }
 
-    const products = await prisma.product.findMany({
-      where: { id: { in: productIds } },
-      select: { id: true, sku: true, name: true, unit: true, costPrice: true, reorderLevel: true },
-    });
-    const byId = new Map(products.map((p) => [p.id, p]));
+    const warehouseIds = [...new Set(grouped.map((g) => g.warehouseId))];
+    const [products, warehouses] = await Promise.all([
+      prisma.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true, sku: true, name: true, unit: true, type: true, costPrice: true, reorderLevel: true },
+      }),
+      prisma.warehouse.findMany({
+        where: { id: { in: warehouseIds } },
+        select: { id: true, type: true },
+      }),
+    ]);
+    const productById = new Map(products.map((p) => [p.id, p]));
+    const warehouseTypeById = new Map(warehouses.map((w) => [w.id, w.type]));
 
-    const rows = grouped
-      .map((g) => {
-        const p = byId.get(g.productId);
+    const perProductQty = new Map<string, Prisma.Decimal>();
+    const sectionTotals = new Map<InventorySectionSlug, { qty: Prisma.Decimal; value: Prisma.Decimal }>();
+
+    for (const g of grouped) {
+      const p = productById.get(g.productId);
+      if (!p) continue;
+      const qty = new Prisma.Decimal(g.balance ?? 0);
+      const value = qty.mul(p.costPrice);
+      const warehouseType = warehouseTypeById.get(g.warehouseId) ?? null;
+      const section = INVENTORY_SECTION_SLUGS.find((slug) =>
+        matchesInventorySection({ section: slug, productType: p.type, warehouseType }),
+      );
+      if (section) {
+        const existing = sectionTotals.get(section) ?? { qty: ZERO, value: ZERO };
+        sectionTotals.set(section, { qty: existing.qty.plus(qty), value: existing.value.plus(value) });
+      }
+      perProductQty.set(g.productId, (perProductQty.get(g.productId) ?? ZERO).plus(qty));
+    }
+
+    const rows = [...perProductQty.entries()]
+      .map(([productId, qty]) => {
+        const p = productById.get(productId);
         if (!p) return null;
-        const qty = new Prisma.Decimal(g.balance ?? 0);
         const value = qty.mul(p.costPrice);
         return {
-          productId: g.productId,
+          productId,
           sku: p.sku,
           name: p.name,
           unit: p.unit,
+          type: p.type,
           qty,
           cost: p.costPrice,
           value,
@@ -344,6 +390,7 @@ export const reportsService = {
       sku: string;
       name: string;
       unit: string;
+      type: string;
       qty: Prisma.Decimal;
       cost: Prisma.Decimal;
       value: Prisma.Decimal;
@@ -356,7 +403,14 @@ export const reportsService = {
       (acc, r) => ({ qty: acc.qty.plus(r.qty), value: acc.value.plus(r.value) }),
       { qty: ZERO, value: ZERO },
     );
-    return { rows, totals };
+    const bySection = INVENTORY_SECTION_SLUGS.map((slug) => ({
+      section: slug,
+      label: INVENTORY_SECTION_META[slug].label,
+      qty: sectionTotals.get(slug)?.qty ?? ZERO,
+      value: sectionTotals.get(slug)?.value ?? ZERO,
+    }));
+
+    return { rows, totals, bySection };
   },
 
   /**

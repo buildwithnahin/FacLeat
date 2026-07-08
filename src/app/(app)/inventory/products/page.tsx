@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
-import type { ProductType } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { getSession } from '@/server/auth/session';
 import { productService } from '@/server/services/product.service';
 import { PageHeader } from '@/components/shared/page-header';
@@ -18,7 +18,9 @@ type ProductsPageProps = {
   searchParams: Promise<{ section?: string }>;
 };
 
-function sectionToProductType(section: ReturnType<typeof parseInventorySection>): ProductType | undefined {
+function sectionToProductType(
+  section: ReturnType<typeof parseInventorySection>,
+): Prisma.ProductWhereInput['type'] {
   switch (section) {
     case 'raw-material':
       return 'RAW_MATERIAL';
@@ -26,6 +28,8 @@ function sectionToProductType(section: ReturnType<typeof parseInventorySection>)
       return 'WORK_IN_PROGRESS';
     case 'finished-goods':
       return 'FINISHED_GOOD';
+    case 'consumables':
+      return { in: ['CONSUMABLE', 'SERVICE'] };
     default:
       return undefined;
   }
