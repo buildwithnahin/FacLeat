@@ -543,7 +543,7 @@ export const factoryWorkflowService = {
       if (receivedValue.gt(0)) {
         const inventoryAccountId = await accountsService.resolveSystemAccount(
           tx,
-          'INVENTORY',
+          'INVENTORY_FINISHED_GOODS',
           order.branchId,
         );
         const wipAccountId = await accountsService.resolveSystemAccount(tx, 'WIP', order.branchId);

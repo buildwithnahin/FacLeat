@@ -1,8 +1,10 @@
 import 'server-only';
-import { Prisma } from '@prisma/client';
+import { Prisma, type SystemAccountKey } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
+import { assertOpenPeriod } from '@/server/periods/guards';
+import { accountsService } from '@/server/services/accounts.service';
 import type { AppSession } from '@/server/auth/session';
 import type {
   SupplierCreateInput,
@@ -129,7 +131,9 @@ export const supplierService = {
         },
       });
 
-      if (new Prisma.Decimal(input.openingBalance).gt(0)) {
+      const openingBalance = new Prisma.Decimal(input.openingBalance);
+      if (openingBalance.gt(0)) {
+        await assertOpenPeriod(tx, supplier.branchId);
         await tx.supplierLedger.create({
           data: {
             branchId: supplier.branchId,
@@ -138,10 +142,29 @@ export const supplierService = {
             refType: 'SUPPLIER',
             refId: supplier.id,
             description: 'Opening balance',
-            debit: new Prisma.Decimal(input.openingBalance),
+            debit: openingBalance,
             credit: new Prisma.Decimal(0),
             createdById: actor.userId,
           },
+        });
+
+        const acc = await accountsService.resolveSystemAccounts(
+          tx,
+          ['AP_CONTROL', 'OPENING_BALANCE_EQUITY'],
+          supplier.branchId,
+        );
+        await accountsService.postSystemJournal(tx, {
+          branchId: supplier.branchId,
+          date: new Date(),
+          memo: `Opening balance for supplier ${supplier.name}`,
+          sourceModule: 'suppliers',
+          sourceRefType: 'SupplierOpeningBalance',
+          sourceRefId: supplier.id,
+          actorUserId: actor.userId,
+          lines: [
+            { accountId: acc.OPENING_BALANCE_EQUITY, debit: openingBalance.toNumber(), credit: 0, currency: supplier.currency, fxRate: 1 },
+            { accountId: acc.AP_CONTROL, debit: 0, credit: openingBalance.toNumber(), currency: supplier.currency, fxRate: 1 },
+          ],
         });
       }
 
@@ -294,6 +317,8 @@ export const supplierService = {
     const amount = new Prisma.Decimal(input.amount);
 
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, supplier.branchId, input.paymentDate);
+
       const count = await tx.supplierPayment.count();
       const number = nextPaymentNumber(count);
 
@@ -345,6 +370,23 @@ export const supplierService = {
           data: { paidAmount: newPaid, status },
         });
       }
+
+      // GL posting — Dr Accounts Payable, Cr Cash/Bank by tender
+      const cashKey: SystemAccountKey = input.method === 'CASH' ? 'CASH' : 'BANK_DEFAULT';
+      const acc = await accountsService.resolveSystemAccounts(tx, ['AP_CONTROL', cashKey], supplier.branchId);
+      await accountsService.postSystemJournal(tx, {
+        branchId: supplier.branchId,
+        date: input.paymentDate,
+        memo: `Supplier payment ${number}`,
+        sourceModule: 'suppliers',
+        sourceRefType: 'SupplierPayment',
+        sourceRefId: payment.id,
+        actorUserId: actor.userId,
+        lines: [
+          { accountId: acc.AP_CONTROL, debit: amount.toNumber(), credit: 0, currency: supplier.currency, fxRate: 1 },
+          { accountId: acc[cashKey], debit: 0, credit: amount.toNumber(), currency: supplier.currency, fxRate: 1 },
+        ],
+      });
 
       await recordAudit(
         {

@@ -1,10 +1,12 @@
 import 'server-only';
-import { Prisma } from '@prisma/client';
+import { Prisma, type SystemAccountKey } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
+import { accountsService } from '@/server/services/accounts.service';
 import type { AppSession } from '@/server/auth/session';
+import type { JournalLineInput } from '@/server/validators/accounts';
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/errors';
 import { nextDocumentNumber } from '@/lib/document-number';
 import {
@@ -551,6 +553,7 @@ export const corporateService = {
       });
 
       // Update delivered qty on order items and create stock OUT
+      let cogsTotal = ZERO;
       for (const d of input.items) {
         const orig = itemMap.get(d.orderItemId)!;
         await tx.corporateOrderItem.update({
@@ -561,6 +564,8 @@ export const corporateService = {
           where: { id: orig.productId },
           select: { costPrice: true },
         });
+        const costPerUnit = product?.costPrice ?? ZERO;
+        cogsTotal = cogsTotal.plus(D(d.quantity).mul(costPerUnit));
         await tx.inventoryLedger.create({
           data: {
             branchId: order.branchId,
@@ -568,11 +573,41 @@ export const corporateService = {
             productId: orig.productId,
             direction: 'OUT',
             quantity: D(d.quantity),
-            costPerUnit: product?.costPrice ?? ZERO,
+            costPerUnit,
             refType: 'CORP_DELIVERY',
             refId: delivery.id,
             createdById: actor.userId,
           },
+        });
+      }
+
+      // GL posting — COGS is recognized at physical delivery (matching
+      // principle), not at invoice time, since that's when stock actually
+      // leaves the warehouse.
+      if (cogsTotal.gt(ZERO)) {
+        const acc = await accountsService.resolveSystemAccounts(
+          tx,
+          ['COGS', 'INVENTORY_FINISHED_GOODS'],
+          order.branchId,
+        );
+        await accountsService.postSystemJournal(tx, {
+          branchId: order.branchId,
+          date: new Date(),
+          memo: `Corporate delivery ${delivery.number} for order ${order.number}`,
+          sourceModule: 'corporate-sales',
+          sourceRefType: 'CorporateDelivery',
+          sourceRefId: delivery.id,
+          actorUserId: actor.userId,
+          lines: [
+            { accountId: acc.COGS, debit: cogsTotal.toNumber(), credit: 0, currency: order.currency, fxRate: 1 },
+            {
+              accountId: acc.INVENTORY_FINISHED_GOODS,
+              debit: 0,
+              credit: cogsTotal.toNumber(),
+              currency: order.currency,
+              fxRate: 1,
+            },
+          ],
         });
       }
 
@@ -697,6 +732,8 @@ export const corporateService = {
     }
 
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, order.branchId);
+
       let subtotal = ZERO;
       let discountTotal = ZERO;
       let taxTotal = ZERO;
@@ -790,6 +827,38 @@ export const corporateService = {
         await tx.corporateOrder.update({ where: { id: order.id }, data: { status: 'INVOICED' } });
       }
 
+      // GL posting — full grandTotal to AR (no initial-payment support in
+      // this flow), gross revenue less discount given, plus tax. COGS was
+      // already posted at delivery time, not repeated here.
+      if (grandTotal.gt(ZERO)) {
+        const keys: SystemAccountKey[] = ['AR_CONTROL', 'SALES_REVENUE_CORPORATE'];
+        if (taxTotal.gt(ZERO)) keys.push('TAX_PAYABLE');
+        if (discountTotal.gt(ZERO)) keys.push('DISCOUNT_GIVEN');
+        const acc = await accountsService.resolveSystemAccounts(tx, keys, order.branchId);
+
+        const lines: JournalLineInput[] = [
+          { accountId: acc.AR_CONTROL, debit: grandTotal.toNumber(), credit: 0, currency: order.currency, fxRate: 1 },
+          { accountId: acc.SALES_REVENUE_CORPORATE, debit: 0, credit: subtotal.toNumber(), currency: order.currency, fxRate: 1 },
+        ];
+        if (discountTotal.gt(ZERO)) {
+          lines.push({ accountId: acc.DISCOUNT_GIVEN, debit: discountTotal.toNumber(), credit: 0, currency: order.currency, fxRate: 1 });
+        }
+        if (taxTotal.gt(ZERO)) {
+          lines.push({ accountId: acc.TAX_PAYABLE, debit: 0, credit: taxTotal.toNumber(), currency: order.currency, fxRate: 1 });
+        }
+
+        await accountsService.postSystemJournal(tx, {
+          branchId: order.branchId,
+          date: new Date(),
+          memo: `Corporate invoice ${invoice.number}`,
+          sourceModule: 'corporate-sales',
+          sourceRefType: 'CorporateInvoice',
+          sourceRefId: invoice.id,
+          actorUserId: actor.userId,
+          lines,
+        });
+      }
+
       await recordAudit(
         {
           actorId: actor.userId,
@@ -868,14 +937,18 @@ export const corporateService = {
       );
     }
 
+    const paidAt = input.paidAt ?? new Date();
+
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, invoice.branchId, paidAt);
+
       const payment = await tx.corporateInvoicePayment.create({
         data: {
           invoiceId: invoice.id,
           method: input.method,
           amount,
           reference: input.reference || null,
-          paidAt: input.paidAt ?? new Date(),
+          paidAt,
           createdById: actor.userId,
         },
       });
@@ -900,6 +973,23 @@ export const corporateService = {
           credit: amount,
           createdById: actor.userId,
         },
+      });
+
+      // GL posting — Dr Cash/Bank by tender, Cr Accounts Receivable
+      const cashKey: SystemAccountKey = input.method === 'CASH' ? 'CASH' : 'BANK_DEFAULT';
+      const acc = await accountsService.resolveSystemAccounts(tx, [cashKey, 'AR_CONTROL'], invoice.branchId);
+      await accountsService.postSystemJournal(tx, {
+        branchId: invoice.branchId,
+        date: paidAt,
+        memo: `Corporate payment on ${invoice.number}`,
+        sourceModule: 'corporate-sales',
+        sourceRefType: 'CorporateInvoicePayment',
+        sourceRefId: payment.id,
+        actorUserId: actor.userId,
+        lines: [
+          { accountId: acc[cashKey], debit: amount.toNumber(), credit: 0, currency: invoice.currency, fxRate: 1 },
+          { accountId: acc.AR_CONTROL, debit: 0, credit: amount.toNumber(), currency: invoice.currency, fxRate: 1 },
+        ],
       });
 
       await recordAudit(

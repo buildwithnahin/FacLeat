@@ -30,7 +30,7 @@ async function findOpenPeriod(tx: Tx, branchId: string, date: Date) {
   return period;
 }
 
-async function assertAccountsPostable(tx: Tx, lines: JournalLineInput[]) {
+async function assertAccountsPostable(tx: Tx, lines: JournalLineInput[], opts: { allowControl?: boolean } = {}) {
   const ids = Array.from(new Set(lines.map((l) => l.accountId)));
   const accounts = await tx.chartAccount.findMany({ where: { id: { in: ids } } });
   const byId = new Map(accounts.map((a) => [a.id, a]));
@@ -39,17 +39,23 @@ async function assertAccountsPostable(tx: Tx, lines: JournalLineInput[]) {
     if (!acc) throw new ValidationError(`Account ${l.accountId} not found`);
     if (!acc.isActive) throw new ValidationError(`Account ${acc.code} is inactive`);
     if (!acc.isPosting) throw new ValidationError(`Account ${acc.code} is a header — pick a posting account`);
+    if (acc.isControl && !opts.allowControl) {
+      throw new ValidationError(
+        `Account ${acc.code} (${acc.name}) is a control account — post through the matching sub-ledger flow (sales, purchase, payments) instead of a manual journal entry`,
+      );
+    }
   }
 }
 
-async function nextJournalNumber(tx: Tx, date: Date) {
+async function nextJournalNumber(tx: Tx, branchId: string, date: Date) {
+  const branch = await tx.branch.findUnique({ where: { id: branchId }, select: { code: true } });
   const year = date.getFullYear();
   const start = new Date(year, 0, 1);
   const end = new Date(year + 1, 0, 1);
   const count = await tx.journalEntry.count({
-    where: { createdAt: { gte: start, lt: end } },
+    where: { branchId, createdAt: { gte: start, lt: end } },
   });
-  return nextDocumentNumber('JE', year, count, 4);
+  return nextDocumentNumber(`JE-${branch?.code ?? branchId.slice(0, 6)}`, year, count, 4);
 }
 
 export type JournalPostInput = JournalCreateInput & {
@@ -76,7 +82,7 @@ export const accountsService = {
       const period = await findOpenPeriod(tx, input.branchId, input.date);
       await assertAccountsPostable(tx, input.lines);
 
-      const number = await nextJournalNumber(tx, input.date);
+      const number = await nextJournalNumber(tx, input.branchId, input.date);
 
       const entry = await tx.journalEntry.create({
         data: {
@@ -155,9 +161,9 @@ export const accountsService = {
     if (debit.lte(0)) throw new ValidationError('Journal total must be greater than zero');
 
     const period = await findOpenPeriod(tx, input.branchId, input.date);
-    await assertAccountsPostable(tx, input.lines);
+    await assertAccountsPostable(tx, input.lines, { allowControl: true });
 
-    const number = await nextJournalNumber(tx, input.date);
+    const number = await nextJournalNumber(tx, input.branchId, input.date);
 
     const entry = await tx.journalEntry.create({
       data: {
@@ -307,7 +313,7 @@ export const accountsService = {
 
       const period = await findOpenPeriod(tx, entry.branchId, new Date());
 
-      const number = await nextJournalNumber(tx, new Date());
+      const number = await nextJournalNumber(tx, entry.branchId, new Date());
       const reversal = await tx.journalEntry.create({
         data: {
           number,
@@ -370,6 +376,20 @@ export const accountsService = {
     const map = branchMap ?? globalMap;
     if (!map) throw new ValidationError(`System account "${key}" is not mapped`);
     return map.accountId;
+  },
+
+  /**
+   * Batch variant of `resolveSystemAccount` — resolves several system
+   * account keys for one branch in parallel, returned as a lookup map.
+   * Convenient when a single posting touches many accounts (e.g. a sale
+   * touches Cash, AR, Revenue, Tax, COGS, and Inventory all at once).
+   */
+  async resolveSystemAccounts(tx: Tx, keys: SystemAccountKey[], branchId: string | null) {
+    const uniqueKeys = Array.from(new Set(keys));
+    const entries = await Promise.all(
+      uniqueKeys.map(async (key) => [key, await this.resolveSystemAccount(tx, key, branchId)] as const),
+    );
+    return Object.fromEntries(entries) as Record<SystemAccountKey, string>;
   },
 
   async accountLedger(
@@ -1658,6 +1678,9 @@ export const accountsService = {
     if (amount.lte(0)) throw new ValidationError('Amount must be greater than zero');
 
     return prisma.$transaction(async (tx) => {
+      await findOpenPeriod(tx, input.fromBranchId, input.transferDate);
+      await findOpenPeriod(tx, input.toBranchId, input.transferDate);
+
       const year = input.transferDate.getFullYear();
       const count = await tx.cashTransfer.count({
         where: { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } },
@@ -1679,9 +1702,41 @@ export const accountsService = {
           createdById: actor.userId,
         },
         include: {
-          fromBranch: { select: { code: true, name: true } },
-          toBranch: { select: { code: true, name: true } },
+          fromBranch: { select: { code: true, name: true, currency: true } },
+          toBranch: { select: { code: true, name: true, currency: true } },
         },
+      });
+
+      // GL posting — two balanced legs (one per branch) bridged by an
+      // Inter-Branch Clearing account, since a single JournalEntry can only
+      // belong to one branch/period.
+      const fromAcc = await this.resolveSystemAccounts(tx, ['CASH', 'INTERBRANCH_CLEARING'], input.fromBranchId);
+      await this.postSystemJournal(tx, {
+        branchId: input.fromBranchId,
+        date: input.transferDate,
+        memo: `Cash transfer ${transfer.number} to ${transfer.toBranch.name}`,
+        sourceModule: 'accounts',
+        sourceRefType: 'CashTransferOut',
+        sourceRefId: transfer.id,
+        actorUserId: actor.userId,
+        lines: [
+          { accountId: fromAcc.INTERBRANCH_CLEARING, debit: amount.toNumber(), credit: 0, currency: transfer.fromBranch.currency, fxRate: 1 },
+          { accountId: fromAcc.CASH, debit: 0, credit: amount.toNumber(), currency: transfer.fromBranch.currency, fxRate: 1 },
+        ],
+      });
+      const toAcc = await this.resolveSystemAccounts(tx, ['CASH', 'INTERBRANCH_CLEARING'], input.toBranchId);
+      await this.postSystemJournal(tx, {
+        branchId: input.toBranchId,
+        date: input.transferDate,
+        memo: `Cash transfer ${transfer.number} from ${transfer.fromBranch.name}`,
+        sourceModule: 'accounts',
+        sourceRefType: 'CashTransferIn',
+        sourceRefId: transfer.id,
+        actorUserId: actor.userId,
+        lines: [
+          { accountId: toAcc.CASH, debit: amount.toNumber(), credit: 0, currency: transfer.toBranch.currency, fxRate: 1 },
+          { accountId: toAcc.INTERBRANCH_CLEARING, debit: 0, credit: amount.toNumber(), currency: transfer.toBranch.currency, fxRate: 1 },
+        ],
       });
 
       await recordAudit(
@@ -1783,6 +1838,8 @@ export const accountsService = {
     const totalAmount = taxAmount ? amount.plus(taxAmount) : amount;
 
     return prisma.$transaction(async (tx) => {
+      await findOpenPeriod(tx, input.branchId, input.date);
+
       const year = input.date.getFullYear();
       const count = await tx.cashEntry.count({
         where: { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } },
@@ -1814,6 +1871,43 @@ export const accountsService = {
           branch: { select: { name: true, currency: true } },
           contact: { select: { name: true, type: true } },
         },
+      });
+
+      // GL posting — routed against generic Other Income / Other Expenses,
+      // since `category` here is a free-text field with no COA mapping.
+      // Keeps the cash book from being financially inert without needing a
+      // category-to-account mapping table (a reasonable follow-up, not
+      // built this pass).
+      const keys: SystemAccountKey[] =
+        input.type === 'CASH_IN'
+          ? (['CASH', 'SALES_REVENUE', ...(taxAmount ? (['TAX_PAYABLE'] as const) : [])] as SystemAccountKey[])
+          : (['CASH', 'PURCHASE_EXPENSE', ...(taxAmount ? (['TAX_RECOVERABLE'] as const) : [])] as SystemAccountKey[]);
+      const acc = await this.resolveSystemAccounts(tx, keys, input.branchId);
+      const lines: JournalLineInput[] =
+        input.type === 'CASH_IN'
+          ? [
+              { accountId: acc.CASH, debit: totalAmount.toNumber(), credit: 0, currency: entry.branch.currency, fxRate: 1 },
+              { accountId: acc.SALES_REVENUE, debit: 0, credit: amount.toNumber(), currency: entry.branch.currency, fxRate: 1 },
+              ...(taxAmount
+                ? [{ accountId: acc.TAX_PAYABLE, debit: 0, credit: taxAmount.toNumber(), currency: entry.branch.currency, fxRate: 1 }]
+                : []),
+            ]
+          : [
+              { accountId: acc.PURCHASE_EXPENSE, debit: amount.toNumber(), credit: 0, currency: entry.branch.currency, fxRate: 1 },
+              ...(taxAmount
+                ? [{ accountId: acc.TAX_RECOVERABLE, debit: taxAmount.toNumber(), credit: 0, currency: entry.branch.currency, fxRate: 1 }]
+                : []),
+              { accountId: acc.CASH, debit: 0, credit: totalAmount.toNumber(), currency: entry.branch.currency, fxRate: 1 },
+            ];
+      await this.postSystemJournal(tx, {
+        branchId: input.branchId,
+        date: input.date,
+        memo: `${entry.type === 'CASH_IN' ? 'Cash in' : 'Cash out'} ${entry.number} — ${input.category}`,
+        sourceModule: 'accounts',
+        sourceRefType: 'CashEntry',
+        sourceRefId: entry.id,
+        actorUserId: actor.userId,
+        lines,
       });
 
       await recordAudit(

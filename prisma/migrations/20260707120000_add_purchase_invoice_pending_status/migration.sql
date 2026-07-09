@@ -1,6 +1,6 @@
--- Add PENDING to PurchaseInvoiceStatus enum.
--- The real invoice lifecycle used everywhere in the app (createInvoice, supplier
--- payment lookups, dashboard KPIs, invoice list/detail pages) is
--- DRAFT -> PENDING -> PARTIALLY_PAID -> PAID/CANCELLED, but PENDING was
--- missing from the enum declaration itself.
-ALTER TYPE "PurchaseInvoiceStatus" ADD VALUE 'PENDING';
+-- No-op: PENDING was already present in PurchaseInvoiceStatus's original
+-- CREATE TYPE list (see 20260417155013_phase3_suppliers_procurement). This
+-- migration was originally written on the mistaken assumption it was
+-- missing; corrected to a no-op so shadow-database replay and fresh
+-- `migrate deploy` don't fail on a duplicate enum label.
+SELECT 1;

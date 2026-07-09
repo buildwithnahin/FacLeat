@@ -1,11 +1,13 @@
 import 'server-only';
-import { Prisma } from '@prisma/client';
+import { Prisma, type SystemAccountKey } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { approvalService } from '@/server/services/approval.service';
+import { accountsService } from '@/server/services/accounts.service';
 import type { AppSession } from '@/server/auth/session';
+import type { JournalLineInput } from '@/server/validators/accounts';
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/errors';
 import { nextDocumentNumber } from '@/lib/document-number';
 import {
@@ -325,23 +327,34 @@ export const posService = {
         include: { items: true, payments: true },
       });
 
-      // Inventory OUT per item
+      // Inventory OUT per item, at real product cost (also the COGS basis below)
+      const costByProduct = new Map(
+        (
+          await tx.product.findMany({
+            where: { id: { in: [...new Set(sale.items.map((li) => li.productId))] } },
+            select: { id: true, costPrice: true },
+          })
+        ).map((p) => [p.id, p.costPrice]),
+      );
+      let cogsTotal = ZERO;
       await Promise.all(
-        sale.items.map((li) =>
-          tx.inventoryLedger.create({
+        sale.items.map((li) => {
+          const costPerUnit = costByProduct.get(li.productId) ?? ZERO;
+          cogsTotal = cogsTotal.plus(li.quantity.mul(costPerUnit));
+          return tx.inventoryLedger.create({
             data: {
               branchId: input.branchId,
               warehouseId: input.warehouseId,
               productId: li.productId,
               direction: 'OUT',
               quantity: li.quantity,
-              costPerUnit: ZERO,
+              costPerUnit,
               refType: 'POS_SALE',
               refId: sale.id,
               createdById: actor.userId,
             },
-          }),
-        ),
+          });
+        }),
       );
 
       // Customer ledger: debit full amount, credit non-credit portion
@@ -375,6 +388,54 @@ export const posService = {
             },
           });
         }
+      }
+
+      // GL posting — cash/bank/AR tendered against revenue + tax, and COGS
+      // against finished-goods inventory. `otherPaid` is derived as a plug
+      // (grandTotal minus credit minus net cash) rather than summed
+      // straight from payment rows, so the entry always balances even if a
+      // card/mobile tender overpays without an accompanying cash line.
+      if (grandTotal.gt(ZERO)) {
+        const cashNet = cashPaid.minus(changeDue);
+        const otherPaid = Prisma.Decimal.max(ZERO, grandTotal.minus(creditAmount).minus(cashNet));
+
+        const keys: SystemAccountKey[] = ['SALES_REVENUE_POS', 'TAX_PAYABLE'];
+        if (cashNet.gt(ZERO)) keys.push('CASH');
+        if (otherPaid.gt(ZERO)) keys.push('BANK_DEFAULT');
+        if (creditAmount.gt(ZERO)) keys.push('AR_CONTROL');
+        if (cogsTotal.gt(ZERO)) keys.push('COGS', 'INVENTORY_FINISHED_GOODS');
+        const acc = await accountsService.resolveSystemAccounts(tx, keys, input.branchId);
+
+        const lines: JournalLineInput[] = [];
+        const line = (accountId: string, debit: Prisma.Decimal, credit: Prisma.Decimal) =>
+          lines.push({
+            accountId,
+            debit: debit.toNumber(),
+            credit: credit.toNumber(),
+            currency: warehouse.branch.currency,
+            fxRate: 1,
+          });
+
+        if (cashNet.gt(ZERO)) line(acc.CASH, cashNet, ZERO);
+        if (otherPaid.gt(ZERO)) line(acc.BANK_DEFAULT, otherPaid, ZERO);
+        if (creditAmount.gt(ZERO)) line(acc.AR_CONTROL, creditAmount, ZERO);
+        line(acc.SALES_REVENUE_POS, ZERO, subtotal);
+        if (taxTotal.gt(ZERO)) line(acc.TAX_PAYABLE, ZERO, taxTotal);
+        if (cogsTotal.gt(ZERO)) {
+          line(acc.COGS, cogsTotal, ZERO);
+          line(acc.INVENTORY_FINISHED_GOODS, ZERO, cogsTotal);
+        }
+
+        await accountsService.postSystemJournal(tx, {
+          branchId: input.branchId,
+          date: new Date(),
+          memo: `POS sale ${sale.number}`,
+          sourceModule: 'pos',
+          sourceRefType: 'PosSale',
+          sourceRefId: sale.id,
+          actorUserId: actor.userId,
+          lines,
+        });
       }
 
       await recordAudit(
@@ -473,23 +534,35 @@ export const posService = {
         },
       });
 
-      // Inventory back IN
+      // Inventory back IN, at current product cost (approximation — the
+      // original sale-time cost isn't snapshotted per line item)
+      const costByProduct = new Map(
+        (
+          await tx.product.findMany({
+            where: { id: { in: [...new Set(returnItems.map((ri) => ri.productId))] } },
+            select: { id: true, costPrice: true },
+          })
+        ).map((p) => [p.id, p.costPrice]),
+      );
+      let cogsReversal = ZERO;
       await Promise.all(
-        returnItems.map((ri) =>
-          tx.inventoryLedger.create({
+        returnItems.map((ri) => {
+          const costPerUnit = costByProduct.get(ri.productId) ?? ZERO;
+          cogsReversal = cogsReversal.plus(ri.qty.mul(costPerUnit));
+          return tx.inventoryLedger.create({
             data: {
               branchId: sale.branchId,
               warehouseId: sale.warehouseId,
               productId: ri.productId,
               direction: 'IN',
               quantity: ri.qty,
-              costPerUnit: ZERO,
+              costPerUnit,
               refType: 'POS_RETURN',
               refId: ret.id,
               createdById: actor.userId,
             },
-          }),
-        ),
+          });
+        }),
       );
 
       // Customer ledger credit for refund
@@ -520,6 +593,65 @@ export const posService = {
       const totalOriginal = sale.items.reduce((a, li) => a.plus(li.quantity), ZERO);
       const newStatus = totalReturned.gte(totalOriginal) ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
       await tx.posSale.update({ where: { id: sale.id }, data: { status: newStatus } });
+
+      // GL reversal — Sales Returns against however the refund was tendered,
+      // plus COGS/inventory reversal. `refundAmount` is a blended net+tax
+      // figure (proration off the original sale line, not split by tax
+      // component here), so it's booked as a single contra-revenue line.
+      if (refundAmount.gt(ZERO)) {
+        const refundKeys: Record<typeof input.refundMethod, SystemAccountKey> = {
+          CASH: 'CASH',
+          CARD: 'BANK_DEFAULT',
+          MOBILE_BANKING: 'BANK_DEFAULT',
+          BANK_TRANSFER: 'BANK_DEFAULT',
+          CREDIT: 'AR_CONTROL',
+          GIFT_CARD: 'BANK_DEFAULT',
+          OTHER: 'BANK_DEFAULT',
+        };
+        const keys: SystemAccountKey[] = ['SALES_RETURNS', refundKeys[input.refundMethod]];
+        if (cogsReversal.gt(ZERO)) keys.push('COGS', 'INVENTORY_FINISHED_GOODS');
+        const acc = await accountsService.resolveSystemAccounts(tx, keys, sale.branchId);
+
+        const lines: JournalLineInput[] = [
+          {
+            accountId: acc.SALES_RETURNS,
+            debit: refundAmount.toNumber(),
+            credit: 0,
+            currency: sale.currency,
+            fxRate: 1,
+          },
+          {
+            accountId: acc[refundKeys[input.refundMethod]],
+            debit: 0,
+            credit: refundAmount.toNumber(),
+            currency: sale.currency,
+            fxRate: 1,
+          },
+        ];
+        if (cogsReversal.gt(ZERO)) {
+          lines.push(
+            {
+              accountId: acc.INVENTORY_FINISHED_GOODS,
+              debit: cogsReversal.toNumber(),
+              credit: 0,
+              currency: sale.currency,
+              fxRate: 1,
+            },
+            { accountId: acc.COGS, debit: 0, credit: cogsReversal.toNumber(), currency: sale.currency, fxRate: 1 },
+          );
+        }
+
+        await accountsService.postSystemJournal(tx, {
+          branchId: sale.branchId,
+          date: new Date(),
+          memo: `POS return ${ret.number} for sale ${sale.number}`,
+          sourceModule: 'pos',
+          sourceRefType: 'PosReturn',
+          sourceRefId: ret.id,
+          actorUserId: actor.userId,
+          lines,
+        });
+      }
 
       await recordAudit(
         {

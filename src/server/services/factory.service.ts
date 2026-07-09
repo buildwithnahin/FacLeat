@@ -458,7 +458,7 @@ export const factoryService = {
         const wipAccountId = await accountsService.resolveSystemAccount(tx, 'WIP', order.branchId);
         const inventoryAccountId = await accountsService.resolveSystemAccount(
           tx,
-          'INVENTORY',
+          'INVENTORY_RAW_MATERIAL',
           order.branchId,
         );
         await accountsService.postSystemJournal(tx, {
@@ -466,8 +466,8 @@ export const factoryService = {
           date: new Date(),
           memo: `Material consumption for ${order.number}`,
           sourceModule: 'factory',
-          sourceRefType: 'ProductionOrder',
-          sourceRefId: order.id,
+          sourceRefType: 'ProductionConsumption',
+          sourceRefId: `${order.id}-${Date.now()}`,
           actorUserId: actor.userId,
           lines: [
             {

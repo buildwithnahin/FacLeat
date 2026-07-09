@@ -886,9 +886,14 @@ async function main() {
       | 'AR_CONTROL'
       | 'AP_CONTROL'
       | 'INVENTORY'
+      | 'INVENTORY_RAW_MATERIAL'
+      | 'INVENTORY_FINISHED_GOODS'
       | 'WIP'
       | 'COGS'
       | 'SALES_REVENUE'
+      | 'SALES_REVENUE_POS'
+      | 'SALES_REVENUE_WHOLESALE'
+      | 'SALES_REVENUE_CORPORATE'
       | 'SALES_RETURNS'
       | 'DISCOUNT_GIVEN'
       | 'TAX_PAYABLE'
@@ -898,7 +903,8 @@ async function main() {
       | 'FX_LOSS'
       | 'RETAINED_EARNINGS'
       | 'OPENING_BALANCE_EQUITY'
-      | 'ROUNDING';
+      | 'ROUNDING'
+      | 'INTERBRANCH_CLEARING';
   };
   const COA: CoaSeed[] = [
     // Assets
@@ -906,6 +912,9 @@ async function main() {
     { code: '1100', name: 'Current Assets', type: 'ASSET', normalSide: 'DEBIT', parent: '1000', isPosting: false },
     { code: '1110', name: 'Cash on Hand', type: 'ASSET', normalSide: 'DEBIT', parent: '1100', systemKey: 'CASH' },
     { code: '1120', name: 'Bank — Operating', type: 'ASSET', normalSide: 'DEBIT', parent: '1100', systemKey: 'BANK_DEFAULT' },
+    { code: '1121', name: 'Bank — Collection Account', type: 'ASSET', normalSide: 'DEBIT', parent: '1100' },
+    { code: '1122', name: 'Bank — Disbursement Account', type: 'ASSET', normalSide: 'DEBIT', parent: '1100' },
+    { code: '1123', name: 'Bank — LC Margin Account', type: 'ASSET', normalSide: 'DEBIT', parent: '1100' },
     {
       code: '1130',
       name: 'Accounts Receivable',
@@ -915,12 +924,31 @@ async function main() {
       isControl: true,
       systemKey: 'AR_CONTROL',
     },
+    { code: '1140', name: 'Inventory', type: 'ASSET', normalSide: 'DEBIT', parent: '1100', isPosting: false },
     {
-      code: '1140',
-      name: 'Inventory',
+      code: '1141',
+      name: 'Raw Materials Inventory',
       type: 'ASSET',
       normalSide: 'DEBIT',
-      parent: '1100',
+      parent: '1140',
+      isControl: true,
+      systemKey: 'INVENTORY_RAW_MATERIAL',
+    },
+    {
+      code: '1142',
+      name: 'Finished Goods Inventory',
+      type: 'ASSET',
+      normalSide: 'DEBIT',
+      parent: '1140',
+      isControl: true,
+      systemKey: 'INVENTORY_FINISHED_GOODS',
+    },
+    {
+      code: '1143',
+      name: 'Consumables & Packaging Inventory',
+      type: 'ASSET',
+      normalSide: 'DEBIT',
+      parent: '1140',
       isControl: true,
       systemKey: 'INVENTORY',
     },
@@ -929,16 +957,33 @@ async function main() {
       name: 'Work in Progress',
       type: 'ASSET',
       normalSide: 'DEBIT',
-      parent: '1100',
+      parent: '1140',
       isControl: true,
       systemKey: 'WIP',
     },
     { code: '1150', name: 'Input Tax Recoverable', type: 'ASSET', normalSide: 'DEBIT', parent: '1100', systemKey: 'TAX_RECOVERABLE' },
+    { code: '1160', name: 'Employee Advances & Loans', type: 'ASSET', normalSide: 'DEBIT', parent: '1100' },
+    { code: '1170', name: 'Prepaid Expenses', type: 'ASSET', normalSide: 'DEBIT', parent: '1100' },
+    { code: '1180', name: 'Security Deposits', type: 'ASSET', normalSide: 'DEBIT', parent: '1100' },
+    { code: '1190', name: 'Staff Loan Receivable', type: 'ASSET', normalSide: 'DEBIT', parent: '1100' },
+    { code: '1195', name: 'Short-Term Investments', type: 'ASSET', normalSide: 'DEBIT', parent: '1100' },
+    {
+      code: '1175',
+      name: 'Inter-Branch Clearing',
+      type: 'ASSET',
+      normalSide: 'DEBIT',
+      parent: '1100',
+      systemKey: 'INTERBRANCH_CLEARING',
+    },
     { code: '1200', name: 'Fixed Assets', type: 'ASSET', normalSide: 'DEBIT', parent: '1000', isPosting: false },
     { code: '1210', name: 'Machinery & Equipment', type: 'ASSET', normalSide: 'DEBIT', parent: '1200' },
     { code: '1220', name: 'Accumulated Depreciation', type: 'ASSET', normalSide: 'CREDIT', parent: '1200' },
     { code: '1230', name: 'Vehicles', type: 'ASSET', normalSide: 'DEBIT', parent: '1200' },
     { code: '1240', name: 'Office Equipment', type: 'ASSET', normalSide: 'DEBIT', parent: '1200' },
+    { code: '1250', name: 'Furniture & Fixtures', type: 'ASSET', normalSide: 'DEBIT', parent: '1200' },
+    { code: '1260', name: 'Leasehold Improvements', type: 'ASSET', normalSide: 'DEBIT', parent: '1200' },
+    { code: '1270', name: 'Capital Work in Progress', type: 'ASSET', normalSide: 'DEBIT', parent: '1200' },
+    { code: '1280', name: 'Intangible Assets', type: 'ASSET', normalSide: 'DEBIT', parent: '1200' },
 
     // Liabilities
     { code: '2000', name: 'Liabilities', type: 'LIABILITY', normalSide: 'CREDIT', isPosting: false },
@@ -951,14 +996,22 @@ async function main() {
       isControl: true,
       systemKey: 'AP_CONTROL',
     },
-    { code: '2200', name: 'Tax Payable', type: 'LIABILITY', normalSide: 'CREDIT', parent: '2000', systemKey: 'TAX_PAYABLE' },
+    { code: '2110', name: 'Salary Payable', type: 'LIABILITY', normalSide: 'CREDIT', parent: '2000' },
+    { code: '2120', name: 'Tax Deducted at Source (TDS) Payable', type: 'LIABILITY', normalSide: 'CREDIT', parent: '2000' },
+    { code: '2130', name: 'Employer Statutory Contributions Payable', type: 'LIABILITY', normalSide: 'CREDIT', parent: '2000' },
+    { code: '2200', name: 'VAT / Sales Tax Payable', type: 'LIABILITY', normalSide: 'CREDIT', parent: '2000', systemKey: 'TAX_PAYABLE' },
     { code: '2300', name: 'Accrued Expenses', type: 'LIABILITY', normalSide: 'CREDIT', parent: '2000' },
-    { code: '2400', name: 'Provident Fund', type: 'LIABILITY', normalSide: 'CREDIT', parent: '2000' },
+    { code: '2400', name: 'Provident Fund Payable', type: 'LIABILITY', normalSide: 'CREDIT', parent: '2000' },
+    { code: '2500', name: 'LC Payable (Import)', type: 'LIABILITY', normalSide: 'CREDIT', parent: '2000' },
+    { code: '2510', name: 'Bank Guarantee Payable', type: 'LIABILITY', normalSide: 'CREDIT', parent: '2000' },
+    { code: '2600', name: 'Customer Advances / Unearned Revenue', type: 'LIABILITY', normalSide: 'CREDIT', parent: '2000' },
+    { code: '2700', name: 'Unclaimed Wages', type: 'LIABILITY', normalSide: 'CREDIT', parent: '2000' },
 
     // Equity
     { code: '3000', name: 'Equity', type: 'EQUITY', normalSide: 'CREDIT', isPosting: false },
     { code: '3100', name: "Owner's Capital", type: 'EQUITY', normalSide: 'CREDIT', parent: '3000' },
     { code: '3200', name: 'Retained Earnings', type: 'EQUITY', normalSide: 'CREDIT', parent: '3000', systemKey: 'RETAINED_EARNINGS' },
+    { code: '3300', name: 'Drawings', type: 'EQUITY', normalSide: 'DEBIT', parent: '3000' },
     {
       code: '3900',
       name: 'Opening Balance Equity',
@@ -971,21 +1024,40 @@ async function main() {
     // Income
     { code: '4000', name: 'Income', type: 'INCOME', normalSide: 'CREDIT', isPosting: false },
     { code: '4100', name: 'Sales Revenue', type: 'INCOME', normalSide: 'CREDIT', parent: '4000', systemKey: 'SALES_REVENUE' },
+    { code: '4110', name: 'POS / Retail Sales Revenue', type: 'INCOME', normalSide: 'CREDIT', parent: '4000', systemKey: 'SALES_REVENUE_POS' },
+    { code: '4120', name: 'Wholesale Sales Revenue', type: 'INCOME', normalSide: 'CREDIT', parent: '4000', systemKey: 'SALES_REVENUE_WHOLESALE' },
+    { code: '4130', name: 'Corporate Sales Revenue', type: 'INCOME', normalSide: 'CREDIT', parent: '4000', systemKey: 'SALES_REVENUE_CORPORATE' },
+    { code: '4140', name: 'Export Sales Revenue', type: 'INCOME', normalSide: 'CREDIT', parent: '4000' },
     { code: '4150', name: 'Sales Returns & Allowances', type: 'INCOME', normalSide: 'DEBIT', parent: '4000', systemKey: 'SALES_RETURNS' },
     { code: '4200', name: 'FX Gain', type: 'INCOME', normalSide: 'CREDIT', parent: '4000', systemKey: 'FX_GAIN' },
+    { code: '4800', name: 'Other Income', type: 'INCOME', normalSide: 'CREDIT', parent: '4000' },
     { code: '4900', name: 'Rounding Income', type: 'INCOME', normalSide: 'CREDIT', parent: '4000', systemKey: 'ROUNDING' },
 
     // Expenses
     { code: '5000', name: 'Expenses', type: 'EXPENSE', normalSide: 'DEBIT', isPosting: false },
     { code: '5100', name: 'Cost of Goods Sold', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5000', systemKey: 'COGS' },
     { code: '5150', name: 'Discount Given', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5000', systemKey: 'DISCOUNT_GIVEN' },
+    { code: '5160', name: 'Bad Debt Expense', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5000' },
     { code: '5200', name: 'Purchase Expense (non-stock)', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5000', systemKey: 'PURCHASE_EXPENSE' },
+    { code: '5250', name: 'Import Duty & Customs Expense', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5000' },
     { code: '5300', name: 'Operating Expenses', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5000', isPosting: false },
     { code: '5310', name: 'Salaries & Wages', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
     { code: '5320', name: 'Rent', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
     { code: '5330', name: 'Utilities', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
     { code: '5340', name: 'Depreciation', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
     { code: '5350', name: 'Repairs & Maintenance', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
+    { code: '5360', name: 'Freight & Carriage Inward', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
+    { code: '5365', name: 'Freight & Carriage Outward', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
+    { code: '5370', name: 'Insurance', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
+    { code: '5375', name: 'Bank Charges', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
+    { code: '5380', name: 'Legal & Professional Fees', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
+    { code: '5385', name: 'Printing & Stationery', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
+    { code: '5390', name: 'Travel & Conveyance', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
+    { code: '5395', name: 'Marketing & Advertising', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
+    { code: '5396', name: 'IT & Software Subscriptions', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
+    { code: '5397', name: 'Fuel & Vehicle Running Cost', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
+    { code: '5398', name: 'Employee Welfare', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
+    { code: '5399', name: 'Communication (Phone / Internet)', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5300' },
     { code: '5400', name: 'FX Loss', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5000', systemKey: 'FX_LOSS' },
     { code: '5500', name: 'Other Expenses', type: 'EXPENSE', normalSide: 'DEBIT', parent: '5000' },
   ];

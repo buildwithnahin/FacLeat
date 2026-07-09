@@ -1,10 +1,12 @@
 import 'server-only';
-import { Prisma } from '@prisma/client';
+import { Prisma, type SystemAccountKey } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
+import { accountsService } from '@/server/services/accounts.service';
 import type { AppSession } from '@/server/auth/session';
+import type { JournalLineInput } from '@/server/validators/accounts';
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/errors';
 import { nextDocumentNumber } from '@/lib/document-number';
 import {
@@ -241,23 +243,34 @@ export const wholesaleService = {
         include: { items: true, payments: true },
       });
 
-      // Inventory OUT per item
+      // Inventory OUT per item, at real product cost (also the COGS basis below)
+      const costByProduct = new Map(
+        (
+          await tx.product.findMany({
+            where: { id: { in: [...new Set(invoice.items.map((li) => li.productId))] } },
+            select: { id: true, costPrice: true },
+          })
+        ).map((p) => [p.id, p.costPrice]),
+      );
+      let cogsTotal = ZERO;
       await Promise.all(
-        invoice.items.map((li) =>
-          tx.inventoryLedger.create({
+        invoice.items.map((li) => {
+          const costPerUnit = costByProduct.get(li.productId) ?? ZERO;
+          cogsTotal = cogsTotal.plus(li.quantity.mul(costPerUnit));
+          return tx.inventoryLedger.create({
             data: {
               branchId: input.branchId,
               warehouseId: input.warehouseId,
               productId: li.productId,
               direction: 'OUT',
               quantity: li.quantity,
-              costPerUnit: ZERO,
+              costPerUnit,
               refType: 'WHOLESALE_INVOICE',
               refId: invoice.id,
               createdById: actor.userId,
             },
-          }),
-        ),
+          });
+        }),
       );
 
       // Customer ledger: invoice debit + payment credit (if any)
@@ -287,6 +300,49 @@ export const wholesaleService = {
             credit: paidTotal,
             createdById: actor.userId,
           },
+        });
+      }
+
+      // GL posting — cash/bank tendered + AR for the balance, against gross
+      // revenue less the discount actually given, plus tax and COGS.
+      if (grandTotal.gt(ZERO)) {
+        const cashPaid = input.initialPayments
+          .filter((p) => p.method === 'CASH')
+          .reduce((a, p) => a.plus(D(p.amount)), ZERO);
+        const otherPaid = paidTotal.minus(cashPaid);
+
+        const keys: SystemAccountKey[] = ['SALES_REVENUE_WHOLESALE', 'TAX_PAYABLE'];
+        if (cashPaid.gt(ZERO)) keys.push('CASH');
+        if (otherPaid.gt(ZERO)) keys.push('BANK_DEFAULT');
+        if (balanceDue.gt(ZERO)) keys.push('AR_CONTROL');
+        if (discountTotal.gt(ZERO)) keys.push('DISCOUNT_GIVEN');
+        if (cogsTotal.gt(ZERO)) keys.push('COGS', 'INVENTORY_FINISHED_GOODS');
+        const acc = await accountsService.resolveSystemAccounts(tx, keys, input.branchId);
+
+        const lines: JournalLineInput[] = [];
+        const line = (accountId: string, debit: Prisma.Decimal, credit: Prisma.Decimal) =>
+          lines.push({ accountId, debit: debit.toNumber(), credit: credit.toNumber(), currency: warehouse.branch.currency, fxRate: 1 });
+
+        if (cashPaid.gt(ZERO)) line(acc.CASH, cashPaid, ZERO);
+        if (otherPaid.gt(ZERO)) line(acc.BANK_DEFAULT, otherPaid, ZERO);
+        if (balanceDue.gt(ZERO)) line(acc.AR_CONTROL, balanceDue, ZERO);
+        if (discountTotal.gt(ZERO)) line(acc.DISCOUNT_GIVEN, discountTotal, ZERO);
+        line(acc.SALES_REVENUE_WHOLESALE, ZERO, subtotal);
+        if (taxTotal.gt(ZERO)) line(acc.TAX_PAYABLE, ZERO, taxTotal);
+        if (cogsTotal.gt(ZERO)) {
+          line(acc.COGS, cogsTotal, ZERO);
+          line(acc.INVENTORY_FINISHED_GOODS, ZERO, cogsTotal);
+        }
+
+        await accountsService.postSystemJournal(tx, {
+          branchId: input.branchId,
+          date: new Date(),
+          memo: `Wholesale invoice ${invoice.number}`,
+          sourceModule: 'wholesale',
+          sourceRefType: 'WholesaleInvoice',
+          sourceRefId: invoice.id,
+          actorUserId: actor.userId,
+          lines,
         });
       }
 
@@ -325,14 +381,18 @@ export const wholesaleService = {
       );
     }
 
+    const paidAt = input.paidAt ?? new Date();
+
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, invoice.branchId, paidAt);
+
       const payment = await tx.wholesalePayment.create({
         data: {
           invoiceId: invoice.id,
           method: input.method,
           amount,
           reference: input.reference || null,
-          paidAt: input.paidAt ?? new Date(),
+          paidAt,
           createdById: actor.userId,
         },
       });
@@ -361,6 +421,23 @@ export const wholesaleService = {
           credit: amount,
           createdById: actor.userId,
         },
+      });
+
+      // GL posting — Dr Cash/Bank by tender, Cr Accounts Receivable
+      const cashKey: SystemAccountKey = input.method === 'CASH' ? 'CASH' : 'BANK_DEFAULT';
+      const acc = await accountsService.resolveSystemAccounts(tx, [cashKey, 'AR_CONTROL'], invoice.branchId);
+      await accountsService.postSystemJournal(tx, {
+        branchId: invoice.branchId,
+        date: paidAt,
+        memo: `Wholesale payment on ${invoice.number}`,
+        sourceModule: 'wholesale',
+        sourceRefType: 'WholesalePayment',
+        sourceRefId: payment.id,
+        actorUserId: actor.userId,
+        lines: [
+          { accountId: acc[cashKey], debit: amount.toNumber(), credit: 0, currency: invoice.currency, fxRate: 1 },
+          { accountId: acc.AR_CONTROL, debit: 0, credit: amount.toNumber(), currency: invoice.currency, fxRate: 1 },
+        ],
       });
 
       await recordAudit(
@@ -465,23 +542,35 @@ export const wholesaleService = {
         },
       });
 
-      // Inventory back IN
+      // Inventory back IN, at current product cost (approximation — the
+      // original invoice-time cost isn't snapshotted per line item)
+      const costByProduct = new Map(
+        (
+          await tx.product.findMany({
+            where: { id: { in: [...new Set(returnItems.map((ri) => ri.productId))] } },
+            select: { id: true, costPrice: true },
+          })
+        ).map((p) => [p.id, p.costPrice]),
+      );
+      let cogsReversal = ZERO;
       await Promise.all(
-        returnItems.map((ri) =>
-          tx.inventoryLedger.create({
+        returnItems.map((ri) => {
+          const costPerUnit = costByProduct.get(ri.productId) ?? ZERO;
+          cogsReversal = cogsReversal.plus(ri.qty.mul(costPerUnit));
+          return tx.inventoryLedger.create({
             data: {
               branchId: invoice.branchId,
               warehouseId: invoice.warehouseId,
               productId: ri.productId,
               direction: 'IN',
               quantity: ri.qty,
-              costPerUnit: ZERO,
+              costPerUnit,
               refType: 'WHOLESALE_RETURN',
               refId: ret.id,
               createdById: actor.userId,
             },
-          }),
-        ),
+          });
+        }),
       );
 
       // Customer ledger credit (reduces receivable)
@@ -517,6 +606,37 @@ export const wholesaleService = {
         where: { id: invoice.id },
         data: { grandTotal: newGrand, balanceDue: newBalance, status: newStatus },
       });
+
+      // GL reversal — Dr Sales Returns / Cr AR (mirrors the CustomerLedger
+      // credit above, which also always nets against AR regardless of
+      // refundMethod), plus COGS/inventory reversal.
+      if (refundAmount.gt(ZERO)) {
+        const keys: SystemAccountKey[] = ['SALES_RETURNS', 'AR_CONTROL'];
+        if (cogsReversal.gt(ZERO)) keys.push('COGS', 'INVENTORY_FINISHED_GOODS');
+        const acc = await accountsService.resolveSystemAccounts(tx, keys, invoice.branchId);
+
+        const lines: JournalLineInput[] = [
+          { accountId: acc.SALES_RETURNS, debit: refundAmount.toNumber(), credit: 0, currency: invoice.currency, fxRate: 1 },
+          { accountId: acc.AR_CONTROL, debit: 0, credit: refundAmount.toNumber(), currency: invoice.currency, fxRate: 1 },
+        ];
+        if (cogsReversal.gt(ZERO)) {
+          lines.push(
+            { accountId: acc.INVENTORY_FINISHED_GOODS, debit: cogsReversal.toNumber(), credit: 0, currency: invoice.currency, fxRate: 1 },
+            { accountId: acc.COGS, debit: 0, credit: cogsReversal.toNumber(), currency: invoice.currency, fxRate: 1 },
+          );
+        }
+
+        await accountsService.postSystemJournal(tx, {
+          branchId: invoice.branchId,
+          date: new Date(),
+          memo: `Wholesale return ${ret.number} against ${invoice.number}`,
+          sourceModule: 'wholesale',
+          sourceRefType: 'WholesaleReturn',
+          sourceRefId: ret.id,
+          actorUserId: actor.userId,
+          lines,
+        });
+      }
 
       await recordAudit(
         {
@@ -558,23 +678,34 @@ export const wholesaleService = {
     return prisma.$transaction(async (tx) => {
       await assertOpenPeriod(tx, invoice.branchId);
 
-      // Reverse stock
+      // Reverse stock, at current product cost (approximation)
+      const costByProduct = new Map(
+        (
+          await tx.product.findMany({
+            where: { id: { in: [...new Set(invoice.items.map((li) => li.productId))] } },
+            select: { id: true, costPrice: true },
+          })
+        ).map((p) => [p.id, p.costPrice]),
+      );
+      let cogsReversal = ZERO;
       await Promise.all(
-        invoice.items.map((li) =>
-          tx.inventoryLedger.create({
+        invoice.items.map((li) => {
+          const costPerUnit = costByProduct.get(li.productId) ?? ZERO;
+          cogsReversal = cogsReversal.plus(li.quantity.mul(costPerUnit));
+          return tx.inventoryLedger.create({
             data: {
               branchId: invoice.branchId,
               warehouseId: invoice.warehouseId,
               productId: li.productId,
               direction: 'IN',
               quantity: li.quantity,
-              costPerUnit: ZERO,
+              costPerUnit,
               refType: 'WHOLESALE_VOID',
               refId: invoice.id,
               createdById: actor.userId,
             },
-          }),
-        ),
+          });
+        }),
       );
       // Reverse customer ledger
       await tx.customerLedger.create({
@@ -590,6 +721,45 @@ export const wholesaleService = {
           createdById: actor.userId,
         },
       });
+
+      // GL reversal — full mirror of the original invoice-creation entry.
+      // `payments.length === 0` is guaranteed by the guard above, so the
+      // whole grandTotal was on credit (AR) with no cash/bank lines to undo.
+      if (invoice.grandTotal.gt(ZERO)) {
+        const keys: SystemAccountKey[] = ['SALES_REVENUE_WHOLESALE', 'AR_CONTROL'];
+        if (invoice.taxTotal.gt(ZERO)) keys.push('TAX_PAYABLE');
+        if (invoice.discountTotal.gt(ZERO)) keys.push('DISCOUNT_GIVEN');
+        if (cogsReversal.gt(ZERO)) keys.push('COGS', 'INVENTORY_FINISHED_GOODS');
+        const acc = await accountsService.resolveSystemAccounts(tx, keys, invoice.branchId);
+
+        const lines: JournalLineInput[] = [
+          { accountId: acc.SALES_REVENUE_WHOLESALE, debit: invoice.subtotal.toNumber(), credit: 0, currency: invoice.currency, fxRate: 1 },
+          { accountId: acc.AR_CONTROL, debit: 0, credit: invoice.grandTotal.toNumber(), currency: invoice.currency, fxRate: 1 },
+        ];
+        if (invoice.taxTotal.gt(ZERO)) {
+          lines.push({ accountId: acc.TAX_PAYABLE, debit: invoice.taxTotal.toNumber(), credit: 0, currency: invoice.currency, fxRate: 1 });
+        }
+        if (invoice.discountTotal.gt(ZERO)) {
+          lines.push({ accountId: acc.DISCOUNT_GIVEN, debit: 0, credit: invoice.discountTotal.toNumber(), currency: invoice.currency, fxRate: 1 });
+        }
+        if (cogsReversal.gt(ZERO)) {
+          lines.push(
+            { accountId: acc.INVENTORY_FINISHED_GOODS, debit: cogsReversal.toNumber(), credit: 0, currency: invoice.currency, fxRate: 1 },
+            { accountId: acc.COGS, debit: 0, credit: cogsReversal.toNumber(), currency: invoice.currency, fxRate: 1 },
+          );
+        }
+
+        await accountsService.postSystemJournal(tx, {
+          branchId: invoice.branchId,
+          date: new Date(),
+          memo: `Void wholesale invoice ${invoice.number}: ${input.reason}`,
+          sourceModule: 'wholesale',
+          sourceRefType: 'WholesaleInvoiceVoid',
+          sourceRefId: invoice.id,
+          actorUserId: actor.userId,
+          lines,
+        });
+      }
 
       await tx.wholesaleInvoice.update({
         where: { id: invoice.id },

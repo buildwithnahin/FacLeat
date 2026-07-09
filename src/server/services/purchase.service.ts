@@ -1,11 +1,13 @@
 import 'server-only';
-import { Prisma } from '@prisma/client';
+import { Prisma, type SystemAccountKey, type ProductType } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { approvalService } from '@/server/services/approval.service';
+import { accountsService } from '@/server/services/accounts.service';
 import type { AppSession } from '@/server/auth/session';
+import type { JournalLineInput } from '@/server/validators/accounts';
 import type {
   RequisitionCreateInput,
   RequisitionDecisionInput,
@@ -16,6 +18,16 @@ import type {
 } from '@/server/validators/purchase';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 import { nextDocumentNumber } from '@/lib/document-number';
+
+const INVENTORY_KEY_BY_PRODUCT_TYPE: Record<ProductType, SystemAccountKey> = {
+  RAW_MATERIAL: 'INVENTORY_RAW_MATERIAL',
+  FINISHED_GOOD: 'INVENTORY_FINISHED_GOODS',
+  WORK_IN_PROGRESS: 'WIP',
+  CONSUMABLE: 'INVENTORY',
+  SERVICE: 'PURCHASE_EXPENSE',
+};
+
+const ZERO = new Prisma.Decimal(0);
 
 function computeLineTotal(
   qty: Prisma.Decimal,
@@ -636,11 +648,13 @@ export const purchaseService = {
     const productIds = [...new Set(input.items.map((it) => it.productId))];
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
-      select: { id: true, category: { select: { name: true } }, size: true },
+      select: { id: true, category: { select: { name: true } }, size: true, type: true },
     });
     const productById = new Map(products.map((p) => [p.id, p]));
 
     return prisma.$transaction(async (tx) => {
+      await assertOpenPeriod(tx, supplier.branchId, input.invoiceDate);
+
       const year = new Date().getFullYear();
       const yearCount = await tx.purchaseInvoice.count({
         where: { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } },
@@ -649,6 +663,7 @@ export const purchaseService = {
 
       let subtotal = new Prisma.Decimal(0);
       let taxTotal = new Prisma.Decimal(0);
+      const grossByType = new Map<ProductType, Prisma.Decimal>();
       const itemRows = input.items.map((it) => {
         const product = productById.get(it.productId);
         if (!product) throw new ValidationError('Selected product was not found');
@@ -663,6 +678,7 @@ export const purchaseService = {
         const taxAmount = gross.mul(tax).div(100);
         subtotal = subtotal.plus(gross);
         taxTotal = taxTotal.plus(taxAmount);
+        grossByType.set(product.type, (grossByType.get(product.type) ?? new Prisma.Decimal(0)).plus(gross));
         return {
           productId: it.productId,
           size,
@@ -724,6 +740,44 @@ export const purchaseService = {
           createdById: actor.userId,
         },
       });
+
+      // GL posting — Dr Inventory (routed per product type) + Tax
+      // Recoverable, Cr Accounts Payable. Discount is distributed pro-rata
+      // across the inventory buckets so the entry always balances.
+      if (grandTotal.gt(ZERO)) {
+        const typeKeys = [...grossByType.keys()].map((t) => INVENTORY_KEY_BY_PRODUCT_TYPE[t]);
+        const keys: SystemAccountKey[] = [...new Set(typeKeys), 'AP_CONTROL'];
+        if (taxTotal.gt(ZERO)) keys.push('TAX_RECOVERABLE');
+        const acc = await accountsService.resolveSystemAccounts(tx, keys, supplier.branchId);
+
+        const lines: JournalLineInput[] = [];
+        for (const [type, gross] of grossByType) {
+          const net = subtotal.gt(ZERO) ? gross.minus(gross.div(subtotal).mul(discountTotal)) : gross;
+          if (net.lte(ZERO)) continue;
+          lines.push({
+            accountId: acc[INVENTORY_KEY_BY_PRODUCT_TYPE[type]],
+            debit: net.toNumber(),
+            credit: 0,
+            currency: input.currency,
+            fxRate: 1,
+          });
+        }
+        if (taxTotal.gt(ZERO)) {
+          lines.push({ accountId: acc.TAX_RECOVERABLE, debit: taxTotal.toNumber(), credit: 0, currency: input.currency, fxRate: 1 });
+        }
+        lines.push({ accountId: acc.AP_CONTROL, debit: 0, credit: grandTotal.toNumber(), currency: input.currency, fxRate: 1 });
+
+        await accountsService.postSystemJournal(tx, {
+          branchId: supplier.branchId,
+          date: input.invoiceDate,
+          memo: `Purchase invoice ${number}`,
+          sourceModule: 'purchase',
+          sourceRefType: 'PurchaseInvoice',
+          sourceRefId: invoice.id,
+          actorUserId: actor.userId,
+          lines,
+        });
+      }
 
       await recordAudit(
         {
@@ -834,12 +888,21 @@ export const purchaseService = {
       });
       const number = nextDocumentNumber('DN', year, yearCount);
 
+      const products = await tx.product.findMany({
+        where: { id: { in: [...new Set(input.items.map((it) => it.productId))] } },
+        select: { id: true, type: true },
+      });
+      const typeByProduct = new Map(products.map((p) => [p.id, p.type]));
+
       let totalAmount = new Prisma.Decimal(0);
+      const amountByType = new Map<ProductType, Prisma.Decimal>();
       const itemRows = input.items.map((it) => {
         const qty = new Prisma.Decimal(it.returnedQty);
         const price = new Prisma.Decimal(it.unitPrice);
         const total = qty.mul(price);
         totalAmount = totalAmount.plus(total);
+        const type = typeByProduct.get(it.productId) ?? 'CONSUMABLE';
+        amountByType.set(type, (amountByType.get(type) ?? ZERO).plus(total));
         return {
           productId: it.productId,
           returnedQty: qty,
@@ -899,6 +962,44 @@ export const purchaseService = {
             note: `${number} (return)`,
             createdById: actor.userId,
           },
+        });
+      }
+
+      // GL posting — Dr Accounts Payable (reduces what's owed), Cr Inventory
+      // (routed per product type) + Cr Tax Recoverable (reversing the input
+      // tax credit taken on the original purchase).
+      if (grandTotal.gt(ZERO)) {
+        const typeKeys = [...amountByType.keys()].map((t) => INVENTORY_KEY_BY_PRODUCT_TYPE[t]);
+        const keys: SystemAccountKey[] = ['AP_CONTROL', ...new Set(typeKeys)];
+        if (vatAdjustment.gt(ZERO)) keys.push('TAX_RECOVERABLE');
+        const acc = await accountsService.resolveSystemAccounts(tx, keys, supplier.branchId);
+
+        const lines: JournalLineInput[] = [
+          { accountId: acc.AP_CONTROL, debit: grandTotal.toNumber(), credit: 0, currency: supplier.currency, fxRate: 1 },
+        ];
+        for (const [type, amount] of amountByType) {
+          if (amount.lte(ZERO)) continue;
+          lines.push({
+            accountId: acc[INVENTORY_KEY_BY_PRODUCT_TYPE[type]],
+            debit: 0,
+            credit: amount.toNumber(),
+            currency: supplier.currency,
+            fxRate: 1,
+          });
+        }
+        if (vatAdjustment.gt(ZERO)) {
+          lines.push({ accountId: acc.TAX_RECOVERABLE, debit: 0, credit: vatAdjustment.toNumber(), currency: supplier.currency, fxRate: 1 });
+        }
+
+        await accountsService.postSystemJournal(tx, {
+          branchId: supplier.branchId,
+          date: input.returnDate,
+          memo: `Purchase return ${number}`,
+          sourceModule: 'purchase',
+          sourceRefType: 'DebitNote',
+          sourceRefId: debitNote.id,
+          actorUserId: actor.userId,
+          lines,
         });
       }
 

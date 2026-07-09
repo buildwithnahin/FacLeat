@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
+import { assertOpenPeriod } from '@/server/periods/guards';
+import { accountsService } from '@/server/services/accounts.service';
 import type { AppSession } from '@/server/auth/session';
 import type {
   CustomerCreateInput,
@@ -114,7 +116,9 @@ export const customerService = {
         },
       });
 
-      if (new Prisma.Decimal(input.openingBalance).gt(0)) {
+      const openingBalance = new Prisma.Decimal(input.openingBalance);
+      if (openingBalance.gt(0)) {
+        await assertOpenPeriod(tx, customer.branchId);
         await tx.customerLedger.create({
           data: {
             branchId: customer.branchId,
@@ -123,10 +127,29 @@ export const customerService = {
             refType: 'CUSTOMER',
             refId: customer.id,
             description: 'Opening balance',
-            debit: new Prisma.Decimal(input.openingBalance),
+            debit: openingBalance,
             credit: new Prisma.Decimal(0),
             createdById: actor.userId,
           },
+        });
+
+        const acc = await accountsService.resolveSystemAccounts(
+          tx,
+          ['AR_CONTROL', 'OPENING_BALANCE_EQUITY'],
+          customer.branchId,
+        );
+        await accountsService.postSystemJournal(tx, {
+          branchId: customer.branchId,
+          date: new Date(),
+          memo: `Opening balance for customer ${customer.name}`,
+          sourceModule: 'crm',
+          sourceRefType: 'CustomerOpeningBalance',
+          sourceRefId: customer.id,
+          actorUserId: actor.userId,
+          lines: [
+            { accountId: acc.AR_CONTROL, debit: openingBalance.toNumber(), credit: 0, currency: customer.currency, fxRate: 1 },
+            { accountId: acc.OPENING_BALANCE_EQUITY, debit: 0, credit: openingBalance.toNumber(), currency: customer.currency, fxRate: 1 },
+          ],
         });
       }
 
