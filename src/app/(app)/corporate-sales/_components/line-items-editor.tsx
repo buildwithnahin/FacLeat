@@ -175,7 +175,7 @@ export function LineItemsEditor({
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
-                <div className="grid grid-cols-3 gap-1 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 text-xs">
                   <label className="space-y-0.5">
                     <span className="text-muted-foreground">Qty</span>
                     <input

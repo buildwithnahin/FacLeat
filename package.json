@@ -2,7 +2,7 @@
   "name": "annex-leather-erp",
   "version": "0.1.0",
   "private": true,
-  "description": "Annex Leather ERP — Next.js 15 + PostgreSQL + Prisma + shadcn/ui",
+  "description": "DeshIT-BD SME ERP — Next.js 15 + PostgreSQL + Prisma + shadcn/ui",
   "scripts": {
     "dev": "node scripts/start-dev.mjs",
     "dev:next": "next dev",

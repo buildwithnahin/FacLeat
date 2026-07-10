@@ -1,5 +1,5 @@
 import { PageHeader } from '@/components/shared/page-header';
-import { RequisitionForm } from '../requisition-form';
+import { RequisitionForm } from '../_components/requisition-form';
 import { prisma } from '@/server/db';
 
 export const metadata = { title: 'New Purchase Requisition' };

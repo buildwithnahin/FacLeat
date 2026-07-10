@@ -19,16 +19,32 @@ const itemSchema = z.object({
   note: z.string().trim().max(500).optional().or(z.literal('')),
 });
 
+// Reasons on the generic manual receive/issue screens are deliberately
+// narrow — anything with a real document-backed flow (GRN, sales, damage,
+// customer return) must go through that flow instead, so the manual screen
+// can't be used as a bypass around approvals/audit trail those flows have.
+// OPENING/MANUAL_ADJUST (receive) and CONSUMPTION/MANUAL_ADJUST (issue) are
+// the only cases with no formal counterpart.
+export const RECEIPT_REF_TYPES = ['OPENING', 'MANUAL_ADJUST'] as const;
+export const ISSUE_REF_TYPES = ['CONSUMPTION', 'MANUAL_ADJUST'] as const;
+
 export const receiptSchema = z.object({
   branchId: z.string().cuid(),
   warehouseId: z.string().cuid(),
-  refType: z.string().trim().min(1).max(40).default('MANUAL_ADJUST'),
+  refType: z.enum(RECEIPT_REF_TYPES).default('MANUAL_ADJUST'),
   refId: z.string().trim().max(80).optional().or(z.literal('')),
   note: z.string().trim().max(500).optional().or(z.literal('')),
   items: z.array(itemSchema).min(1),
 });
 
-export const issueSchema = receiptSchema;
+export const issueSchema = z.object({
+  branchId: z.string().cuid(),
+  warehouseId: z.string().cuid(),
+  refType: z.enum(ISSUE_REF_TYPES).default('MANUAL_ADJUST'),
+  refId: z.string().trim().max(80).optional().or(z.literal('')),
+  note: z.string().trim().max(500).optional().or(z.literal('')),
+  items: z.array(itemSchema).min(1),
+});
 
 export const transferSchema = z.object({
   branchId: z.string().cuid(),

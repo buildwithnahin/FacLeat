@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
   const products = await productService.list(session);
 
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Annex Leather ERP';
+  workbook.creator = 'DeshIT-BD SME ERP';
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet('Products');

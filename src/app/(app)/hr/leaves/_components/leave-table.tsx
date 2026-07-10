@@ -404,7 +404,7 @@ export function LeaveTable({
 
               <div className="py-4 space-y-5 text-sm">
                 {/* Employee Card */}
-                <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-900/40 p-4 rounded-lg border border-slate-100 dark:border-slate-800">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-900/40 p-4 rounded-lg border border-slate-100 dark:border-slate-800">
                   <div>
                     <span className="text-xs text-muted-foreground block uppercase font-bold">Employee</span>
                     <span className="font-semibold text-slate-800 dark:text-slate-100">

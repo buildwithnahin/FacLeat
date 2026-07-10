@@ -24,7 +24,7 @@ export function RuleForm() {
           <Label>Name *</Label>
           <Input name="name" required placeholder="e.g. PO > 100k" />
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div>
             <Label>Module</Label>
             <Input name="module" required placeholder="purchase" />

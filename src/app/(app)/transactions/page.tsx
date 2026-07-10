@@ -1117,9 +1117,9 @@ function CashInPanel({ prefillDate }: { prefillDate?: string | null }) {
       {error && <ErrorBanner msg={error} />}
 
       {/* Split layout: form left, recent transactions right */}
-      <div className="flex gap-5">
+      <div className="flex flex-col gap-5 lg:flex-row">
         {/* ── Left: Add cash in entry form ── */}
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <form onSubmit={handleSubmit} className="space-y-4">
             <h3 className="text-sm font-semibold text-gray-800">Add cash in entry</h3>
 
@@ -1131,7 +1131,7 @@ function CashInPanel({ prefillDate }: { prefillDate?: string | null }) {
             )}
 
             {/* Row 1: Date & time + Voucher number */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
                   Date &amp; time <span className="text-red-500">*</span>
@@ -1161,7 +1161,7 @@ function CashInPanel({ prefillDate }: { prefillDate?: string | null }) {
             </div>
 
             {/* Row 2: Amount + Tax */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
                   Amount (without tax) <span className="text-red-500">*</span>
@@ -1206,7 +1206,7 @@ function CashInPanel({ prefillDate }: { prefillDate?: string | null }) {
             </div>
 
             {/* Row 3: Contact + Receive mode */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-gray-700">Contact</label>
                 <select
@@ -1239,7 +1239,7 @@ function CashInPanel({ prefillDate }: { prefillDate?: string | null }) {
             </div>
 
             {/* Row 4: Category + Reference */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-gray-700">
                   Category <span className="text-red-500">*</span>
@@ -1330,7 +1330,7 @@ function CashInPanel({ prefillDate }: { prefillDate?: string | null }) {
         </div>
 
         {/* ── Right: Recent transactions ── */}
-        <div className="w-72 shrink-0">
+        <div className="w-full lg:w-72 lg:shrink-0">
           <div className="border border-gray-200 rounded-lg overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
               <h3 className="text-sm font-semibold text-gray-700">Recent transactions</h3>
@@ -1614,9 +1614,9 @@ function CashOutPanel({ prefillDate }: { prefillDate?: string | null }) {
       {error && <ErrorBanner msg={error} />}
 
       {/* Split layout: form left, recent transactions right */}
-      <div className="flex gap-5">
+      <div className="flex flex-col gap-5 lg:flex-row">
         {/* ── Left: Add cash out entry form ── */}
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <form onSubmit={handleSubmit} className="space-y-4">
             <h3 className="text-sm font-semibold text-gray-800">Add cash out entry</h3>
 
@@ -1628,7 +1628,7 @@ function CashOutPanel({ prefillDate }: { prefillDate?: string | null }) {
             )}
 
             {/* Row 1: Date & time + Voucher number */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
                   Date &amp; time <span className="text-red-500">*</span>
@@ -1658,7 +1658,7 @@ function CashOutPanel({ prefillDate }: { prefillDate?: string | null }) {
             </div>
 
             {/* Row 2: Amount + Tax */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
                   Amount (without tax) <span className="text-red-500">*</span>
@@ -1701,7 +1701,7 @@ function CashOutPanel({ prefillDate }: { prefillDate?: string | null }) {
             </div>
 
             {/* Row 3: Contact + Pay mode */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-gray-700">Contact</label>
                 <select
@@ -1734,7 +1734,7 @@ function CashOutPanel({ prefillDate }: { prefillDate?: string | null }) {
             </div>
 
             {/* Row 4: Category + Reference */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-gray-700">
                   Category <span className="text-red-500">*</span>
@@ -1824,7 +1824,7 @@ function CashOutPanel({ prefillDate }: { prefillDate?: string | null }) {
         </div>
 
         {/* ── Right: Recent transactions ── */}
-        <div className="w-72 shrink-0">
+        <div className="w-full lg:w-72 lg:shrink-0">
           <div className="border border-gray-200 rounded-lg overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
               <h3 className="text-sm font-semibold text-gray-700">Recent transactions</h3>

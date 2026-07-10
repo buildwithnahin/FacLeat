@@ -75,7 +75,7 @@ export default async function PayslipDetailsPage({
         <CardHeader className="text-center border-b pb-6 mb-6">
           <div className="flex justify-between items-start">
             <div className="text-left">
-              <h2 className="text-2xl font-bold tracking-tight">Annex Leather Limited</h2>
+              <h2 className="text-2xl font-bold tracking-tight">DeshIT-BD SME ERP Limited</h2>
               <p className="text-muted-foreground text-sm mt-1">{employee.branch?.name || 'Head Office'}</p>
             </div>
             <div className="text-right">
@@ -86,7 +86,7 @@ export default async function PayslipDetailsPage({
         </CardHeader>
         <CardContent className="space-y-8">
           
-          <div className="grid grid-cols-2 gap-x-12 gap-y-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-4 text-sm">
             <div className="space-y-1">
               <div className="flex justify-between"><span className="text-muted-foreground">Employee Name:</span> <span className="font-semibold">{employee.firstName} {employee.lastName}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Employee Code:</span> <span>{employee.code}</span></div>

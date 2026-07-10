@@ -53,7 +53,7 @@ export default async function BalanceSheetPage({
       </div>
 
       <Card className="mt-6">
-        <div className="p-6 grid grid-cols-2 gap-4 text-sm">
+        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div>
             <div className="text-xs uppercase tracking-wider text-muted-foreground">Total assets</div>
             <div className="text-2xl font-semibold tabular-nums mt-1">{bs.totals.asset.toString()}</div>

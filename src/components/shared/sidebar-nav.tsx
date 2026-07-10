@@ -256,7 +256,7 @@ export function SidebarNav({ modules }: { modules: ClientNavModule[] }) {
 
           const rowClasses = cn(
             'group w-full flex items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors',
-            active ? 'bg-primary/90 text-white' : 'text-white/80 hover:bg-white/5 hover:text-white',
+            active ? 'bg-white/10 text-white' : 'text-white/80 hover:bg-white/5 hover:text-white',
           );
 
           return (

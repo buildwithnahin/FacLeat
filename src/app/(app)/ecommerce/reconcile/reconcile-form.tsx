@@ -90,7 +90,7 @@ export function ReconcileForm({
         </select>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <div>
           <Label>Period start</Label>
           <Input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />

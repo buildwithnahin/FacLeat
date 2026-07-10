@@ -131,7 +131,7 @@ export default async function QuoteDetailPage({
                 { key: 'total', header: 'Line total', align: 'right', cell: (r) => <span className="tabular font-medium">{formatCurrency(r.lineTotal, currency)}</span> },
               ]}
             />
-            <div className="border-t p-4 grid grid-cols-2 gap-3 text-sm max-w-sm ml-auto">
+            <div className="border-t p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm max-w-sm ml-auto">
               <div className="text-muted-foreground">Subtotal</div>
               <div className="text-right tabular">{formatCurrency(quote.subtotal, currency)}</div>
               <div className="text-muted-foreground">Discount</div>

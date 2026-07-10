@@ -1,4 +1,4 @@
-# Annex Leather ERP
+# DeshIT-BD SME ERP
 
 A full enterprise ERP for leather / factory / showroom / business operations — covering inventory, factory, retail/wholesale/corporate/online sales, purchase, accounting, assets, HR & payroll, reporting, approvals, and audit, with multi-branch support and role-based access.
 
@@ -298,4 +298,4 @@ The previous Express + Mongoose + React/Vite codebase in `client/` and `server/`
 
 ## License
 
-Proprietary software developed for Annex Leather.
+Proprietary software developed for DeshIT-BD SME ERP.

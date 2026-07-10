@@ -117,7 +117,7 @@ export function LCAmendmentList({ lcId, amendments, lcStatus }: Props) {
                   <Pill tone={AMEND_STATUS_TONE[a.status] ?? 'grey'}>{a.status}</Pill>
                 </div>
                 <p className="text-xs text-muted-foreground">{a.reason}</p>
-                <div className="text-xs text-muted-foreground grid grid-cols-2 gap-1">
+                <div className="text-xs text-muted-foreground grid grid-cols-1 sm:grid-cols-2 gap-1">
                   {a.newExpiryDate && <span>New Expiry: {new Date(a.newExpiryDate).toLocaleDateString()}</span>}
                   {a.newLcAmount && <span>New Amount: {a.newLcAmount.toString()}</span>}
                   {a.newLatestShipDate && <span>New Ship Date: {new Date(a.newLatestShipDate).toLocaleDateString()}</span>}

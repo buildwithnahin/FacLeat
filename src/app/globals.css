@@ -31,6 +31,7 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -49,18 +50,21 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.141 0.005 285.823);
 
-  /* blue-600 — matches Figma primary */
-  --primary: oklch(0.546 0.213 259.58);
-  --primary-foreground: oklch(0.985 0 0);
+  /* Primary Blue — brand navy */
+  --primary: #0e2a47;
+  --primary-foreground: #ffffff;
 
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
+  /* Accent Gold — secondary CTA fill (matches "Secondary" button in design system) */
+  --secondary: #b88634;
+  --secondary-foreground: #ffffff;
 
-  --muted: oklch(0.967 0.001 286.375);
+  /* Soft Gray — muted surfaces */
+  --muted: #e6ecf2;
   --muted-foreground: oklch(0.552 0.016 285.938);
 
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
+  /* Light Blue — subtle hover/highlight surface (kept low-contrast so it doesn't compete with gold) */
+  --accent: #f1f6fb;
+  --accent-foreground: #0e2a47;
 
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
@@ -73,37 +77,39 @@
 
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.546 0.213 259.58);
+  --ring: #0e2a47;
 
-  /* dark slate-900 sidebar per Figma */
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.546 0.213 259.58);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  /* Primary Blue sidebar per new design system */
+  --sidebar: #0e2a47;
+  --sidebar-foreground: #ffffff;
+  --sidebar-accent: #b88634;
+  --sidebar-accent-foreground: #0e2a47;
 }
 
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.645 0.19 259.58);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: #0a1b2e;
+  --foreground: #f5f8fb;
+  --card: #0e2338;
+  --card-foreground: #f5f8fb;
+  --popover: #0e2338;
+  --popover-foreground: #f5f8fb;
+  --primary: #4c7db0;
+  --primary-foreground: #ffffff;
+  --secondary: #c99b4a;
+  --secondary-foreground: #0a1b2e;
+  --muted: #16293d;
+  --muted-foreground: #9fb0c1;
+  --accent: #1e3a5a;
+  --accent-foreground: #f5f8fb;
   --destructive: oklch(0.637 0.237 25.331);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.274 0.006 286.033);
-  --input: oklch(0.274 0.006 286.033);
-  --ring: oklch(0.645 0.19 259.58);
-  --sidebar: oklch(0.141 0.005 285.823);
-  --sidebar-foreground: oklch(0.985 0 0);
+  --border: #223447;
+  --input: #223447;
+  --ring: #4c7db0;
+  --sidebar: #081625;
+  --sidebar-foreground: #f5f8fb;
+  --sidebar-accent: #b88634;
+  --sidebar-accent-foreground: #0a1b2e;
 }
 
 @layer base {

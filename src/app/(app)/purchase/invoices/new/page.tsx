@@ -1,5 +1,5 @@
 import { PageHeader } from '@/components/shared/page-header';
-import { InvoiceForm } from '../invoice-form';
+import { InvoiceForm } from '../_components/invoice-form';
 import { prisma } from '@/server/db';
 import type { CurrencyCode } from '@/lib/money';
 

@@ -1,5 +1,5 @@
 import { PageHeader } from '@/components/shared/page-header';
-import { POForm } from '../po-form';
+import { POForm } from '../_components/po-form';
 import { prisma } from '@/server/db';
 
 export const metadata = { title: 'New Purchase Order' };

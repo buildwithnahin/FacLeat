@@ -1,5 +1,5 @@
 import { PageHeader } from '@/components/shared/page-header';
-import { DebitNoteForm } from '../debit-note-form';
+import { DebitNoteForm } from '../_components/debit-note-form';
 import { prisma } from '@/server/db';
 
 export const metadata = { title: 'New Purchase Return' };

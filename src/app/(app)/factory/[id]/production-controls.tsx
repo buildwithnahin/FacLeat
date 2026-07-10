@@ -297,7 +297,7 @@ export function ProductionControls({
             <Label className="text-xs">Task / worker</Label>
             <Input name="description" type="text" placeholder="e.g. Cutting — John" required maxLength={255} />
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
               <Label className="text-xs">Hours</Label>
               <Input name="hours" type="number" min="0.01" step="0.01" required />

@@ -32,7 +32,7 @@ function shell(title: string, body: string, href?: string | null) {
       <h2 style="margin:0 0 12px;font-size:18px">${escapeHtml(title)}</h2>
       <div style="font-size:14px">${body}</div>
       ${cta}
-      <p style="margin-top:24px;color:#6b7280;font-size:12px">Annex Leather ERP</p>
+      <p style="margin-top:24px;color:#6b7280;font-size:12px">DeshIT-BD SME ERP</p>
     </div>
   `;
 }

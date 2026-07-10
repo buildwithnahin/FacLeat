@@ -158,7 +158,7 @@ export function LCDrawdownList({ lcId, drawdowns, lcStatus, currency, availableA
                     </Pill>
                   </div>
                 </div>
-                <div className="text-xs text-muted-foreground grid grid-cols-2 gap-1">
+                <div className="text-xs text-muted-foreground grid grid-cols-1 sm:grid-cols-2 gap-1">
                   <span>Presented: {new Date(dd.presentationDate).toLocaleDateString()}</span>
                   {dd.documentsDueBy && <span>Docs due: {new Date(dd.documentsDueBy).toLocaleDateString()}</span>}
                   {dd.blRef && <span>BL: {dd.blRef}</span>}
@@ -217,7 +217,7 @@ export function LCDrawdownList({ lcId, drawdowns, lcStatus, currency, availableA
                 </FormItem>
               )} />
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField control={form.control} name="commercialInvoiceRef" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Commercial Invoice Ref</FormLabel>

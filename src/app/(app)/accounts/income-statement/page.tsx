@@ -47,7 +47,7 @@ export default async function IncomeStatementPage({
       </div>
 
       <Card className="mt-6">
-        <div className="p-6 grid grid-cols-3 gap-4 text-sm">
+        <div className="p-6 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
           <KpiCell label="Total income" value={report.totals.income} color="text-emerald-600" />
           <KpiCell label="Total expense" value={report.totals.expense} color="text-destructive" />
           <KpiCell

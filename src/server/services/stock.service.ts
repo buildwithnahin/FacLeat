@@ -22,7 +22,7 @@ export type MovementItem = {
 export type ReceiptInput = {
   branchId: string;
   warehouseId: string;
-  refType: string; // e.g. 'GRN' | 'MANUAL_ADJUST' | 'OPENING'
+  refType: string; // 'OPENING' | 'MANUAL_ADJUST' on the manual UI; formal flows (GRN, returns) write InventoryLedger directly with their own refType
   refId?: string;
   note?: string;
   items: MovementItem[];
@@ -31,7 +31,7 @@ export type ReceiptInput = {
 export type IssueInput = {
   branchId: string;
   warehouseId: string;
-  refType: string; // e.g. 'SALE' | 'DAMAGE' | 'MANUAL_ADJUST'
+  refType: string; // 'CONSUMPTION' | 'MANUAL_ADJUST' on the manual UI; formal flows (sales, damage) write InventoryLedger directly with their own refType
   refId?: string;
   note?: string;
   items: MovementItem[];

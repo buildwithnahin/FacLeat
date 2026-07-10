@@ -142,7 +142,7 @@ export default async function TradeOrderDetailPage({ params }: { params: Promise
                         <span className="text-sm font-medium">Shipment #{s.sequence}</span>
                         <Pill tone={SHIP_STATUS_TONE[s.status] ?? 'grey'}>{s.status.replace(/_/g, ' ')}</Pill>
                       </div>
-                      <div className="text-xs text-muted-foreground grid grid-cols-2 gap-1">
+                      <div className="text-xs text-muted-foreground grid grid-cols-1 sm:grid-cols-2 gap-1">
                         {s.vesselName && <span>Vessel: {s.vesselName}</span>}
                         {s.blNumber && <span>BL: {s.blNumber}</span>}
                         {s.etd && <span>ETD: {new Date(s.etd).toLocaleDateString()}</span>}

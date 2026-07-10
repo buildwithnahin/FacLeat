@@ -7,7 +7,7 @@ export default function LoginPage() {
   return (
     <div className="bg-card border rounded-lg p-8 shadow-sm">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Annex Leather ERP</h1>
+        <h1 className="text-2xl font-semibold">DeshIT-BD SME ERP</h1>
         <p className="text-sm text-muted-foreground mt-1">Sign in to your account</p>
       </div>
       <Suspense>

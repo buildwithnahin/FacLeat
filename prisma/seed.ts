@@ -441,8 +441,8 @@ async function main() {
   // 1a. Default company
   const defaultCompany = await prisma.company.upsert({
     where: { code: 'DEFAULT' },
-    update: {},
-    create: { code: 'DEFAULT', name: 'Annex Leather', currency: 'BDT' },
+    update: { name: 'DeshIT-BD SME ERP' },
+    create: { code: 'DEFAULT', name: 'DeshIT-BD SME ERP', currency: 'BDT' },
   });
   console.log(`  ✓ Company: ${defaultCompany.name}`);
 
@@ -654,6 +654,9 @@ async function main() {
   const warehouseData = [
     { branchCode: 'HQ', code: 'MAIN', name: 'Main Warehouse', type: 'MAIN' as const },
     { branchCode: 'HQ', code: 'STORE', name: 'Showroom Store', type: 'SHOWROOM' as const },
+    { branchCode: 'HQ', code: 'QRT', name: 'Quarantine', type: 'QUARANTINE' as const },
+    { branchCode: 'HQ', code: 'DMG', name: 'Damaged Stock', type: 'DAMAGED' as const },
+    { branchCode: 'HQ', code: 'WIP', name: 'Work In Progress', type: 'WIP' as const },
     { branchCode: 'DHAKA', code: 'MAIN', name: 'Dhaka Showroom', type: 'SHOWROOM' as const },
     { branchCode: 'CTG', code: 'MAIN', name: 'Chittagong Warehouse', type: 'MAIN' as const },
     { branchCode: 'FACTORY', code: 'MAIN', name: 'Factory Storage', type: 'MAIN' as const },

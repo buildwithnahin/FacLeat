@@ -63,7 +63,7 @@ export function PaymentForm({
           Balance due <span className="tabular text-red-600">{formatCurrency(balanceDue, currency)}</span>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <div>
           <Label>Method</Label>
           <select

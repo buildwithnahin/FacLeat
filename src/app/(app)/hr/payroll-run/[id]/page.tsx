@@ -69,7 +69,7 @@ export default async function PayrollRunDetailsPage({ params }: { params: Promis
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-8 text-sm">
                 <div>
                   <div className="flex justify-between pb-2 border-b border-border/50">
                     <span className="text-muted-foreground">Total Overtime (OT)</span>

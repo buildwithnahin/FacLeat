@@ -33,7 +33,7 @@ export default async function EquityChangesPage({
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <div className="text-center mb-6">
-        <h1 className="text-xl font-bold">Annex Leather Ltd.</h1>
+        <h1 className="text-xl font-bold">DeshIT-BD SME ERP Ltd.</h1>
         <p className="text-sm text-gray-500">Statement of Changes in Equity</p>
         <p className="text-sm text-gray-500">For the year ended {to.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
       </div>

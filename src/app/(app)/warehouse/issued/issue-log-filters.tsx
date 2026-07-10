@@ -77,7 +77,9 @@ export function IssueLogFilters({ warehouses }: { warehouses: Warehouse[] }) {
           <SelectItem value="all">All types</SelectItem>
           <SelectItem value="SALE">Sale</SelectItem>
           <SelectItem value="DAMAGE">Damage</SelectItem>
+          <SelectItem value="CUSTOMER_RETURN">Customer return</SelectItem>
           <SelectItem value="MANUAL_ADJUST">Manual adjust</SelectItem>
+          <SelectItem value="CONSUMPTION">Consumption</SelectItem>
           <SelectItem value="PRODUCTION">Production</SelectItem>
           <SelectItem value="TRANSFER">Transfer</SelectItem>
         </SelectContent>

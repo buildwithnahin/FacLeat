@@ -210,7 +210,7 @@ export function ProductsBrowser({
           </div>
 
           {/* Column checkboxes */}
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 py-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 py-1">
             {PRODUCT_EXPORT_COLS.map((col) => (
               <label
                 key={col.key}

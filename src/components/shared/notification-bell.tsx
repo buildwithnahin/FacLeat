@@ -103,7 +103,7 @@ export function NotificationBell({
                 {unread > 0 && (
                   <button
                     type="button"
-                    className="text-xs text-blue-600 hover:underline"
+                    className="text-xs text-primary hover:underline"
                     onClick={() => void markAllRead()}
                   >
                     Mark all read
@@ -111,7 +111,7 @@ export function NotificationBell({
                 )}
                 <Link
                   href="/notifications"
-                  className="text-xs text-blue-600 hover:underline"
+                  className="text-xs text-primary hover:underline"
                   onClick={() => setOpen(false)}
                 >
                   View all

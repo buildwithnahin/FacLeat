@@ -11,7 +11,7 @@ export interface Step {
 
 export function StepIndicator({ steps, className }: { steps: Step[]; className?: string }) {
   return (
-    <div className={cn('rounded-lg bg-blue-50 p-4', className)}>
+    <div className={cn('rounded-lg bg-accent p-4', className)}>
       <div className="flex items-center gap-2">
         {steps.map((step, idx) => {
           const isLast = idx === steps.length - 1;
@@ -22,7 +22,7 @@ export function StepIndicator({ steps, className }: { steps: Step[]; className?:
                   className={cn(
                     'h-8 w-8 rounded-full grid place-items-center text-xs font-semibold shrink-0',
                     step.state === 'completed' && 'bg-emerald-500 text-white',
-                    step.state === 'active' && 'bg-blue-600 text-white',
+                    step.state === 'active' && 'bg-primary text-primary-foreground',
                     step.state === 'pending' && 'bg-neutral-300 text-neutral-700',
                   )}
                 >

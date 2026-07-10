@@ -2,7 +2,7 @@
 
 
 ## Project
-Annex Leather ERP — Full Enterprise ERP for leather / factory / showroom / business operations.
+DeshIT-BD SME ERP — Full Enterprise ERP for leather / factory / showroom / business operations.
 
 
 This file is the master implementation guide for Claude Code / Claude AI to understand the product scope, architecture, development rules, module boundaries, UI direction, design system, and execution order.

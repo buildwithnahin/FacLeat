@@ -244,19 +244,20 @@ export function StockMovementForm({
                   {mode === 'receive' ? (
                     <>
                       <option value="OPENING">Opening balance</option>
-                      <option value="GRN">Goods receiving</option>
-                      <option value="RETURN">Customer return</option>
                       <option value="MANUAL_ADJUST">Manual adjustment</option>
                     </>
                   ) : (
                     <>
-                      <option value="SALE">Sale</option>
-                      <option value="DAMAGE">Damage / loss</option>
                       <option value="CONSUMPTION">Consumption</option>
                       <option value="MANUAL_ADJUST">Manual adjustment</option>
                     </>
                   )}
                 </select>
+                <p className="text-xs text-muted-foreground">
+                  {mode === 'receive'
+                    ? 'Goods receiving and customer returns go through Purchase → GRN / POS / Wholesale / Warehouse Returns instead.'
+                    : 'Sales and damage write-offs go through POS / Wholesale / Corporate Sales / Warehouse Damage Report instead.'}
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="refId">Reference #</Label>

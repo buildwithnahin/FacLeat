@@ -43,7 +43,7 @@ export function CategoryForm() {
             ))}
           </select>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div>
             <Label>Life (months)</Label>
             <Input name="defaultLifeMonths" type="number" min="1" defaultValue={60} />

@@ -21,7 +21,7 @@ export default async function FinancialNotesPage({
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <div className="text-center mb-6">
-        <h1 className="text-xl font-bold">Annex Leather Ltd.</h1>
+        <h1 className="text-xl font-bold">DeshIT-BD SME ERP Ltd.</h1>
         <p className="text-sm text-gray-500">Notes to the Financial Statements</p>
         <p className="text-sm text-gray-500">As at {asOfLabel}</p>
       </div>

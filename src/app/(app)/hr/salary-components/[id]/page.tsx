@@ -59,15 +59,15 @@ export default async function SalaryComponentViewPage({
             <CardTitle>Basic Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 border-b pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
               <span className="text-muted-foreground font-medium">Component Name</span>
               <span className="col-span-2 font-semibold">{component.name}</span>
             </div>
-            <div className="grid grid-cols-3 border-b pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
               <span className="text-muted-foreground font-medium">Code</span>
               <span className="col-span-2 font-mono">{component.code}</span>
             </div>
-            <div className="grid grid-cols-3 border-b pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
               <span className="text-muted-foreground font-medium">Category</span>
               <span className="col-span-2">
                 <Badge variant={component.category === 'EARNINGS' ? 'success' : 'destructive'}>
@@ -75,11 +75,11 @@ export default async function SalaryComponentViewPage({
                 </Badge>
               </span>
             </div>
-            <div className="grid grid-cols-3 border-b pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
               <span className="text-muted-foreground font-medium">Type</span>
               <span className="col-span-2">{component.type}</span>
             </div>
-            <div className="grid grid-cols-3 border-b pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
               <span className="text-muted-foreground font-medium">Status</span>
               <span className="col-span-2">
                 <Badge variant={component.status === 'ACTIVE' ? 'default' : 'outline'}>
@@ -87,7 +87,7 @@ export default async function SalaryComponentViewPage({
                 </Badge>
               </span>
             </div>
-            <div className="grid grid-cols-3 pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 pb-2">
               <span className="text-muted-foreground font-medium">Description</span>
               <span className="col-span-2">{component.description || '-'}</span>
             </div>
@@ -99,27 +99,27 @@ export default async function SalaryComponentViewPage({
             <CardTitle>Calculation Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 border-b pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
               <span className="text-muted-foreground font-medium">Calculation Method</span>
               <span className="col-span-2">{component.calculationType.replace('_', ' ')}</span>
             </div>
             
             {component.calculationType === 'PERCENTAGE' && (
-              <div className="grid grid-cols-3 border-b pb-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
                 <span className="text-muted-foreground font-medium">Percentage</span>
                 <span className="col-span-2">{component.value ? `${component.value}% of ${component.baseComponent || 'Base'}` : '-'}</span>
               </div>
             )}
             
             {component.calculationType === 'FIXED_AMOUNT' && (
-              <div className="grid grid-cols-3 border-b pb-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
                 <span className="text-muted-foreground font-medium">Fixed Value</span>
                 <span className="col-span-2">{component.value ? component.value.toString() : '-'}</span>
               </div>
             )}
 
             {component.calculationType === 'FORMULA' && (
-              <div className="grid grid-cols-3 border-b pb-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
                 <span className="text-muted-foreground font-medium">Formula</span>
                 <span className="col-span-2 font-mono text-sm bg-slate-100 dark:bg-slate-800 p-1 rounded">{component.formula}</span>
               </div>
@@ -132,19 +132,19 @@ export default async function SalaryComponentViewPage({
             <CardTitle>Payroll Settings</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 border-b pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
               <span className="text-muted-foreground font-medium">Include in Gross</span>
               <span className="col-span-2">{renderBoolean(component.includeInGross)}</span>
             </div>
-            <div className="grid grid-cols-3 border-b pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
               <span className="text-muted-foreground font-medium">Include in Net</span>
               <span className="col-span-2">{renderBoolean(component.includeInNet)}</span>
             </div>
-            <div className="grid grid-cols-3 border-b pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
               <span className="text-muted-foreground font-medium">Taxable</span>
               <span className="col-span-2">{renderBoolean(component.isTaxable)}</span>
             </div>
-            <div className="grid grid-cols-3 border-b pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
               <span className="text-muted-foreground font-medium">Show in Payslip</span>
               <span className="col-span-2">{renderBoolean(component.showInPayslip)}</span>
             </div>
@@ -156,23 +156,23 @@ export default async function SalaryComponentViewPage({
             <CardTitle>Validation Rules</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 border-b pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
               <span className="text-muted-foreground font-medium">Mandatory</span>
               <span className="col-span-2">{renderBoolean(component.isMandatory)}</span>
             </div>
-            <div className="grid grid-cols-3 border-b pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
               <span className="text-muted-foreground font-medium">Editable During Payroll</span>
               <span className="col-span-2">{renderBoolean(component.isEditableDuringPayroll)}</span>
             </div>
-            <div className="grid grid-cols-3 border-b pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
               <span className="text-muted-foreground font-medium">Allow Negative</span>
               <span className="col-span-2">{renderBoolean(component.allowNegativeValue)}</span>
             </div>
-            <div className="grid grid-cols-3 border-b pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-b pb-2">
               <span className="text-muted-foreground font-medium">Min Amount</span>
               <span className="col-span-2">{component.minAmount ? component.minAmount.toString() : '-'}</span>
             </div>
-            <div className="grid grid-cols-3 pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 pb-2">
               <span className="text-muted-foreground font-medium">Max Amount</span>
               <span className="col-span-2">{component.maxAmount ? component.maxAmount.toString() : '-'}</span>
             </div>

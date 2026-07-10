@@ -46,7 +46,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
             onClick={() => setOpen(false)}
           />
           <div className="absolute right-0 z-30 mt-2 w-72 rounded-md border bg-background p-3 shadow-lg">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Input
                 type="date"
                 value={current.from ?? ''}

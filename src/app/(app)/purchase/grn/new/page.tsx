@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/shared/data-table';
 import { AlertBanner } from '@/components/shared/alert-banner';
-import { GrnForm } from '../grn-form';
+import { GrnForm } from '../_components/grn-form';
 import { prisma } from '@/server/db';
 
 export const metadata = { title: 'Receive goods' };

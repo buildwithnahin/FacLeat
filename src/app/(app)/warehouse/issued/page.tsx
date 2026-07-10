@@ -205,7 +205,9 @@ function RefTypeBadge({ refType }: { refType: string }) {
   const map: Record<string, { label: string; variant: 'destructive' | 'warning' | 'outline' | 'secondary' }> = {
     SALE: { label: 'Sale', variant: 'destructive' },
     DAMAGE: { label: 'Damage', variant: 'warning' },
+    CUSTOMER_RETURN: { label: 'Customer Return', variant: 'warning' },
     MANUAL_ADJUST: { label: 'Manual', variant: 'outline' },
+    CONSUMPTION: { label: 'Consumption', variant: 'secondary' },
     PRODUCTION: { label: 'Production', variant: 'secondary' },
     TRANSFER: { label: 'Transfer', variant: 'secondary' },
   };

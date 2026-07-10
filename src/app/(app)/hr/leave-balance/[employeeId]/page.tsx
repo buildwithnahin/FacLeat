@@ -126,7 +126,7 @@ export default async function EmployeeLeaveBalancePage({
                 </div>
                 <Badge variant={statusVariant(row.status)}>{statusLabel(row.status)}</Badge>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
                 <QuickMetric label="Entitled" value={formatDays(row)} />
                 <QuickMetric label="Used" value={String(row.approvedTakenDays)} />
                 <QuickMetric label="Available" value={formatAvailable(row)} />

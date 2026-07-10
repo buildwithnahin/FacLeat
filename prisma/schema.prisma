@@ -1,4 +1,4 @@
-// Annex Leather ERP — Prisma schema
+// DeshIT-BD SME ERP — Prisma schema
 // Phase 0 foundation tables only. Module-specific models (inventory,
 // sales, accounts, etc.) are added as their modules are built.
 

@@ -185,7 +185,7 @@ export function PayrollAdjustmentForm({
                 <CardDescription>Configure the amount and reason</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="type"
@@ -253,7 +253,7 @@ export function PayrollAdjustmentForm({
                   )}
                 />
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="reason"
