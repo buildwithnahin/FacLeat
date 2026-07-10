@@ -557,14 +557,22 @@ export async function isResignationTableAvailable(forceRefresh = false) {
     return resignationTableAvailabilityCache.available;
   }
 
-  const rows = await prisma.$queryRaw<Array<{ table_name: string }>>`
-    SELECT table_name
-    FROM information_schema.tables
-    WHERE table_schema = 'public'
-      AND table_name IN (${Prisma.join(REQUIRED_TABLES)})
-  `;
+  let available = true;
+  try {
+    await Promise.all([
+      prisma.employeeResignation.findFirst({ select: { id: true } }),
+      prisma.employeeExitClearance.findFirst({ select: { id: true } }),
+      prisma.employeeExitDepartmentClearance.findFirst({ select: { id: true } }),
+      prisma.employeeExitAssetReturn.findFirst({ select: { id: true } }),
+      prisma.employeeExitSystemAccess.findFirst({ select: { id: true } }),
+      prisma.employeeExitAccountsSettlement.findFirst({ select: { id: true } }),
+      prisma.employeeExitInterview.findFirst({ select: { id: true } }),
+    ]);
+  } catch (error) {
+    if (!isEmployeeResignationTableMissingError(error)) throw error;
+    available = false;
+  }
 
-  const available = REQUIRED_TABLES.every((tableName) => rows.some((row) => row.table_name === tableName));
   resignationTableAvailabilityCache = { checkedAt: now, available };
   return available;
 }

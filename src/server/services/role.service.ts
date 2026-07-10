@@ -95,6 +95,21 @@ export const roleService = {
       if (dup) throw new ValidationError('Role name already exists');
     }
 
+    // Prevent a total lockout: if this role currently grants roles:write and the
+    // edit would remove it, make sure at least one other role still has it.
+    const hadRolesWrite = existing.permissions.some((rp) => rp.permission.key === 'roles:write');
+    const willHaveRolesWrite = input.permissionKeys.includes('roles:write');
+    if (hadRolesWrite && !willHaveRolesWrite) {
+      const otherRolesWithAccess = await prisma.rolePermission.count({
+        where: { roleId: { not: input.id }, permission: { key: 'roles:write' } },
+      });
+      if (otherRolesWithAccess === 0) {
+        throw new ValidationError(
+          'Cannot remove role management access from this role — no other role would retain it',
+        );
+      }
+    }
+
     const perms = await prisma.permission.findMany({
       where: { key: { in: input.permissionKeys } },
       select: { id: true },

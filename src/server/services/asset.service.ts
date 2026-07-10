@@ -229,6 +229,12 @@ export const assetService = {
     const actor = await authorize(session, 'assets:write');
     const existing = await prisma.asset.findUnique({ where: { id: input.id } });
     if (!existing) throw new NotFoundError('Asset not found');
+    if (existing.status === 'DISPOSED') {
+      throw new ValidationError('Cannot edit a disposed asset');
+    }
+    if (input.status === 'DISPOSED') {
+      throw new ValidationError('Use the dispose action to mark an asset as disposed');
+    }
 
     return prisma.$transaction(async (tx) => {
       const asset = await tx.asset.update({

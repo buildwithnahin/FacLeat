@@ -58,8 +58,11 @@ export const googleDriveStorage = {
     const drive = getDriveClient();
     try {
       await drive.files.delete({ fileId });
-    } catch {
-      // Ignore 404 — file already gone
+    } catch (error) {
+      const status = (error as { code?: number; response?: { status?: number } })?.code
+        ?? (error as { response?: { status?: number } })?.response?.status;
+      if (status !== 404) throw error;
+      // File already gone — nothing left to delete.
     }
   },
 

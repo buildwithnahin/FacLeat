@@ -540,17 +540,16 @@ export const tradeService = {
     });
 
     // Compute BL presentation deadline
-    const documentsDueBy = lc.latestShipDate
-      ? new Date(
-          new Date(input.presentationDate).getTime() + lc.presentationDays * 86400000,
-        )
-      : null;
+    const documentsDueBy = new Date(
+      new Date(input.presentationDate).getTime() + lc.presentationDays * 86400000,
+    );
 
     return prisma.$transaction(async (tx) => {
       const drawdown = await tx.lCDrawdown.create({
         data: {
           lcId: input.lcId,
           drawdownNumber: (lastDd?.drawdownNumber ?? 0) + 1,
+          status: 'DOCUMENTS_SUBMITTED',
           presentationDate: input.presentationDate,
           documentsDueBy,
           amount,
@@ -565,16 +564,19 @@ export const tradeService = {
         },
       });
 
-      // Update LC utilized / available
+      // Update LC utilized / available — availableAmount is always derived from
+      // lcAmount - utilizedAmount (not incrementally adjusted) so it stays
+      // self-consistent even when a drawdown uses tolerance headroom.
       const newUtilized = lc.utilizedAmount.plus(amount);
-      const newAvailable = lc.availableAmount.minus(amount);
+      const newAvailableRaw = lc.lcAmount.minus(newUtilized);
+      const newAvailable = newAvailableRaw.gt(D(0)) ? newAvailableRaw : D(0);
       const newStatus = newAvailable.lte(D(0)) ? 'FULLY_UTILIZED' : 'PARTIALLY_UTILIZED';
 
       await tx.letterOfCredit.update({
         where: { id: input.lcId },
         data: {
           utilizedAmount: newUtilized,
-          availableAmount: newAvailable.gt(D(0)) ? newAvailable : D(0),
+          availableAmount: newAvailable,
           status: newStatus,
         },
       });
@@ -614,16 +616,20 @@ export const tradeService = {
         },
       });
 
-      // If rejected, release the amount back to LC
+      // If rejected, release the amount back to LC. availableAmount is re-derived
+      // from lcAmount - utilizedAmount (not incremented by the raw drawdown amount)
+      // so it can't drift above the LC's real remaining balance when the original
+      // drawdown had been clamped for exceeding tolerance-adjusted availability.
       if (input.decision === 'REJECTED') {
+        const newUtilized = drawdown.lc.utilizedAmount.minus(drawdown.amount);
+        const newAvailableRaw = drawdown.lc.lcAmount.minus(newUtilized);
+        const newAvailable = newAvailableRaw.gt(D(0)) ? newAvailableRaw : D(0);
         await tx.letterOfCredit.update({
           where: { id: drawdown.lcId },
           data: {
-            utilizedAmount: { decrement: drawdown.amount },
-            availableAmount: { increment: drawdown.amount },
-            status: drawdown.lc.utilizedAmount.minus(drawdown.amount).lte(D(0))
-              ? 'ACTIVE'
-              : 'PARTIALLY_UTILIZED',
+            utilizedAmount: newUtilized,
+            availableAmount: newAvailable,
+            status: newUtilized.lte(D(0)) ? 'ACTIVE' : 'PARTIALLY_UTILIZED',
           },
         });
       }

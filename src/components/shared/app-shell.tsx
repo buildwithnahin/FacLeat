@@ -108,9 +108,9 @@ export async function AppShell({
           </MobileSidebarFrame>
 
           <div className="flex-1 flex flex-col min-w-0">
-            <header className="h-14 bg-background border-b sticky top-0 z-10 flex items-center gap-2 overflow-x-auto px-3 sm:gap-3 sm:px-6">
+            <header className="h-14 bg-background border-b sticky top-0 z-10 flex items-center gap-2 px-3 sm:gap-3 sm:px-6">
               <SidebarToggleButton />
-              <div className="min-w-[140px] flex-1 sm:max-w-xl">
+              <div className="min-w-0 flex-1 sm:max-w-xl">
                 <SearchCommand modules={visibleModules} />
               </div>
               <div className="flex shrink-0 items-center gap-2 sm:gap-3">

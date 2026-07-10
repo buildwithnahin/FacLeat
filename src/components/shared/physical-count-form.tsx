@@ -37,15 +37,15 @@ export interface PhysicalCountFormProps {
   branchId: string;
   warehouses: PhysicalCountWarehouseOption[];
   products: PhysicalCountProductOption[];
-  /** map from productId → current system balance */
-  balanceByProduct: Record<string, string>;
+  /** map from warehouseId → productId → current system balance */
+  balanceByWarehouseProduct: Record<string, Record<string, string>>;
 }
 
 export function PhysicalCountForm({
   branchId,
   warehouses,
   products,
-  balanceByProduct,
+  balanceByWarehouseProduct,
 }: PhysicalCountFormProps) {
   const [state, formAction, pending] = useActionState<StockFormState, FormData>(
     postPhysicalCountAction,
@@ -56,6 +56,19 @@ export function PhysicalCountForm({
   const [continuous, setContinuous] = useState(true);
   const scanRef = useRef<HTMLInputElement>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+
+  const balanceByProduct = useMemo(
+    () => balanceByWarehouseProduct[warehouseId] ?? {},
+    [balanceByWarehouseProduct, warehouseId],
+  );
+
+  // Re-sync already-scanned rows' System qty when the selected warehouse changes,
+  // so counters aren't left comparing against a different warehouse's balance.
+  useEffect(() => {
+    setRows((prev) =>
+      prev.map((r) => ({ ...r, system: balanceByProduct[r.productId] ?? '0' })),
+    );
+  }, [balanceByProduct]);
 
   useEffect(() => {
     scanRef.current?.focus();

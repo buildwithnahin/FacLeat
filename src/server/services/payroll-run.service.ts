@@ -311,7 +311,7 @@ export class PayrollRunService {
         let absentDeduction = 0;
         
         emp.payrollAdjustments.forEach(adj => {
-          if (adj.type === 'DEDUCTION' || adj.type === 'ATTENDANCE_ADJUSTMENT' && Number(adj.amount) > 0) {
+          if (adj.type === 'DEDUCTION' || (adj.type === 'ATTENDANCE_ADJUSTMENT' && Number(adj.amount) > 0)) {
             adjustmentsDeduction += Number(adj.amount);
             if (adj.reason === 'LATE_SALARY_REVISION') lateDeduction += Number(adj.amount);
             if (adj.reason === 'ATTENDANCE_CORRECTION') absentDeduction += Number(adj.amount);

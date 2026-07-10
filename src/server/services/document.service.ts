@@ -184,8 +184,11 @@ export const documentService = {
     if (doc._count.links > 0) {
       throw new ValidationError('Document is linked to entities — unlink first');
     }
-    await prisma.document.delete({ where: { id } });
+    // Remove the physical file before the DB row, so a storage failure leaves
+    // the document record (and its audit trail) intact instead of orphaning the
+    // file with no remaining pointer to it.
     await storageRemove(doc.storagePath);
+    await prisma.document.delete({ where: { id } });
     await recordAudit({
       actorId: actor.userId,
       branchId: doc.branchId,

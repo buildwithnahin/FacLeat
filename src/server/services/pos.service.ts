@@ -735,7 +735,12 @@ export const posService = {
       },
     });
     if (!sale) throw new NotFoundError('Sale not found');
-    return sale;
+    // cashierId has no Prisma relation to User, so resolve the display name separately.
+    const cashier = await prisma.user.findUnique({
+      where: { id: sale.cashierId },
+      select: { name: true },
+    });
+    return { ...sale, cashierName: cashier?.name ?? sale.cashierId };
   },
 
   async searchProducts(session: AppSession | null, branchId: string, query: string, limit = 30) {

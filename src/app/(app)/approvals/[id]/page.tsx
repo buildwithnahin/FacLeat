@@ -47,10 +47,20 @@ export default async function ApprovalDetailPage({
     throw e;
   }
 
-  const active = req.steps.find((s) => s.status === 'ACTIVE');
+  // A CHANGES_REQUESTED request has no ACTIVE step (see approval.service.ts's
+  // decide()) — fall back to the CHANGES_REQUESTED step so the same approver can
+  // still see the decide controls once the submitter has addressed the feedback.
+  const active =
+    req.steps.find((s) => s.status === 'ACTIVE') ??
+    (req.status === 'CHANGES_REQUESTED'
+      ? req.steps.find((s) => s.status === 'CHANGES_REQUESTED')
+      : undefined);
   const canDecide =
     !!active && !!session && session.roles.includes(active.approverRole);
-  const canCancel = !!session && session.userId === req.requestedById && req.status === 'PENDING';
+  const canCancel =
+    !!session &&
+    session.userId === req.requestedById &&
+    (req.status === 'PENDING' || req.status === 'CHANGES_REQUESTED');
 
   return (
     <div className="space-y-6">

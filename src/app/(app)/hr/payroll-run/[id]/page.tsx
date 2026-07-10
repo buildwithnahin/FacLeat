@@ -12,10 +12,15 @@ export default async function PayrollRunDetailsPage({ params }: { params: Promis
   const { id } = await params;
   
   const run = await PayrollRunService.getPayrollRunById(id);
-  
+
   if (!run) {
     notFound();
   }
+
+  const totalAdjustmentsAddition = run.payslips.reduce(
+    (sum, p) => sum + Number(p.payrollAdjustmentsAddition),
+    0,
+  );
 
   return (
     <div className="space-y-6">
@@ -97,7 +102,7 @@ export default async function PayrollRunDetailsPage({ params }: { params: Promis
                 <div>
                   <div className="flex justify-between pb-2 border-b border-border/50">
                     <span className="text-muted-foreground">Total Adjustments (Additions)</span>
-                    <span className="font-medium text-emerald-600">+--</span> {/* Mocked */}
+                    <span className="font-medium text-emerald-600">+{formatCurrency(totalAdjustmentsAddition)}</span>
                   </div>
                 </div>
                 <div>

@@ -106,7 +106,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
           <Card className="p-4 space-y-1 text-sm">
             <div className="font-medium text-base mb-2">Summary</div>
             <Row label="Customer" value={sale.customer ? `${sale.customer.code} — ${sale.customer.name}` : 'Walk-in'} />
-            <Row label="Cashier" value={sale.cashierId} />
+            <Row label="Cashier" value={sale.cashierName} />
             <div className="my-2 border-t" />
             <Row label="Subtotal" value={formatCurrency(sale.subtotal, sale.currency)} />
             <Row label="Discount" value={`−${formatCurrency(sale.discountTotal, sale.currency)}`} />

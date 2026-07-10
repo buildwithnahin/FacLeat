@@ -49,7 +49,11 @@ export default async function InventoryReportPage({
     return `/reports/inventory${qs ? `?${qs}` : ''}`;
   };
 
-  const exportHref = `/api/reports/inventory.csv${sp.branchId ? `?branchId=${sp.branchId}` : ''}`;
+  const exportParams = new URLSearchParams();
+  if (sp.branchId) exportParams.set('branchId', sp.branchId);
+  if (activeSection) exportParams.set('section', activeSection);
+  const exportQs = exportParams.toString();
+  const exportHref = `/api/reports/inventory.csv${exportQs ? `?${exportQs}` : ''}`;
 
   return (
     <div className="space-y-6">

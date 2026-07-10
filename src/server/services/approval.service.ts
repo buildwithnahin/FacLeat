@@ -420,7 +420,15 @@ export const approvalService = {
         throw new ValidationError(`Cannot decide a ${request.status.toLowerCase()} request`);
       }
 
-      const activeStep = request.steps.find((s) => s.status === 'ACTIVE');
+      // A CHANGES_REQUESTED request has no ACTIVE step (the last decision left its
+      // step in a terminal CHANGES_REQUESTED state) — fall back to that step so the
+      // same approver can re-decide once the submitter has addressed the feedback,
+      // instead of leaving the request permanently undecidable.
+      const activeStep =
+        request.steps.find((s) => s.status === 'ACTIVE') ??
+        (request.status === 'CHANGES_REQUESTED'
+          ? request.steps.find((s) => s.status === 'CHANGES_REQUESTED')
+          : undefined);
       if (!activeStep) throw new ValidationError('No active step to decide on');
       if (!myRoles.has(activeStep.approverRole)) {
         throw new ForbiddenError(

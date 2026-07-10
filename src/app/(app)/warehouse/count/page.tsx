@@ -32,13 +32,12 @@ export default async function CountPage() {
     stockService.balanceSnapshot(session, branchId),
   ]);
 
-  // Pick balances for the first warehouse by default; the form shows balance per
-  // product across all warehouses aggregated — for the initial pass we index by
-  // product using the selected warehouse's balances only.
-  const primary = warehouses[0]?.id;
-  const balanceByProduct: Record<string, string> = {};
+  // Index balances per warehouse so the form can show the correct "System" qty
+  // for whichever warehouse the user has selected, not just the first one.
+  const balanceByWarehouseProduct: Record<string, Record<string, string>> = {};
   for (const b of balances) {
-    if (b.warehouseId === primary) balanceByProduct[b.productId] = b.balance.toString();
+    const forWarehouse = (balanceByWarehouseProduct[b.warehouseId] ??= {});
+    forWarehouse[b.productId] = b.balance.toString();
   }
 
   return (
@@ -51,7 +50,7 @@ export default async function CountPage() {
         branchId={branchId}
         warehouses={warehouses.map((w) => ({ id: w.id, name: w.name, code: w.code }))}
         products={products}
-        balanceByProduct={balanceByProduct}
+        balanceByWarehouseProduct={balanceByWarehouseProduct}
       />
     </div>
   );

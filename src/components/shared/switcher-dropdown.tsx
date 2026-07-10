@@ -40,11 +40,14 @@ export function SwitcherDropdown({
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="inline-flex h-9 items-center gap-2 rounded-md border bg-background px-3 text-sm hover:bg-muted/50"
+        aria-label={triggerLabel}
+        className="inline-flex h-9 items-center gap-2 rounded-md border bg-background px-2 text-sm hover:bg-muted/50 sm:px-3"
       >
         {icon}
-        <span className="max-w-[8rem] truncate font-medium sm:max-w-[14rem]">{triggerLabel}</span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="hidden max-w-[10rem] truncate font-medium sm:inline lg:max-w-[14rem]">
+          {triggerLabel}
+        </span>
+        <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:block" />
       </button>
 
       {open && (
@@ -55,7 +58,7 @@ export function SwitcherDropdown({
             className="fixed inset-0 z-20 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 z-30 mt-1 min-w-[220px] rounded-md border bg-popover text-popover-foreground shadow-md">
+          <div className="absolute right-0 z-30 mt-1 w-[min(220px,90vw)] rounded-md border bg-popover text-popover-foreground shadow-md">
             <div className="border-b px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground">
               {panelTitle}
             </div>
