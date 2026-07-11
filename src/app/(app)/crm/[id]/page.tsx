@@ -29,7 +29,7 @@ export default async function CustomerDetailPage({
   }
 
   const dueMap = new Map(
-    (await customerService.outstandingByCustomer()).map((r) => [r.customerId, r]),
+    (await customerService.outstandingByCustomer(session, customer.branchId)).map((r) => [r.customerId, r]),
   );
   const agg = dueMap.get(customer.id);
   const totalSales = agg?.totalSales ?? null;

@@ -1,14 +1,18 @@
 'use server';
 
 import { cookies } from 'next/headers';
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getSession } from '@/server/auth/session';
 import { companyService } from '@/server/services/company.service';
 import { companyCreateSchema, companyUpdateSchema } from '@/server/validators/companies';
 import { ApiError } from '@/lib/errors';
-import { ACTIVE_BRANCH_COOKIE, ACTIVE_COMPANY_COOKIE } from '@/lib/cookies';
+import {
+  ACTIVE_BRANCH_BY_COMPANY_COOKIE,
+  ACTIVE_BRANCH_COOKIE,
+  ACTIVE_COMPANY_COOKIE,
+  parseActiveBranchByCompanyCookie,
+} from '@/lib/cookies';
 import { prisma } from '@/server/db';
 
 export type CompanyFormState = { error?: string; fieldErrors?: Record<string, string[]> } | undefined;
@@ -74,23 +78,51 @@ export async function setActiveCompanyAction(formData: FormData) {
     maxAge: 60 * 60 * 24 * 30,
   });
 
-  // If the currently active branch doesn't belong to the newly active company,
-  // re-select a branch within the new company so pages don't stay anchored to
-  // the previous company's branch context.
-  const nextBranch = await prisma.branch.findFirst({
-    where: {
-      companyId,
-      isActive: true,
-      ...(session.branchAccessType === 'ALL_BRANCHES'
-        ? {}
-        : { id: { in: session.allowedBranchIds } }),
-    },
-    orderBy: [{ name: 'asc' }],
-    select: { id: true },
-  });
+  const branchByCompany = parseActiveBranchByCompanyCookie(
+    store.get(ACTIVE_BRANCH_BY_COMPANY_COOKIE)?.value,
+  );
 
-  if (nextBranch) {
-    store.set(ACTIVE_BRANCH_COOKIE, nextBranch.id, {
+  let nextBranchId = branchByCompany[companyId] ?? null;
+
+  if (nextBranchId) {
+    const savedBranch = await prisma.branch.findFirst({
+      where: {
+        id: nextBranchId,
+        companyId,
+        isActive: true,
+        ...(session.branchAccessType === 'ALL_BRANCHES'
+          ? {}
+          : { id: { in: session.allowedBranchIds } }),
+      },
+      select: { id: true },
+    });
+    if (!savedBranch) nextBranchId = null;
+  }
+
+  if (!nextBranchId) {
+    const nextBranch = await prisma.branch.findFirst({
+      where: {
+        companyId,
+        isActive: true,
+        ...(session.branchAccessType === 'ALL_BRANCHES'
+          ? {}
+          : { id: { in: session.allowedBranchIds } }),
+      },
+      orderBy: [{ name: 'asc' }],
+      select: { id: true },
+    });
+    nextBranchId = nextBranch?.id ?? null;
+  }
+
+  if (nextBranchId) {
+    branchByCompany[companyId] = nextBranchId;
+    store.set(ACTIVE_BRANCH_COOKIE, nextBranchId, {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30,
+    });
+    store.set(ACTIVE_BRANCH_BY_COMPANY_COOKIE, JSON.stringify(branchByCompany), {
       httpOnly: true,
       sameSite: 'lax',
       path: '/',
@@ -101,7 +133,4 @@ export async function setActiveCompanyAction(formData: FormData) {
   }
 
   revalidatePath('/', 'layout');
-
-  const referer = (await headers()).get('referer');
-  redirect(referer ?? '/');
 }

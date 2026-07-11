@@ -2,6 +2,7 @@ import 'server-only';
 import { Prisma, type SystemAccountKey } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { assertBranchInScope, getScopedBranchIds } from '@/server/auth/data-scope';
 import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { approvalService } from '@/server/services/approval.service';
@@ -54,6 +55,7 @@ function computeLine(item: {
 export const posService = {
   async currentSession(session: AppSession | null, branchId: string, warehouseId: string) {
     await authorize(session, 'pos:sell');
+    await assertBranchInScope(session, branchId);
     return prisma.posSession.findFirst({
       where: { branchId, warehouseId, status: 'OPEN' },
       orderBy: { openedAt: 'desc' },
@@ -63,8 +65,12 @@ export const posService = {
 
   async mySessions(session: AppSession | null, limit = 20) {
     const actor = await authorize(session, 'pos:sell');
+    const branchIds = await getScopedBranchIds(actor);
     return prisma.posSession.findMany({
-      where: { cashierId: actor.userId },
+      where: {
+        cashierId: actor.userId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
+      },
       orderBy: { openedAt: 'desc' },
       take: limit,
       include: { warehouse: { select: { name: true, code: true } } },
@@ -73,8 +79,13 @@ export const posService = {
 
   async openSession(session: AppSession | null, input: OpenSessionInput) {
     const actor = await authorize(session, 'pos:sell');
+    await assertBranchInScope(actor, input.branchId);
     const existing = await prisma.posSession.findFirst({
-      where: { cashierId: actor.userId, status: 'OPEN' },
+      where: {
+        cashierId: actor.userId,
+        status: 'OPEN',
+        ...(actor.activeCompanyId ? { branch: { companyId: actor.activeCompanyId } } : {}),
+      },
     });
     if (existing) throw new ValidationError('You already have an open session. Close it first.');
 
@@ -690,9 +701,10 @@ export const posService = {
     } = {},
   ) {
     await authorize(session, 'pos:sell');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.posSale.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         cashierId: filters.cashierId,
         customerId: filters.customerId,
         sessionId: filters.sessionId,
@@ -735,6 +747,7 @@ export const posService = {
       },
     });
     if (!sale) throw new NotFoundError('Sale not found');
+    await assertBranchInScope(session, sale.branchId);
     // cashierId has no Prisma relation to User, so resolve the display name separately.
     const cashier = await prisma.user.findUnique({
       where: { id: sale.cashierId },
@@ -745,10 +758,11 @@ export const posService = {
 
   async searchProducts(session: AppSession | null, branchId: string, query: string, limit = 30) {
     await authorize(session, 'pos:sell');
+    const branch = await assertBranchInScope(session, branchId);
     const q = query.trim();
     if (!q) {
       return prisma.product.findMany({
-        where: { isActive: true },
+        where: { isActive: true, companyId: branch.companyId },
         orderBy: { name: 'asc' },
         take: limit,
         select: {
@@ -766,6 +780,7 @@ export const posService = {
     return prisma.product.findMany({
       where: {
         isActive: true,
+        companyId: branch.companyId,
         OR: [
           { sku: { equals: q, mode: 'insensitive' } },
           { barcode: { equals: q } },

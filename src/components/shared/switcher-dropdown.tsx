@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { useEffect, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { Check, ChevronDown, Loader2 } from 'lucide-react';
 
 export interface SwitcherItem {
   id: string;
@@ -20,7 +21,7 @@ export function SwitcherDropdown({
   emptyLabel,
   items,
   activeId,
-  action,
+  onSelectUrl,
   fieldName,
 }: {
   icon: React.ReactNode;
@@ -29,10 +30,47 @@ export function SwitcherDropdown({
   emptyLabel: string;
   items: SwitcherItem[];
   activeId?: string;
-  action: (formData: FormData) => void | Promise<void>;
+  onSelectUrl: string;
   fieldName: string;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [currentActiveId, setCurrentActiveId] = useState(activeId);
+  const [currentLabel, setCurrentLabel] = useState(triggerLabel);
+
+  useEffect(() => {
+    setCurrentActiveId(activeId);
+  }, [activeId]);
+
+  useEffect(() => {
+    setCurrentLabel(triggerLabel);
+  }, [triggerLabel]);
+
+  function handleSelect(item: SwitcherItem) {
+    if (pending || item.id === currentActiveId) {
+      setOpen(false);
+      return;
+    }
+
+    setCurrentActiveId(item.id);
+    setCurrentLabel(item.name);
+    setOpen(false);
+
+    startTransition(async () => {
+      const res = await fetch(onSelectUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [fieldName]: item.id }),
+      });
+      if (!res.ok) {
+        setCurrentActiveId(activeId);
+        setCurrentLabel(triggerLabel);
+        return;
+      }
+      router.refresh();
+    });
+  }
 
   return (
     <div className="relative">
@@ -40,14 +78,19 @@ export function SwitcherDropdown({
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        aria-label={triggerLabel}
-        className="inline-flex h-9 items-center gap-2 rounded-md border bg-background px-2 text-sm hover:bg-muted/50 sm:px-3"
+        aria-label={currentLabel}
+        disabled={pending}
+        className="inline-flex h-9 items-center gap-2 rounded-md border bg-background px-2 text-sm hover:bg-muted/50 disabled:cursor-wait disabled:opacity-70 sm:px-3"
       >
         {icon}
         <span className="hidden max-w-[10rem] truncate font-medium sm:inline lg:max-w-[14rem]">
-          {triggerLabel}
+          {currentLabel}
         </span>
-        <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:block" />
+        {pending ? (
+          <Loader2 className="hidden h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground sm:block" />
+        ) : (
+          <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:block" />
+        )}
       </button>
 
       {open && (
@@ -65,19 +108,23 @@ export function SwitcherDropdown({
             <ul className="max-h-80 overflow-y-auto py-1">
               {items.map((item) => (
                 <li key={item.id}>
-                  <form action={action} onSubmit={() => setOpen(false)}>
-                    <input type="hidden" name={fieldName} value={item.id} />
-                    <button
-                      type="submit"
-                      className={
-                        'w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground ' +
-                        (item.id === activeId ? 'bg-muted/50 font-medium' : '')
-                      }
-                    >
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => handleSelect(item)}
+                    className={
+                      'flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground disabled:cursor-wait disabled:opacity-70 ' +
+                      (item.id === currentActiveId ? 'bg-muted/50 font-medium' : '')
+                    }
+                  >
+                    <span className="min-w-0">
                       <span className="block">{item.name}</span>
                       <span className="block text-xs text-muted-foreground">{item.meta}</span>
-                    </button>
-                  </form>
+                    </span>
+                    {item.id === currentActiveId ? (
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    ) : null}
+                  </button>
                 </li>
               ))}
               {items.length === 0 && (

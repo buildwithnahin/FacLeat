@@ -2,6 +2,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { assertBranchInScope, getScopedBranchIds } from '@/server/auth/data-scope';
 import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { accountsService } from '@/server/services/accounts.service';
@@ -32,9 +33,10 @@ export const customerService = {
     filters: { branchId?: string; status?: string; type?: string; search?: string } = {},
   ) {
     await authorize(session, 'crm:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     const customers = await prisma.customer.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status as 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | undefined,
         type: filters.type as
           | 'RETAIL'
@@ -57,7 +59,7 @@ export const customerService = {
       include: CUSTOMER_INCLUDE,
     });
 
-    const outstanding = await this.outstandingByCustomer();
+    const outstanding = await this.outstandingByCustomer(session, filters.branchId);
     const dueMap = new Map(outstanding.map((o) => [o.customerId, o]));
 
     return customers.map((c) => {
@@ -83,11 +85,13 @@ export const customerService = {
       },
     });
     if (!customer) throw new NotFoundError('Customer not found');
+    await assertBranchInScope(session, customer.branchId);
     return customer;
   },
 
   async create(session: AppSession | null, input: CustomerCreateInput) {
     const actor = await authorize(session, 'crm:write');
+    await assertBranchInScope(actor, input.branchId);
 
     return prisma.$transaction(async (tx) => {
       const count = await tx.customer.count();
@@ -179,6 +183,8 @@ export const customerService = {
     const actor = await authorize(session, 'crm:write');
     const existing = await prisma.customer.findUnique({ where: { id: input.id } });
     if (!existing) throw new NotFoundError('Customer not found');
+    await assertBranchInScope(actor, existing.branchId);
+    await assertBranchInScope(actor, input.branchId);
 
     return prisma.$transaction(async (tx) => {
       const customer = await tx.customer.update({
@@ -228,6 +234,7 @@ export const customerService = {
       include: { _count: { select: { ledger: true, interactions: true } } },
     });
     if (!existing) throw new NotFoundError('Customer not found');
+    await assertBranchInScope(actor, existing.branchId);
     if (existing._count.ledger > 0) {
       throw new ValidationError(
         'Customer has ledger activity — deactivate instead of deleting.',
@@ -251,18 +258,33 @@ export const customerService = {
     });
   },
 
-  async outstandingByCustomer(): Promise<OutstandingRow[]> {
-    const rows = await prisma.$queryRaw<
-      { customerId: string; totalDue: number; totalSales: number }[]
-    >`SELECT "customerId",
-             COALESCE(SUM(debit - credit), 0)::numeric AS "totalDue",
-             COALESCE(SUM(debit), 0)::numeric AS "totalSales"
-        FROM "CustomerLedger"
-       GROUP BY "customerId"`;
+  async outstandingByCustomer(session: AppSession | null, branchId?: string): Promise<OutstandingRow[]> {
+    const branchIds = await getScopedBranchIds(session, branchId);
+    const rows = branchIds
+      ? await prisma.customerLedger.groupBy({
+          by: ['customerId'],
+          where: { branchId: { in: branchIds } },
+          _sum: { debit: true, credit: true },
+        })
+      : await prisma.customerLedger.groupBy({
+          by: ['customerId'],
+          _sum: { debit: true, credit: true },
+        });
+    const salesTotals = branchIds
+      ? await prisma.customerLedger.groupBy({
+          by: ['customerId'],
+          where: { branchId: { in: branchIds } },
+          _sum: { debit: true },
+        })
+      : await prisma.customerLedger.groupBy({
+          by: ['customerId'],
+          _sum: { debit: true },
+        });
+    const salesMap = new Map(salesTotals.map((row) => [row.customerId, row._sum.debit ?? new Prisma.Decimal(0)]));
     return rows.map((r) => ({
       customerId: r.customerId,
-      totalDue: new Prisma.Decimal(r.totalDue ?? 0),
-      totalSales: new Prisma.Decimal(r.totalSales ?? 0),
+      totalDue: new Prisma.Decimal(r._sum.debit ?? 0).minus(r._sum.credit ?? 0),
+      totalSales: salesMap.get(r.customerId) ?? new Prisma.Decimal(0),
     }));
   },
 
@@ -273,6 +295,7 @@ export const customerService = {
       include: CUSTOMER_INCLUDE,
     });
     if (!customer) throw new NotFoundError('Customer not found');
+    await assertBranchInScope(session, customer.branchId);
     const entries = await prisma.customerLedger.findMany({
       where: { customerId },
       orderBy: { createdAt: 'asc' },

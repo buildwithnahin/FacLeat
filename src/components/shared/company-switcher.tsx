@@ -1,7 +1,6 @@
 import { Building } from 'lucide-react';
 import type { AppSession } from '@/server/auth/session';
 import { companyService } from '@/server/services/company.service';
-import { setActiveCompanyAction } from '@/server/actions/companies';
 import { SwitcherDropdown } from '@/components/shared/switcher-dropdown';
 
 export async function CompanySwitcher({ session }: { session: AppSession }) {
@@ -23,7 +22,7 @@ export async function CompanySwitcher({ session }: { session: AppSession }) {
       panelTitle="Switch company"
       emptyLabel="No companies"
       activeId={active?.id}
-      action={setActiveCompanyAction}
+      onSelectUrl="/api/session/active-company"
       fieldName="companyId"
       items={companies.map((c) => ({ id: c.id, name: c.name, meta: `${c.code} · ${c.currency}` }))}
     />

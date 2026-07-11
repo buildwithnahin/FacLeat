@@ -20,11 +20,13 @@ export default async function NewQuotePage() {
     );
   }
 
-  const [branch, customers, products] = await Promise.all([
-    prisma.branch.findUnique({
-      where: { id: branchId },
-      select: { id: true, name: true, currency: true },
-    }),
+  const branch = await prisma.branch.findUnique({
+    where: { id: branchId },
+    select: { id: true, name: true, currency: true, companyId: true },
+  });
+  if (!branch) redirect('/corporate-sales');
+
+  const [customers, products] = await Promise.all([
     prisma.customer.findMany({
       where: { branchId, status: 'ACTIVE' },
       orderBy: { name: 'asc' },
@@ -32,13 +34,12 @@ export default async function NewQuotePage() {
       select: { id: true, code: true, name: true, type: true, creditLimit: true, currency: true },
     }),
     prisma.product.findMany({
-      where: { isActive: true },
+      where: { isActive: true, companyId: branch.companyId },
       orderBy: { name: 'asc' },
       take: 40,
       select: { id: true, sku: true, barcode: true, name: true, unit: true, sellPrice: true, taxRate: true, imageUrl: true },
     }),
   ]);
-  if (!branch) redirect('/corporate-sales');
 
   return (
     <div className="space-y-6">

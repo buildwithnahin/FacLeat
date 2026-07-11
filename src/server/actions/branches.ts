@@ -1,14 +1,17 @@
 'use server';
 
 import { cookies } from 'next/headers';
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getSession } from '@/server/auth/session';
 import { branchService } from '@/server/services/branch.service';
 import { branchCreateSchema, branchUpdateSchema } from '@/server/validators/branches';
 import { ApiError } from '@/lib/errors';
-import { ACTIVE_BRANCH_COOKIE } from '@/lib/cookies';
+import {
+  ACTIVE_BRANCH_BY_COMPANY_COOKIE,
+  ACTIVE_BRANCH_COOKIE,
+  parseActiveBranchByCompanyCookie,
+} from '@/lib/cookies';
 
 export type BranchFormState = { error?: string; fieldErrors?: Record<string, string[]> } | undefined;
 
@@ -75,8 +78,17 @@ export async function setActiveBranchAction(formData: FormData) {
     path: '/',
     maxAge: 60 * 60 * 24 * 30,
   });
-  revalidatePath('/', 'layout');
 
-  const referer = (await headers()).get('referer');
-  redirect(referer ?? '/');
+  const branchByCompany = parseActiveBranchByCompanyCookie(
+    store.get(ACTIVE_BRANCH_BY_COMPANY_COOKIE)?.value,
+  );
+  branchByCompany[branch.companyId] = branchId;
+  store.set(ACTIVE_BRANCH_BY_COMPANY_COOKIE, JSON.stringify(branchByCompany), {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 30,
+  });
+
+  revalidatePath('/', 'layout');
 }

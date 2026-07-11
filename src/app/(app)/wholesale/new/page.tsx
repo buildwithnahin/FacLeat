@@ -37,7 +37,7 @@ export default async function NewWholesaleInvoicePage() {
       take: 500,
       select: { id: true, code: true, name: true, type: true, creditLimit: true, creditDays: true },
     }),
-    wholesaleService.searchProducts(session, '', 40),
+    wholesaleService.searchProducts(session, '', 40, branchId),
   ]);
 
   if (!branch) {

@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { getSession } from '@/server/auth/session';
 import { prisma } from '@/server/db';
+import { getScopedBranchIds } from '@/server/auth/data-scope';
 import { posService } from '@/server/services/pos.service';
 import { PosTerminal } from './terminal';
 
@@ -14,9 +15,14 @@ export const metadata = { title: 'POS Terminal' };
 export default async function PosPage() {
   const session = await getSession();
   if (!session) redirect('/login');
+  const branchIds = await getScopedBranchIds(session);
 
   const openSession = await prisma.posSession.findFirst({
-    where: { cashierId: session.userId, status: 'OPEN' },
+    where: {
+      cashierId: session.userId,
+      status: 'OPEN',
+      ...(branchIds ? { branchId: { in: branchIds } } : {}),
+    },
     include: {
       branch: { select: { id: true, name: true, code: true, currency: true } },
       warehouse: { select: { id: true, name: true, code: true } },

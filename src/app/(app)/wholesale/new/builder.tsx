@@ -126,7 +126,9 @@ export function InvoiceBuilder({
 
   async function searchProducts(q: string) {
     setScanQuery(q);
-    const res = await fetch(`/api/wholesale/search?q=${encodeURIComponent(q)}`);
+    const res = await fetch(
+      `/api/wholesale/search?q=${encodeURIComponent(q)}&branchId=${encodeURIComponent(branch.id)}`,
+    );
     if (res.ok) setProducts(await res.json());
   }
 

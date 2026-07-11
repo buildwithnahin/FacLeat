@@ -1,7 +1,6 @@
 import { Building2 } from 'lucide-react';
 import type { AppSession } from '@/server/auth/session';
 import { branchService } from '@/server/services/branch.service';
-import { setActiveBranchAction } from '@/server/actions/branches';
 import { SwitcherDropdown } from '@/components/shared/switcher-dropdown';
 
 export async function BranchSwitcher({ session }: { session: AppSession }) {
@@ -23,7 +22,7 @@ export async function BranchSwitcher({ session }: { session: AppSession }) {
       panelTitle="Switch branch"
       emptyLabel="No branches"
       activeId={active?.id}
-      action={setActiveBranchAction}
+      onSelectUrl="/api/session/active-branch"
       fieldName="branchId"
       items={branches.map((b) => ({ id: b.id, name: b.name, meta: `${b.code} · ${b.currency}` }))}
     />

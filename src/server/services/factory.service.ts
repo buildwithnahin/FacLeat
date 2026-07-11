@@ -2,6 +2,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { assertBranchInScope, getScopedBranchIds } from '@/server/auth/data-scope';
 import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { approvalService } from '@/server/services/approval.service';
@@ -120,9 +121,10 @@ export const factoryService = {
     filters: { branchId?: string; status?: string; search?: string } = {},
   ) {
     await authorize(session, 'factory:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.productionOrder.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status as Prisma.ProductionOrderWhereInput['status'],
         OR: filters.search
           ? [
@@ -148,6 +150,7 @@ export const factoryService = {
       include: ORDER_INCLUDE,
     });
     if (!order) throw new NotFoundError('Production order not found');
+    await assertBranchInScope(session, order.branchId);
     return order;
   },
 
@@ -253,9 +256,10 @@ export const factoryService = {
     filters: { branchId?: string; status?: string } = {},
   ) {
     await authorize(session, 'factory:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.productionPlan.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status as Prisma.ProductionPlanWhereInput['status'],
       },
       orderBy: { createdAt: 'desc' },
@@ -281,6 +285,7 @@ export const factoryService = {
       },
     });
     if (!plan) throw new NotFoundError('Production plan not found');
+    await assertBranchInScope(session, plan.branchId);
     return plan;
   },
 
@@ -671,7 +676,8 @@ export const factoryService = {
 
   async summary(session: AppSession | null, branchId?: string) {
     await authorize(session, 'factory:read');
-    const where: Prisma.ProductionOrderWhereInput = branchId ? { branchId } : {};
+    const branchIds = await getScopedBranchIds(session, branchId);
+    const where: Prisma.ProductionOrderWhereInput = branchIds ? { branchId: { in: branchIds } } : {};
     const [planned, inProgress, completed, overdue] = await Promise.all([
       prisma.productionOrder.count({ where: { ...where, status: 'PLANNED' } }),
       prisma.productionOrder.count({ where: { ...where, status: 'IN_PROGRESS' } }),

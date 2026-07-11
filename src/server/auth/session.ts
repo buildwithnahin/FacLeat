@@ -6,7 +6,12 @@ import { auth } from './config';
 import { resolveSessionActiveBranchId, type SessionBranchAccessType } from './branch-access';
 import { getAllowedCompanyIds, resolveSessionActiveCompanyId } from './company-access';
 import { prisma } from '@/server/db';
-import { ACTIVE_BRANCH_COOKIE, ACTIVE_COMPANY_COOKIE } from '@/lib/cookies';
+import {
+  ACTIVE_BRANCH_BY_COMPANY_COOKIE,
+  ACTIVE_BRANCH_COOKIE,
+  ACTIVE_COMPANY_COOKIE,
+  parseActiveBranchByCompanyCookie,
+} from '@/lib/cookies';
 
 export interface AppSession {
   userId: string;
@@ -89,7 +94,7 @@ export const getSession = cache(async (): Promise<AppSession | null> => {
     }
     const isSuperAdmin = roleNames.some((role) => role.toLowerCase().includes('super admin'));
 
-    const override = cookieStore.get(ACTIVE_BRANCH_COOKIE)?.value;
+    const branchOverride = cookieStore.get(ACTIVE_BRANCH_COOKIE)?.value;
     let allowedBranchIds =
       userWithRoles.branchAccessType === 'ALL_BRANCHES'
         ? []
@@ -146,13 +151,29 @@ export const getSession = cache(async (): Promise<AppSession | null> => {
       isSuperAdmin,
     });
 
+    const branchByCompany = parseActiveBranchByCompanyCookie(
+      cookieStore.get(ACTIVE_BRANCH_BY_COMPANY_COOKIE)?.value,
+    );
+    const scopedBranchOverride =
+      requestedActiveCompanyId ? branchByCompany[requestedActiveCompanyId] ?? branchOverride ?? null : branchOverride ?? null;
+
     let resolvedActiveBranchId = resolveSessionActiveBranchId({
       branchAccessType: userWithRoles.branchAccessType,
       allowedBranchIds,
       defaultBranchId: userWithRoles.defaultBranchId ?? null,
-      activeBranchId: override ?? s.user.activeBranchId ?? userWithRoles.defaultBranchId ?? null,
+      activeBranchId: scopedBranchOverride ?? s.user.activeBranchId ?? userWithRoles.defaultBranchId ?? null,
       isSuperAdmin,
     });
+
+    if (resolvedActiveBranchId && !branchCompanyMap.has(resolvedActiveBranchId)) {
+      const activeBranch = await prisma.branch.findUnique({
+        where: { id: resolvedActiveBranchId },
+        select: { companyId: true },
+      });
+      if (activeBranch) {
+        branchCompanyMap.set(resolvedActiveBranchId, activeBranch.companyId);
+      }
+    }
 
     if (
       requestedActiveCompanyId &&

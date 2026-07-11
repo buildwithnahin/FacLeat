@@ -7,7 +7,8 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   const q = req.nextUrl.searchParams.get('q') ?? '';
-  const products = await wholesaleService.searchProducts(session, q, 40);
+  const branchId = req.nextUrl.searchParams.get('branchId') ?? session.activeBranchId ?? undefined;
+  const products = await wholesaleService.searchProducts(session, q, 40, branchId);
   return Response.json(
     products.map((p) => ({
       id: p.id,

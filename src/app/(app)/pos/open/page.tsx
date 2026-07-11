@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { prisma } from '@/server/db';
 import { getSession } from '@/server/auth/session';
+import { getScopedBranchIds } from '@/server/auth/data-scope';
 import { OpenSessionForm } from './open-session-form';
 
 export const metadata = { title: 'Open POS Session' };
@@ -8,19 +9,31 @@ export const metadata = { title: 'Open POS Session' };
 export default async function OpenSessionPage() {
   const session = await getSession();
   if (!session) redirect('/login');
+  const branchIds = await getScopedBranchIds(session);
 
   const existing = await prisma.posSession.findFirst({
-    where: { cashierId: session.userId, status: 'OPEN' },
+    where: {
+      cashierId: session.userId,
+      status: 'OPEN',
+      ...(branchIds ? { branchId: { in: branchIds } } : {}),
+    },
   });
   if (existing) redirect('/pos');
 
   const branches = await prisma.branch.findMany({
-    where: { isActive: true },
+    where: {
+      isActive: true,
+      ...(branchIds ? { id: { in: branchIds } } : {}),
+    },
     orderBy: { name: 'asc' },
     select: { id: true, name: true, code: true, currency: true },
   });
   const warehouses = await prisma.warehouse.findMany({
-    where: { isActive: true, type: { in: ['STORE', 'SHOWROOM', 'MAIN'] } },
+    where: {
+      isActive: true,
+      type: { in: ['STORE', 'SHOWROOM', 'MAIN'] },
+      ...(branchIds ? { branchId: { in: branchIds } } : {}),
+    },
     orderBy: { name: 'asc' },
     select: { id: true, name: true, code: true, branchId: true },
   });

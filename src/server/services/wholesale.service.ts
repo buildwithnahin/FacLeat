@@ -2,6 +2,7 @@ import 'server-only';
 import { Prisma, type SystemAccountKey } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { assertBranchInScope, getScopedBranchIds } from '@/server/auth/data-scope';
 import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { accountsService } from '@/server/services/accounts.service';
@@ -56,9 +57,10 @@ export const wholesaleService = {
     } = {},
   ) {
     await authorize(session, 'wholesale:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.wholesaleInvoice.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         customerId: filters.customerId,
         status: filters.status as
           | 'DRAFT'
@@ -102,6 +104,7 @@ export const wholesaleService = {
       },
     });
     if (!inv) throw new NotFoundError('Invoice not found');
+    await assertBranchInScope(session, inv.branchId);
     return inv;
   },
 
@@ -810,12 +813,18 @@ export const wholesaleService = {
     return { totals, overdue, recent };
   },
 
-  async searchProducts(session: AppSession | null, query: string, limit = 30) {
+  async searchProducts(session: AppSession | null, query: string, limit = 30, branchId?: string) {
     await authorize(session, 'wholesale:write');
+    const activeBranchId = branchId ?? session?.activeBranchId ?? null;
+    if (!activeBranchId) {
+      return [];
+    }
+    const branch = await assertBranchInScope(session, activeBranchId);
     const q = query.trim();
     const where = q
       ? {
           isActive: true,
+          companyId: branch.companyId,
           OR: [
             { sku: { equals: q, mode: 'insensitive' as const } },
             { barcode: { equals: q } },
@@ -823,7 +832,7 @@ export const wholesaleService = {
             { sku: { contains: q, mode: 'insensitive' as const } },
           ],
         }
-      : { isActive: true };
+      : { isActive: true, companyId: branch.companyId };
     return prisma.product.findMany({
       where,
       orderBy: { name: 'asc' },

@@ -2,6 +2,7 @@ import 'server-only';
 import { Prisma, type SystemAccountKey } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { assertBranchInScope, getScopedBranchIds } from '@/server/auth/data-scope';
 import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { accountsService } from '@/server/services/accounts.service';
@@ -26,9 +27,10 @@ export const supplierService = {
     filters: { branchId?: string; status?: string; search?: string } = {},
   ) {
     await authorize(session, 'suppliers:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     const suppliers = await prisma.supplier.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status as 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | undefined,
         OR: filters.search
           ? [
@@ -43,7 +45,7 @@ export const supplierService = {
       include: SUPPLIER_INCLUDE,
     });
 
-    const outstanding = await this.outstandingBySupplier();
+    const outstanding = await this.outstandingBySupplier(session, filters.branchId);
     const dueMap = new Map(outstanding.map((o) => [o.supplierId, o]));
 
     return suppliers.map((s) => {
@@ -101,11 +103,13 @@ export const supplierService = {
       },
     });
     if (!supplier) throw new NotFoundError('Supplier not found');
+    await assertBranchInScope(session, supplier.branchId);
     return supplier;
   },
 
   async create(session: AppSession | null, input: SupplierCreateInput) {
     const actor = await authorize(session, 'suppliers:write');
+    await assertBranchInScope(actor, input.branchId);
 
     return prisma.$transaction(async (tx) => {
       const count = await tx.supplier.count();
@@ -189,6 +193,8 @@ export const supplierService = {
     const actor = await authorize(session, 'suppliers:write');
     const existing = await prisma.supplier.findUnique({ where: { id: input.id } });
     if (!existing) throw new NotFoundError('Supplier not found');
+    await assertBranchInScope(actor, existing.branchId);
+    await assertBranchInScope(actor, input.branchId);
 
     return prisma.$transaction(async (tx) => {
       const supplier = await tx.supplier.update({
@@ -237,6 +243,7 @@ export const supplierService = {
       },
     });
     if (!existing) throw new NotFoundError('Supplier not found');
+    await assertBranchInScope(actor, existing.branchId);
     if (
       existing._count.purchaseOrders > 0 ||
       existing._count.purchaseInvoices > 0 ||
@@ -267,18 +274,33 @@ export const supplierService = {
    * Sum of debit - credit per supplier (running outstanding balance),
    * plus total purchases (debit entries).
    */
-  async outstandingBySupplier(): Promise<OutstandingRow[]> {
-    const rows = await prisma.$queryRaw<
-      { supplierId: string; totalDue: number; totalPurchase: number }[]
-    >`SELECT "supplierId",
-             COALESCE(SUM(debit - credit), 0)::numeric AS "totalDue",
-             COALESCE(SUM(debit), 0)::numeric AS "totalPurchase"
-        FROM "SupplierLedger"
-       GROUP BY "supplierId"`;
+  async outstandingBySupplier(session: AppSession | null, branchId?: string): Promise<OutstandingRow[]> {
+    const branchIds = await getScopedBranchIds(session, branchId);
+    const rows = branchIds
+      ? await prisma.supplierLedger.groupBy({
+          by: ['supplierId'],
+          where: { branchId: { in: branchIds } },
+          _sum: { debit: true, credit: true },
+        })
+      : await prisma.supplierLedger.groupBy({
+          by: ['supplierId'],
+          _sum: { debit: true, credit: true },
+        });
+    const purchaseTotals = branchIds
+      ? await prisma.supplierLedger.groupBy({
+          by: ['supplierId'],
+          where: { branchId: { in: branchIds } },
+          _sum: { debit: true },
+        })
+      : await prisma.supplierLedger.groupBy({
+          by: ['supplierId'],
+          _sum: { debit: true },
+        });
+    const purchaseMap = new Map(purchaseTotals.map((row) => [row.supplierId, row._sum.debit ?? new Prisma.Decimal(0)]));
     return rows.map((r) => ({
       supplierId: r.supplierId,
-      totalDue: new Prisma.Decimal(r.totalDue ?? 0),
-      totalPurchase: new Prisma.Decimal(r.totalPurchase ?? 0),
+      totalDue: new Prisma.Decimal(r._sum.debit ?? 0).minus(r._sum.credit ?? 0),
+      totalPurchase: purchaseMap.get(r.supplierId) ?? new Prisma.Decimal(0),
     }));
   },
 
@@ -289,6 +311,7 @@ export const supplierService = {
       include: SUPPLIER_INCLUDE,
     });
     if (!supplier) throw new NotFoundError('Supplier not found');
+    await assertBranchInScope(session, supplier.branchId);
     const entries = await prisma.supplierLedger.findMany({
       where: { supplierId },
       orderBy: { createdAt: 'asc' },
@@ -313,6 +336,7 @@ export const supplierService = {
     const actor = await authorize(session, 'purchase:pay');
     const supplier = await prisma.supplier.findUnique({ where: { id: input.supplierId } });
     if (!supplier) throw new NotFoundError('Supplier not found');
+    await assertBranchInScope(actor, supplier.branchId);
 
     const amount = new Prisma.Decimal(input.amount);
 
@@ -412,7 +436,9 @@ export const supplierService = {
 
   async listPayments(session: AppSession | null, limit = 20) {
     await authorize(session, 'suppliers:read');
+    const branchIds = await getScopedBranchIds(session);
     return prisma.supplierPayment.findMany({
+      where: branchIds ? { branchId: { in: branchIds } } : undefined,
       orderBy: { paymentDate: 'desc' },
       take: limit,
       include: {

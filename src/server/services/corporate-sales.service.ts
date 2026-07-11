@@ -2,6 +2,7 @@ import 'server-only';
 import { Prisma, type SystemAccountKey } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { assertBranchInScope, getScopedBranchIds } from '@/server/auth/data-scope';
 import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { accountsService } from '@/server/services/accounts.service';
@@ -92,9 +93,10 @@ export const corporateService = {
     filters: { status?: string; search?: string; branchId?: string; limit?: number } = {},
   ) {
     await authorize(session, 'corporate-sales:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.corporateQuote.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status as
           | 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED' | 'CONVERTED'
           | undefined,
@@ -125,6 +127,7 @@ export const corporateService = {
       },
     });
     if (!quote) throw new NotFoundError('Quote not found');
+    await assertBranchInScope(session, quote.branchId);
     return quote;
   },
 
@@ -298,9 +301,10 @@ export const corporateService = {
     filters: { status?: string; search?: string; branchId?: string; limit?: number } = {},
   ) {
     await authorize(session, 'corporate-sales:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.corporateOrder.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status as
           | 'DRAFT' | 'CONFIRMED' | 'PARTIALLY_DELIVERED' | 'DELIVERED' | 'INVOICED' | 'CLOSED' | 'CANCELED'
           | undefined,
@@ -341,6 +345,7 @@ export const corporateService = {
       },
     });
     if (!order) throw new NotFoundError('Order not found');
+    await assertBranchInScope(session, order.branchId);
     return order;
   },
 
@@ -892,6 +897,7 @@ export const corporateService = {
       },
     });
     if (!inv) throw new NotFoundError('Invoice not found');
+    await assertBranchInScope(session, inv.branchId);
     return inv;
   },
 
@@ -900,9 +906,10 @@ export const corporateService = {
     filters: { status?: string; search?: string; branchId?: string; limit?: number } = {},
   ) {
     await authorize(session, 'corporate-sales:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.corporateInvoice.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status as
           | 'DRAFT' | 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'VOIDED'
           | undefined,
