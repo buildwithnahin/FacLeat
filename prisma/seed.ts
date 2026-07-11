@@ -8,7 +8,7 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
   { name: 'Super Admin', description: 'Full system access', permissions: 'ALL' },
   {
     name: 'Admin',
-    description: 'Branch-level admin',
+    description: 'Company-level admin',
     permissions: [
       'dashboard:read',
       'users:read',
@@ -16,6 +16,10 @@ const SYSTEM_ROLES: Array<{ name: string; description: string; permissions: 'ALL
       'companies:read',
       'companies:write',
       'branches:read',
+      'branches:write',
+      'roles:read',
+      'roles:write',
+      'roles:delete',
       'approvals:read',
       'approvals:approve',
       'approvals:reject',
@@ -491,11 +495,18 @@ async function main() {
 
   // 4. Roles + role permissions
   for (const roleSpec of SYSTEM_ROLES) {
-    const role = await prisma.role.upsert({
-      where: { name: roleSpec.name },
-      update: { description: roleSpec.description, isSystem: true },
-      create: { name: roleSpec.name, description: roleSpec.description, isSystem: true },
+    const existingRole = await prisma.role.findFirst({
+      where: { companyId: null, name: roleSpec.name },
+      select: { id: true },
     });
+    const role = existingRole
+      ? await prisma.role.update({
+          where: { id: existingRole.id },
+          data: { description: roleSpec.description, isSystem: true, companyId: null },
+        })
+      : await prisma.role.create({
+          data: { name: roleSpec.name, description: roleSpec.description, isSystem: true, companyId: null },
+        });
     const keys = roleSpec.permissions === 'ALL' ? permKeys : roleSpec.permissions;
     const perms = await prisma.permission.findMany({ where: { key: { in: keys } } });
     await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
@@ -512,7 +523,7 @@ async function main() {
   branches.forEach((b) => branchMap.set(b.code, b.id));
 
   for (const userData of SAMPLE_USERS) {
-    const role = await prisma.role.findUnique({ where: { name: userData.role } });
+    const role = await prisma.role.findFirst({ where: { companyId: null, name: userData.role } });
     if (!role) continue;
 
     const passwordHash = await bcrypt.hash('Demo@123', 10);

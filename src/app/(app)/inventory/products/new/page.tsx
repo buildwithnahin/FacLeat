@@ -8,9 +8,13 @@ export const metadata = { title: 'New product' };
 
 export default async function NewProductPage() {
   const session = await getSession();
+  const companyId = session?.activeCompanyId ?? undefined;
   const [categories, brands] = await Promise.all([
     categoryService.listFlat(session),
-    prisma.productBrand.findMany({ orderBy: { name: 'asc' } }),
+    prisma.productBrand.findMany({
+      where: { companyId },
+      orderBy: { name: 'asc' },
+    }),
   ]);
 
   return (

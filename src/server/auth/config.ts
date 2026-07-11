@@ -2,8 +2,10 @@ import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
+import { headers } from 'next/headers';
 import { prisma } from '@/server/db';
 import { authConfig } from './config.edge';
+import { recordAudit } from '@/server/audit/logger';
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -40,6 +42,22 @@ function recordLoginFailure(email: string) {
 
 function clearLoginFailures(email: string) {
   loginAttempts.delete(email.toLowerCase());
+}
+
+async function getRequestAuditMeta() {
+  try {
+    const headerStore = await headers();
+    const forwardedFor = headerStore.get('x-forwarded-for');
+    return {
+      ip: forwardedFor?.split(',')[0]?.trim() ?? null,
+      userAgent: headerStore.get('user-agent'),
+    };
+  } catch {
+    return {
+      ip: null,
+      userAgent: null,
+    };
+  }
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -79,6 +97,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
 
         clearLoginFailures(parsed.data.email);
+        const auditMeta = await getRequestAuditMeta();
+        try {
+          await recordAudit({
+            actorId: user.id,
+            branchId: user.defaultBranchId ?? null,
+            module: 'auth',
+            action: 'LOGIN_SUCCESS',
+            entityType: 'session',
+            entityId: user.id,
+            after: {
+              email: user.email,
+            },
+            ip: auditMeta.ip,
+            userAgent: auditMeta.userAgent,
+          });
+        } catch (error) {
+          console.error('Login audit failed:', error);
+        }
         return {
           id: user.id,
           email: user.email,

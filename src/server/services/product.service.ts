@@ -37,6 +37,36 @@ async function generateUniqueBarcode(companyId: string) {
   throw new ValidationError('Could not generate a unique barcode after 5 attempts');
 }
 
+function assertProductCompanyAccess(session: AppSession | null, companyId: string) {
+  if (!session?.activeCompanyId) return;
+  if (session.activeCompanyId !== companyId) {
+    throw new NotFoundError('Product not found');
+  }
+}
+
+async function loadCategoryForCompany(categoryId: string | null | undefined, companyId: string) {
+  if (!categoryId) return null;
+  const category = await prisma.productCategory.findUnique({
+    where: { id: categoryId },
+    select: { id: true, name: true, companyId: true },
+  });
+  if (!category || category.companyId !== companyId) {
+    throw new ValidationError('Category does not belong to the active company');
+  }
+  return category;
+}
+
+async function assertBrandCompanyAccess(brandId: string | null | undefined, companyId: string) {
+  if (!brandId) return;
+  const brand = await prisma.productBrand.findUnique({
+    where: { id: brandId },
+    select: { id: true, companyId: true },
+  });
+  if (!brand || brand.companyId !== companyId) {
+    throw new ValidationError('Brand does not belong to the active company');
+  }
+}
+
 export const productService = {
   async list(
     session: AppSession | null,
@@ -117,6 +147,7 @@ export const productService = {
     const actor = await authorize(session, 'barcode:generate');
     const existing = await prisma.product.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError('Product not found');
+    assertProductCompanyAccess(actor, existing.companyId);
     if (existing.barcode) throw new ValidationError('Product already has a barcode');
 
     const candidate = await generateUniqueBarcode(existing.companyId);
@@ -146,6 +177,7 @@ export const productService = {
     await authorize(session, 'inventory:read');
     const product = await prisma.product.findUnique({ where: { id }, include: PRODUCT_INCLUDE });
     if (!product) throw new NotFoundError('Product not found');
+    assertProductCompanyAccess(session, product.companyId);
     return product;
   },
 
@@ -166,12 +198,8 @@ export const productService = {
       const bDup = await prisma.product.findUnique({ where: { companyId_barcode: { companyId, barcode } } });
       if (bDup) throw new ValidationError('Barcode already in use');
     }
-    const category = input.categoryId
-      ? await prisma.productCategory.findUnique({
-          where: { id: input.categoryId },
-          select: { name: true },
-        })
-      : null;
+    const category = await loadCategoryForCompany(input.categoryId, companyId);
+    await assertBrandCompanyAccess(input.brandId, companyId);
     if (isShoesCategory(category?.name) && !input.size.trim()) {
       throw new ValidationError('Size is required for products in the Shoes category');
     }
@@ -219,6 +247,7 @@ export const productService = {
     const actor = await authorize(session, 'inventory:write');
     const existing = await prisma.product.findUnique({ where: { id: input.id } });
     if (!existing) throw new NotFoundError('Product not found');
+    assertProductCompanyAccess(actor, existing.companyId);
 
     if (input.sku !== existing.sku) {
       const dup = await prisma.product.findUnique({
@@ -240,12 +269,8 @@ export const productService = {
       });
       if (bDup) throw new ValidationError('Barcode already in use');
     }
-    const category = input.categoryId
-      ? await prisma.productCategory.findUnique({
-          where: { id: input.categoryId },
-          select: { name: true },
-        })
-      : null;
+    const category = await loadCategoryForCompany(input.categoryId, existing.companyId);
+    await assertBrandCompanyAccess(input.brandId, existing.companyId);
     if (isShoesCategory(category?.name) && !input.size.trim()) {
       throw new ValidationError('Size is required for products in the Shoes category');
     }

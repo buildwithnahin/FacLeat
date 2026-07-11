@@ -5,9 +5,10 @@ import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import type { AppSession } from '@/server/auth/session';
 import type { RoleCreateInput, RoleUpdateInput } from '@/server/validators/roles';
-import { NotFoundError, ValidationError } from '@/lib/errors';
+import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/errors';
 
 const ROLE_INCLUDE = {
+  company: { select: { id: true, name: true } },
   permissions: { include: { permission: true } },
   _count: { select: { users: true } },
 } as const;
@@ -24,17 +25,66 @@ const cachedPermissionList = unstable_cache(
   { revalidate: 300, tags: ['rbac'] },
 );
 
+function normalizeRoleDescription<T extends { name: string; isSystem: boolean; description: string | null }>(role: T): T {
+  if (role.isSystem && role.name === 'Admin' && role.description === 'Branch-level admin') {
+    return {
+      ...role,
+      description: 'Company-level admin',
+    };
+  }
+  return role;
+}
+
+function hasSuperAdminScope(session: AppSession | null) {
+  return session?.roles.some((role) => role.toLowerCase().includes('super admin')) ?? false;
+}
+
+function roleWhereForSession(session: AppSession | null) {
+  if (!session?.activeCompanyId) {
+    return undefined;
+  }
+  if (hasSuperAdminScope(session)) {
+    return undefined;
+  }
+  return {
+    OR: [{ companyId: session.activeCompanyId }, { isSystem: true }],
+  };
+}
+
+function assertRoleCompanyAccess(
+  session: AppSession | null,
+  role: { companyId: string | null; isSystem: boolean },
+) {
+  if (hasSuperAdminScope(session)) return;
+  if (role.isSystem) {
+    throw new ForbiddenError('Only super admin can modify system roles');
+  }
+  if (!session?.activeCompanyId || role.companyId !== session.activeCompanyId) {
+    throw new ForbiddenError('Role access denied for the active company');
+  }
+}
+
 export const roleService = {
   async list(session: AppSession | null) {
     await authorize(session, 'roles:read');
-    return cachedRoleList();
+    const roles = await cachedRoleList();
+    const where = roleWhereForSession(session);
+    const filtered = where
+      ? roles.filter((role) => role.companyId === session?.activeCompanyId || role.isSystem)
+      : roles;
+    return filtered.map(normalizeRoleDescription);
   },
 
   async getById(session: AppSession | null, id: string) {
     await authorize(session, 'roles:read');
     const role = await prisma.role.findUnique({ where: { id }, include: ROLE_INCLUDE });
     if (!role) throw new NotFoundError('Role not found');
-    return role;
+    if (!hasSuperAdminScope(session)) {
+      if (!session?.activeCompanyId || (role.companyId !== session.activeCompanyId && !role.isSystem)) {
+        throw new NotFoundError('Role not found');
+      }
+    }
+    return normalizeRoleDescription(role);
   },
 
   async listPermissions(session: AppSession | null) {
@@ -44,8 +94,13 @@ export const roleService = {
 
   async create(session: AppSession | null, input: RoleCreateInput) {
     const actor = await authorize(session, 'roles:write');
+    if (!actor.activeCompanyId && !hasSuperAdminScope(actor)) {
+      throw new ValidationError('No active company selected');
+    }
 
-    const dup = await prisma.role.findUnique({ where: { name: input.name } });
+    const companyId = actor.activeCompanyId ?? null;
+
+    const dup = await prisma.role.findFirst({ where: { companyId, name: input.name } });
     if (dup) throw new ValidationError('Role name already exists');
 
     const perms = await prisma.permission.findMany({
@@ -56,6 +111,7 @@ export const roleService = {
     const role = await prisma.$transaction(async (tx) => {
       const role = await tx.role.create({
         data: {
+          companyId,
           name: input.name,
           description: input.description || null,
           permissions: { create: perms.map((p) => ({ permissionId: p.id })) },
@@ -87,11 +143,14 @@ export const roleService = {
       include: ROLE_INCLUDE,
     });
     if (!existing) throw new NotFoundError('Role not found');
+    assertRoleCompanyAccess(actor, { companyId: existing.companyId, isSystem: existing.isSystem });
     if (existing.isSystem && existing.name !== input.name) {
       throw new ValidationError('Cannot rename a system role');
     }
     if (input.name !== existing.name) {
-      const dup = await prisma.role.findUnique({ where: { name: input.name } });
+      const dup = await prisma.role.findFirst({
+        where: { companyId: existing.companyId, name: input.name },
+      });
       if (dup) throw new ValidationError('Role name already exists');
     }
 
@@ -155,6 +214,7 @@ export const roleService = {
       include: { _count: { select: { users: true } } },
     });
     if (!existing) throw new NotFoundError('Role not found');
+    assertRoleCompanyAccess(actor, { companyId: existing.companyId, isSystem: existing.isSystem });
     if (existing.isSystem) throw new ValidationError('Cannot delete a system role');
     if (existing._count.users > 0) throw new ValidationError('Role is still assigned to users');
 

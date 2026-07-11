@@ -37,21 +37,9 @@ export default async function StockBalancePage({ searchParams }: StockBalancePag
   const session = await getSession();
   const sp = await searchParams;
   const section = parseInventorySection(sp.section) ?? 'raw-material';
-  const branchId = session?.activeBranchId;
-
-  if (!branchId) {
-    return (
-      <div>
-        <PageHeader title="Stock balance" />
-        <Card className="p-6 text-sm text-muted-foreground">
-          Select an active branch from the topbar first.
-        </Card>
-      </div>
-    );
-  }
 
   const allRows = (await stockService.balanceSnapshotDetailed(session, {
-    branchId,
+    branchId: session?.activeBranchId ?? undefined,
     section,
   })) as Row[];
 

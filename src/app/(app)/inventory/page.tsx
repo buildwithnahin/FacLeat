@@ -3,6 +3,7 @@ import { Plus, PackagePlus, PackageMinus, Boxes, Layers, AlertTriangle } from 'l
 import { getSession } from '@/server/auth/session';
 import { reportsService } from '@/server/services/reports.service';
 import { stockService } from '@/server/services/stock.service';
+import { productService } from '@/server/services/product.service';
 import { PageHeader } from '@/components/shared/page-header';
 import { KpiCard } from '@/components/shared/kpi-card';
 import { Card } from '@/components/ui/card';
@@ -16,9 +17,10 @@ export default async function InventoryOverviewPage() {
   const session = await getSession();
   const branchId = session?.activeBranchId ?? undefined;
 
-  const [valuation, movements] = await Promise.all([
+  const [valuation, movements, products] = await Promise.all([
     reportsService.inventoryValuation(session, { branchId }),
     stockService.listMovements(session, { branchId, limit: 8 }),
+    productService.list(session),
   ]);
 
   const lowStock = valuation.rows.filter((r) => r.belowReorder);
@@ -50,7 +52,7 @@ export default async function InventoryOverviewPage() {
       </PageHeader>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <KpiCard label="Products tracked" value={valuation.rows.length} icon={Boxes} />
+        <KpiCard label="Products tracked" value={products.length} icon={Boxes} />
         <KpiCard
           label="Total stock value"
           value={formatCurrency(valuation.totals.value, 'BDT')}

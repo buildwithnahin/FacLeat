@@ -1,6 +1,7 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getSession } from '@/server/auth/session';
@@ -75,4 +76,7 @@ export async function setActiveBranchAction(formData: FormData) {
     maxAge: 60 * 60 * 24 * 30,
   });
   revalidatePath('/', 'layout');
+
+  const referer = (await headers()).get('referer');
+  redirect(referer ?? '/');
 }

@@ -14,7 +14,7 @@ export async function BranchSwitcher({ session }: { session: AppSession }) {
 
   if (branches.length === 0) return null;
 
-  const active = branches.find((b) => b.id === session.activeBranchId) ?? branches[0];
+  const active = branches.find((b) => b.id === session.activeBranchId) ?? null;
 
   return (
     <SwitcherDropdown

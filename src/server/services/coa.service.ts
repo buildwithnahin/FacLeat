@@ -3,6 +3,7 @@ import { revalidateTag, unstable_cache } from 'next/cache';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { assertBranchInScope } from '@/server/auth/data-scope';
 import { recordAudit } from '@/server/audit/logger';
 import type { AppSession } from '@/server/auth/session';
 import { NotFoundError, ValidationError } from '@/lib/errors';
@@ -102,11 +103,14 @@ export const coaService = {
       include: { parent: true, children: { orderBy: { code: 'asc' } } },
     });
     if (!account) throw new NotFoundError('Account not found');
+    if (account.branchId) await assertBranchInScope(session, account.branchId);
     return account;
   },
 
   async create(session: AppSession | null, input: ChartAccountCreateInput) {
     const actor = await authorize(session, 'coa:write');
+    const scopedBranchId = input.branchId ?? actor.activeBranchId ?? null;
+    if (scopedBranchId) await assertBranchInScope(actor, scopedBranchId);
 
     const existing = await prisma.chartAccount.findUnique({ where: { code: input.code } });
     if (existing) throw new ValidationError('Account code already exists');
@@ -143,7 +147,7 @@ export const coaService = {
           isPosting: input.isPosting,
           isControl: input.isControl,
           currency: input.currency,
-          branchId: input.branchId ?? null,
+          branchId: scopedBranchId,
           openingBalance: new Prisma.Decimal(input.openingBalance),
           description: input.description || null,
           isActive: input.isActive,
@@ -176,6 +180,7 @@ export const coaService = {
     const actor = await authorize(session, 'coa:write');
     const existing = await prisma.chartAccount.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError('Account not found');
+    if (existing.branchId) await assertBranchInScope(actor, existing.branchId);
     if (existing.isSystem) throw new ValidationError('System accounts cannot be deactivated');
 
     const account = await prisma.$transaction(async (tx) => {
@@ -206,6 +211,9 @@ export const coaService = {
     const actor = await authorize(session, 'coa:write');
     const existing = await prisma.chartAccount.findUnique({ where: { id: input.id } });
     if (!existing) throw new NotFoundError('Account not found');
+    if (existing.branchId) await assertBranchInScope(actor, existing.branchId);
+    const scopedBranchId = input.branchId ?? actor.activeBranchId ?? null;
+    if (scopedBranchId) await assertBranchInScope(actor, scopedBranchId);
     if (existing.isSystem && (input.code !== existing.code || input.type !== existing.type)) {
       throw new ValidationError('System accounts cannot have code or type changed');
     }
@@ -251,7 +259,7 @@ export const coaService = {
           isPosting: input.isPosting,
           isControl: input.isControl,
           currency: input.currency,
-          branchId: input.branchId ?? null,
+          branchId: scopedBranchId,
           openingBalance: new Prisma.Decimal(input.openingBalance),
           description: input.description || null,
           isActive: input.isActive,
@@ -308,6 +316,7 @@ export const coaService = {
       },
     });
     if (!existing) throw new NotFoundError('Account not found');
+    if (existing.branchId) await assertBranchInScope(actor, existing.branchId);
     if (existing.isSystem) throw new ValidationError('System accounts cannot be deleted');
     if (existing._count.children > 0) throw new ValidationError('Delete child accounts first');
     if (existing._count.journalLines > 0) {

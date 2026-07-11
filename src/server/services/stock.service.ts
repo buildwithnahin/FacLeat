@@ -2,6 +2,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { assertBranchInScope, getScopedBranchIds } from '@/server/auth/data-scope';
 import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { publishToPermission } from '@/server/notifications/publisher';
@@ -150,9 +151,24 @@ async function notifyLowStockProducts(branchId: string, productIds: string[]) {
   }
 }
 
+async function assertProductsInCompany(session: AppSession | null, productIds: string[]) {
+  if (!session?.activeCompanyId || productIds.length === 0) return;
+
+  const products = await prisma.product.findMany({
+    where: { id: { in: Array.from(new Set(productIds)) } },
+    select: { id: true, companyId: true },
+  });
+  if (products.length !== Array.from(new Set(productIds)).length) {
+    throw new NotFoundError('One or more products were not found');
+  }
+  const invalid = products.find((product) => product.companyId !== session.activeCompanyId);
+  if (invalid) throw new ValidationError('Product does not belong to the active company');
+}
+
 export const stockService = {
   async balanceSnapshot(session: AppSession | null, branchId: string, warehouseId?: string) {
     await authorize(session, 'inventory:read');
+    await assertBranchInScope(session, branchId);
     return getBalances(prisma, branchId, warehouseId);
   },
 
@@ -165,14 +181,20 @@ export const stockService = {
     },
   ): Promise<DetailedBalanceRow[]> {
     await authorize(session, 'inventory:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
+    if (filters.branchId && branchIds && branchIds.length === 0) return [];
 
     const [balances, warehouses, products] = await Promise.all([
       getBalances(prisma, filters.branchId, filters.warehouseId),
       prisma.warehouse.findMany({
-        where: { branchId: filters.branchId, ...(filters.warehouseId ? { id: filters.warehouseId } : {}) },
+        where: {
+          ...(branchIds ? { branchId: { in: branchIds } } : {}),
+          ...(filters.warehouseId ? { id: filters.warehouseId } : {}),
+        },
         select: { id: true, name: true, code: true, type: true },
       }),
       prisma.product.findMany({
+        where: session?.activeCompanyId ? { companyId: session.activeCompanyId } : undefined,
         select: {
           id: true,
           sku: true,
@@ -235,9 +257,10 @@ export const stockService = {
     },
   ) {
     await authorize(session, 'inventory:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     const rows = await prisma.inventoryLedger.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         warehouseId: filters.warehouseId,
         productId: filters.productId,
         direction: filters.direction,
@@ -250,14 +273,18 @@ export const stockService = {
       orderBy: { createdAt: 'desc' },
       take: filters.limit ?? 200,
       include: {
-        product: { select: { sku: true, name: true, unit: true, type: true } },
+        product: { select: { sku: true, name: true, unit: true, type: true, companyId: true } },
         warehouse: { select: { code: true, name: true, type: true } },
       },
     });
 
-    if (!filters.section) return rows;
+    const companyScopedRows = session?.activeCompanyId
+      ? rows.filter((row) => row.product.companyId === session.activeCompanyId)
+      : rows;
 
-    return rows.filter((row) =>
+    if (!filters.section) return companyScopedRows;
+
+    return companyScopedRows.filter((row) =>
       matchesInventorySection({
         section: filters.section!,
         productType: row.product.type,
@@ -269,6 +296,8 @@ export const stockService = {
   async postReceipt(session: AppSession | null, input: ReceiptInput) {
     const actor = await authorize(session, 'warehouse:receive');
     assertPositiveItems(input.items);
+    await assertBranchInScope(actor, input.branchId);
+    await assertProductsInCompany(actor, input.items.map((it) => it.productId));
     const warehouse = await prisma.warehouse.findUnique({ where: { id: input.warehouseId } });
     if (!warehouse || warehouse.branchId !== input.branchId) {
       throw new ValidationError('Warehouse does not belong to this branch');
@@ -324,6 +353,8 @@ export const stockService = {
   async postIssue(session: AppSession | null, input: IssueInput) {
     const actor = await authorize(session, 'warehouse:issue');
     assertPositiveItems(input.items);
+    await assertBranchInScope(actor, input.branchId);
+    await assertProductsInCompany(actor, input.items.map((it) => it.productId));
 
     const warehouse = await prisma.warehouse.findUnique({
       where: { id: input.warehouseId },
@@ -401,6 +432,8 @@ export const stockService = {
   async postTransfer(session: AppSession | null, input: TransferInput) {
     const actor = await authorize(session, 'warehouse:transfer');
     assertPositiveItems(input.items);
+    await assertBranchInScope(actor, input.branchId);
+    await assertProductsInCompany(actor, input.items.map((it) => it.productId));
     if (input.fromWarehouseId === input.toWarehouseId) {
       throw new ValidationError('Source and destination warehouses must differ');
     }
@@ -416,6 +449,8 @@ export const stockService = {
     if (from.type !== 'SHOWROOM' || to.type !== 'SHOWROOM') {
       throw new ValidationError('Transfers are only allowed between showroom warehouses');
     }
+    await assertBranchInScope(actor, from.branchId);
+    await assertBranchInScope(actor, to.branchId);
     if (from.branchId === to.branchId) {
       throw new ValidationError('Transfers must be between different showroom branches');
     }
@@ -503,6 +538,8 @@ export const stockService = {
   async postPhysicalCount(session: AppSession | null, input: PhysicalCountInput) {
     const actor = await authorize(session, 'warehouse:count');
     if (input.items.length === 0) throw new ValidationError('No items counted');
+    await assertBranchInScope(actor, input.branchId);
+    await assertProductsInCompany(actor, input.items.map((it) => it.productId));
 
     const warehouse = await prisma.warehouse.findUnique({ where: { id: input.warehouseId } });
     if (!warehouse || warehouse.branchId !== input.branchId) {

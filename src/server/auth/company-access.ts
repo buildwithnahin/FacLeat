@@ -1,5 +1,9 @@
 import type { AppSession } from './session';
 
+function hasSuperAdminScope(session: AppSession | null) {
+  return session?.roles.some((role) => role.toLowerCase().includes('super admin')) ?? false;
+}
+
 // Company access is derived from branch access, not tracked independently:
 // a user's allowed companies are the distinct companies of their allowed
 // branches. Branch.companyId is required and Employee.branchId is required,
@@ -26,7 +30,9 @@ export function getAllowedCompanyIds(
 
 export function canAccessCompany(session: AppSession | null, companyId: string | null | undefined) {
   if (!session || !companyId) return false;
-  if (session.branchAccessType === 'ALL_BRANCHES') return true;
+  if (session.branchAccessType === 'ALL_BRANCHES') {
+    return hasSuperAdminScope(session) ? true : session.allowedCompanyIds.includes(companyId);
+  }
   return session.allowedCompanyIds.includes(companyId);
 }
 
@@ -35,8 +41,9 @@ export function resolveSessionActiveCompanyId(input: {
   allowedCompanyIds: string[];
   defaultCompanyId: string | null;
   activeCompanyId: string | null;
+  isSuperAdmin?: boolean;
 }) {
-  if (input.branchAccessType === 'ALL_BRANCHES') {
+  if (input.branchAccessType === 'ALL_BRANCHES' && input.isSuperAdmin) {
     return input.activeCompanyId ?? input.defaultCompanyId ?? null;
   }
 
@@ -47,5 +54,5 @@ export function resolveSessionActiveCompanyId(input: {
   if (input.defaultCompanyId && allowed.has(input.defaultCompanyId)) {
     return input.defaultCompanyId;
   }
-  return input.allowedCompanyIds[0] ?? null;
+  return input.allowedCompanyIds[0] ?? input.defaultCompanyId ?? null;
 }

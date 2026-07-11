@@ -1,6 +1,7 @@
 import 'server-only';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { assertBranchInScope, getScopedBranchIds } from '@/server/auth/data-scope';
 import { recordAudit } from '@/server/audit/logger';
 import type { AppSession } from '@/server/auth/session';
 import type { WarehouseCreateInput, WarehouseUpdateInput } from '@/server/validators/warehouses';
@@ -13,7 +14,9 @@ const WAREHOUSE_INCLUDE = {
 export const warehouseService = {
   async listAll(session: AppSession | null) {
     await authorize(session, 'warehouse:read');
+    const branchIds = await getScopedBranchIds(session);
     return prisma.warehouse.findMany({
+      where: branchIds ? { branchId: { in: branchIds } } : undefined,
       orderBy: [{ branch: { name: 'asc' } }, { name: 'asc' }],
       include: WAREHOUSE_INCLUDE,
     });
@@ -21,6 +24,7 @@ export const warehouseService = {
 
   async listActiveForBranch(session: AppSession | null, branchId: string) {
     await authorize(session, 'warehouse:read');
+    await assertBranchInScope(session, branchId);
     return prisma.warehouse.findMany({
       where: { branchId, isActive: true },
       orderBy: { name: 'asc' },
@@ -29,6 +33,7 @@ export const warehouseService = {
 
   async listActiveShowroomsForBranch(session: AppSession | null, branchId: string) {
     await authorize(session, 'warehouse:read');
+    await assertBranchInScope(session, branchId);
     return prisma.warehouse.findMany({
       where: { branchId, isActive: true, type: 'SHOWROOM' },
       orderBy: { name: 'asc' },
@@ -37,8 +42,13 @@ export const warehouseService = {
 
   async listActiveShowrooms(session: AppSession | null) {
     await authorize(session, 'warehouse:read');
+    const branchIds = await getScopedBranchIds(session);
     return prisma.warehouse.findMany({
-      where: { isActive: true, type: 'SHOWROOM' },
+      where: {
+        isActive: true,
+        type: 'SHOWROOM',
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
+      },
       orderBy: [{ branch: { name: 'asc' } }, { name: 'asc' }],
       include: WAREHOUSE_INCLUDE,
     });
@@ -48,6 +58,7 @@ export const warehouseService = {
     await authorize(session, 'warehouse:read');
     const wh = await prisma.warehouse.findUnique({ where: { id }, include: WAREHOUSE_INCLUDE });
     if (!wh) throw new NotFoundError('Warehouse not found');
+    await assertBranchInScope(session, wh.branchId);
     return wh;
   },
 
@@ -55,6 +66,7 @@ export const warehouseService = {
     const actor = await authorize(session, 'warehouse:read');
     // tighter: require warehouse mutation to carry through as inventory:write since there is no explicit create perm
     await authorize(session, 'inventory:write');
+    await assertBranchInScope(actor, input.branchId);
 
     const dup = await prisma.warehouse.findUnique({
       where: { branchId_code: { branchId: input.branchId, code: input.code } },
@@ -92,6 +104,8 @@ export const warehouseService = {
     const actor = await authorize(session, 'inventory:write');
     const existing = await prisma.warehouse.findUnique({ where: { id: input.id } });
     if (!existing) throw new NotFoundError('Warehouse not found');
+    await assertBranchInScope(actor, existing.branchId);
+    await assertBranchInScope(actor, input.branchId);
     if (
       input.code !== existing.code ||
       input.branchId !== existing.branchId

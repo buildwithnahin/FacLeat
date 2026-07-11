@@ -655,24 +655,35 @@ async function loadDashboardData(
 }
 
 async function loadSuperAdminData(): Promise<DashboardData> {
-  const [mainBranches, branches, users] = await Promise.all([
-    prisma.branch.count({ where: { type: 'MAIN' } }),
+  const today = startOfDay();
+  const [companies, branches, users, todayLoginUsers] = await Promise.all([
+    prisma.company.count({ where: { isActive: true } }),
     prisma.branch.count(),
     prisma.user.count(),
+    prisma.auditLog.findMany({
+      where: {
+        module: 'auth',
+        action: 'LOGIN_SUCCESS',
+        actorId: { not: null },
+        createdAt: { gte: today },
+      },
+      select: { actorId: true },
+      distinct: ['actorId'],
+    }),
   ]);
 
   return {
     metrics: {
-      totalCompanies: formatCount(mainBranches),
+      totalCompanies: formatCount(companies),
       totalBranches: formatCount(branches),
       totalUsers: formatCount(users),
       activeModules: formatCount(MODULES.length),
       systemHealth: branches > 0 && users > 0 ? 'Healthy' : 'Check',
-      todayLoginUsers: 'N/A',
+      todayLoginUsers: formatCount(todayLoginUsers.length),
     },
     notes: [
-      'Total Companies currently uses MAIN branches because the schema does not yet include a dedicated company table.',
-      'Today Login Users stays as N/A until a login audit or session-tracking table is added.',
+      'Total Companies uses active records from the dedicated Company table.',
+      'Today Login Users counts distinct successful logins recorded in the audit log since midnight.',
     ],
   };
 }

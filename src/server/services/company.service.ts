@@ -8,6 +8,10 @@ import type { AppSession } from '@/server/auth/session';
 import type { CompanyCreateInput, CompanyUpdateInput } from '@/server/validators/companies';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 
+function hasSuperAdminScope(session: AppSession | null) {
+  return session?.roles.some((role) => role.toLowerCase().includes('super admin')) ?? false;
+}
+
 const cachedActiveCompanies = unstable_cache(
   () => prisma.company.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
   ['companies-active'],
@@ -25,7 +29,7 @@ export const companyService = {
     if (!session) return [];
 
     const companies = await cachedActiveCompanies();
-    if (session.branchAccessType === 'ALL_BRANCHES') {
+    if (session.branchAccessType === 'ALL_BRANCHES' && hasSuperAdminScope(session)) {
       return companies;
     }
 
@@ -41,7 +45,7 @@ export const companyService = {
   async listAll(session: AppSession | null) {
     await authorize(session, 'companies:read');
     const companies = await cachedAllCompanies();
-    if (session?.branchAccessType === 'ALL_BRANCHES') return companies;
+    if (session?.branchAccessType === 'ALL_BRANCHES' && hasSuperAdminScope(session)) return companies;
     const allowed = new Set(session?.allowedCompanyIds ?? []);
     return companies.filter((company) => allowed.has(company.id));
   },
@@ -62,6 +66,9 @@ export const companyService = {
 
   async create(session: AppSession | null, input: CompanyCreateInput) {
     const actor = await authorize(session, 'companies:write');
+    if (!hasSuperAdminScope(actor)) {
+      throw new ValidationError('Only super admin can create companies');
+    }
     const dup = await prisma.company.findUnique({ where: { code: input.code } });
     if (dup) throw new ValidationError('Company code already exists');
 
@@ -99,6 +106,9 @@ export const companyService = {
     const actor = await authorize(session, 'companies:write');
     const existing = await prisma.company.findUnique({ where: { id: input.id } });
     if (!existing) throw new NotFoundError('Company not found');
+    if (!hasSuperAdminScope(actor) && actor.activeCompanyId !== existing.id) {
+      throw new ValidationError('Company access denied');
+    }
     if (input.code !== existing.code) {
       const dup = await prisma.company.findUnique({ where: { code: input.code } });
       if (dup) throw new ValidationError('Company code already exists');

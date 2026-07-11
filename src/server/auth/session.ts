@@ -87,9 +87,10 @@ export const getSession = cache(async (): Promise<AppSession | null> => {
       roleNames.push(ur.role.name);
       for (const rp of ur.role.permissions) permSet.add(rp.permission.key);
     }
+    const isSuperAdmin = roleNames.some((role) => role.toLowerCase().includes('super admin'));
 
     const override = cookieStore.get(ACTIVE_BRANCH_COOKIE)?.value;
-    const allowedBranchIds =
+    let allowedBranchIds =
       userWithRoles.branchAccessType === 'ALL_BRANCHES'
         ? []
         : Array.from(
@@ -109,13 +110,62 @@ export const getSession = cache(async (): Promise<AppSession | null> => {
       branchCompanyMap.set(userWithRoles.defaultBranchId, userWithRoles.defaultBranch.companyId);
     }
 
-    const allowedCompanyIds = getAllowedCompanyIds(
-      userWithRoles.branchAccessType,
-      allowedBranchIds,
-      branchCompanyMap,
-    );
+    let allowedCompanyIds =
+      userWithRoles.branchAccessType === 'ALL_BRANCHES' && !isSuperAdmin
+        ? Array.from(
+            new Set(
+              [userWithRoles.defaultCompanyId, ...branchCompanyMap.values()].filter(
+                (companyId): companyId is string => !!companyId,
+              ),
+            ),
+          )
+        : getAllowedCompanyIds(
+            userWithRoles.branchAccessType,
+            allowedBranchIds,
+            branchCompanyMap,
+          );
+
+    if (userWithRoles.branchAccessType === 'ALL_BRANCHES' && !isSuperAdmin && allowedCompanyIds.length > 0) {
+      const scopedBranches = await prisma.branch.findMany({
+        where: { companyId: { in: allowedCompanyIds } },
+        select: { id: true, companyId: true },
+      });
+      allowedBranchIds = scopedBranches.map((branch) => branch.id);
+      for (const branch of scopedBranches) {
+        branchCompanyMap.set(branch.id, branch.companyId);
+      }
+      allowedCompanyIds = Array.from(new Set(scopedBranches.map((branch) => branch.companyId)));
+    }
 
     const companyOverride = cookieStore.get(ACTIVE_COMPANY_COOKIE)?.value;
+    const requestedActiveCompanyId = resolveSessionActiveCompanyId({
+      branchAccessType: userWithRoles.branchAccessType,
+      allowedCompanyIds,
+      defaultCompanyId: userWithRoles.defaultCompanyId ?? null,
+      activeCompanyId: companyOverride ?? s.user.activeCompanyId ?? userWithRoles.defaultCompanyId ?? null,
+      isSuperAdmin,
+    });
+
+    let resolvedActiveBranchId = resolveSessionActiveBranchId({
+      branchAccessType: userWithRoles.branchAccessType,
+      allowedBranchIds,
+      defaultBranchId: userWithRoles.defaultBranchId ?? null,
+      activeBranchId: override ?? s.user.activeBranchId ?? userWithRoles.defaultBranchId ?? null,
+      isSuperAdmin,
+    });
+
+    if (
+      requestedActiveCompanyId &&
+      resolvedActiveBranchId &&
+      branchCompanyMap.get(resolvedActiveBranchId) !== requestedActiveCompanyId
+    ) {
+      resolvedActiveBranchId =
+        allowedBranchIds.find((branchId) => branchCompanyMap.get(branchId) === requestedActiveCompanyId) ?? null;
+    }
+
+    const branchScopedCompanyId = resolvedActiveBranchId
+      ? branchCompanyMap.get(resolvedActiveBranchId) ?? null
+      : null;
 
     return {
       userId: userWithRoles.id,
@@ -126,20 +176,11 @@ export const getSession = cache(async (): Promise<AppSession | null> => {
       branchAccessType: userWithRoles.branchAccessType,
       defaultBranchId: userWithRoles.defaultBranchId ?? null,
       allowedBranchIds,
-      activeBranchId: resolveSessionActiveBranchId({
-        branchAccessType: userWithRoles.branchAccessType,
-        allowedBranchIds,
-        defaultBranchId: userWithRoles.defaultBranchId ?? null,
-        activeBranchId: override ?? s.user.activeBranchId ?? userWithRoles.defaultBranchId ?? null,
-      }),
+      activeBranchId: resolvedActiveBranchId,
       defaultCompanyId: userWithRoles.defaultCompanyId ?? null,
       allowedCompanyIds,
-      activeCompanyId: resolveSessionActiveCompanyId({
-        branchAccessType: userWithRoles.branchAccessType,
-        allowedCompanyIds,
-        defaultCompanyId: userWithRoles.defaultCompanyId ?? null,
-        activeCompanyId: companyOverride ?? s.user.activeCompanyId ?? userWithRoles.defaultCompanyId ?? null,
-      }),
+      activeCompanyId:
+        branchScopedCompanyId ?? requestedActiveCompanyId,
     };
   } catch (error) {
     if (isRecoverableSessionError(error)) {
@@ -175,4 +216,3 @@ export function getBranchFilter(session: AppSession) {
 export function invalidateRbacCache() {
   revalidateTag('rbac');
 }
-

@@ -2,6 +2,7 @@ import 'server-only';
 import { Prisma, type SystemAccountKey } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { assertBranchInScope, getScopedBranchIds } from '@/server/auth/data-scope';
 import { recordAudit } from '@/server/audit/logger';
 import type { AppSession } from '@/server/auth/session';
 import { NotFoundError, ValidationError } from '@/lib/errors';
@@ -72,6 +73,7 @@ export const accountsService = {
    */
   async postJournal(session: AppSession | null, input: JournalPostInput, externalTx?: Tx) {
     const actor = await authorize(session, 'accounts:post');
+    await assertBranchInScope(actor, input.branchId);
 
     const debit = input.lines.reduce((s, l) => s.plus(D(l.debit || 0)), ZERO);
     const credit = input.lines.reduce((s, l) => s.plus(D(l.credit || 0)), ZERO);
@@ -228,9 +230,10 @@ export const accountsService = {
     } = {},
   ) {
     await authorize(session, 'accounts:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.journalEntry.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status,
         date: {
           gte: filters.from,
@@ -260,6 +263,7 @@ export const accountsService = {
       },
     });
     if (!entry) throw new NotFoundError('Journal entry not found');
+    await assertBranchInScope(session, entry.branchId);
     return entry;
   },
 
@@ -268,6 +272,7 @@ export const accountsService = {
     return prisma.$transaction(async (tx) => {
       const entry = await tx.journalEntry.findUnique({ where: { id }, include: { lines: true } });
       if (!entry) throw new NotFoundError('Journal entry not found');
+      await assertBranchInScope(actor, entry.branchId);
       if (entry.status !== 'DRAFT') throw new ValidationError('Only draft entries can be posted');
       const period = await tx.period.findUnique({ where: { id: entry.periodId } });
       if (!period || period.status !== 'OPEN') throw new ValidationError('Period is not open');
@@ -305,6 +310,7 @@ export const accountsService = {
         include: { lines: true },
       });
       if (!entry) throw new NotFoundError('Journal entry not found');
+      await assertBranchInScope(actor, entry.branchId);
       if (entry.status !== 'POSTED') throw new ValidationError('Only posted entries can be voided');
       if (entry.reversesId) throw new ValidationError('Cannot void a reversal entry');
 
@@ -399,13 +405,15 @@ export const accountsService = {
     await authorize(session, 'accounts:read');
     const account = await prisma.chartAccount.findUnique({ where: { id: filters.accountId } });
     if (!account) throw new NotFoundError('Account not found');
+    if (account.branchId) await assertBranchInScope(session, account.branchId);
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
 
     const lines = await prisma.journalEntryLine.findMany({
       where: {
         accountId: filters.accountId,
         entry: {
           status: 'POSTED',
-          branchId: filters.branchId,
+          ...(branchIds ? { branchId: { in: branchIds } } : {}),
           date: { gte: filters.from, lte: filters.to },
         },
       },
@@ -437,8 +445,9 @@ export const accountsService = {
 
   async listPeriods(session: AppSession | null, filters: { branchId?: string } = {}) {
     await authorize(session, 'accounts:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.period.findMany({
-      where: { branchId: filters.branchId },
+      where: branchIds ? { branchId: { in: branchIds } } : undefined,
       include: { branch: true, _count: { select: { journalEntries: true } } },
       orderBy: [{ branchId: 'asc' }, { startsAt: 'desc' }],
     });
@@ -449,6 +458,7 @@ export const accountsService = {
     input: { branchId: string; name: string; startsAt: Date; endsAt: Date },
   ) {
     const actor = await authorize(session, 'accounts:close-period');
+    await assertBranchInScope(actor, input.branchId);
     if (input.endsAt <= input.startsAt) throw new ValidationError('End date must be after start date');
     const overlap = await prisma.period.findFirst({
       where: {
@@ -487,6 +497,7 @@ export const accountsService = {
     return prisma.$transaction(async (tx) => {
       const existing = await tx.period.findUnique({ where: { id: input.id } });
       if (!existing) throw new NotFoundError('Period not found');
+      await assertBranchInScope(actor, existing.branchId);
       if (existing.status === 'CLOSED' && input.status !== 'CLOSED') {
         throw new ValidationError('Closed periods cannot be reopened');
       }

@@ -1,6 +1,7 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getSession } from '@/server/auth/session';
@@ -74,17 +75,33 @@ export async function setActiveCompanyAction(formData: FormData) {
   });
 
   // If the currently active branch doesn't belong to the newly active company,
-  // clear the branch cookie so the branch switcher re-selects within the new company.
-  const currentBranchId = store.get(ACTIVE_BRANCH_COOKIE)?.value;
-  if (currentBranchId) {
-    const currentBranch = await prisma.branch.findUnique({
-      where: { id: currentBranchId },
-      select: { companyId: true },
+  // re-select a branch within the new company so pages don't stay anchored to
+  // the previous company's branch context.
+  const nextBranch = await prisma.branch.findFirst({
+    where: {
+      companyId,
+      isActive: true,
+      ...(session.branchAccessType === 'ALL_BRANCHES'
+        ? {}
+        : { id: { in: session.allowedBranchIds } }),
+    },
+    orderBy: [{ name: 'asc' }],
+    select: { id: true },
+  });
+
+  if (nextBranch) {
+    store.set(ACTIVE_BRANCH_COOKIE, nextBranch.id, {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30,
     });
-    if (currentBranch?.companyId !== companyId) {
-      store.delete(ACTIVE_BRANCH_COOKIE);
-    }
+  } else {
+    store.delete(ACTIVE_BRANCH_COOKIE);
   }
 
   revalidatePath('/', 'layout');
+
+  const referer = (await headers()).get('referer');
+  redirect(referer ?? '/');
 }

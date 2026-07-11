@@ -5,11 +5,15 @@ export type SessionBranchAccessType =
   | 'ASSIGNED_BRANCHES'
   | 'OWN_BRANCH_ONLY';
 
+function hasSuperAdminScope(session: AppSession | null) {
+  return session?.roles.some((role) => role.toLowerCase().includes('super admin')) ?? false;
+}
+
 export function getAllowedBranchIds(session: AppSession | null): string[] {
   if (!session) return [];
 
   if (session.branchAccessType === 'ALL_BRANCHES') {
-    return [];
+    return hasSuperAdminScope(session) ? [] : session.allowedBranchIds;
   }
 
   const ids = new Set<string>();
@@ -23,7 +27,9 @@ export function getAllowedBranchIds(session: AppSession | null): string[] {
 
 export function canAccessBranch(session: AppSession | null, branchId: string | null | undefined) {
   if (!session || !branchId) return false;
-  if (session.branchAccessType === 'ALL_BRANCHES') return true;
+  if (session.branchAccessType === 'ALL_BRANCHES') {
+    return hasSuperAdminScope(session) ? true : getAllowedBranchIds(session).includes(branchId);
+  }
   return getAllowedBranchIds(session).includes(branchId);
 }
 
@@ -32,8 +38,9 @@ export function resolveSessionActiveBranchId(input: {
   allowedBranchIds: string[];
   defaultBranchId: string | null;
   activeBranchId: string | null;
+  isSuperAdmin?: boolean;
 }) {
-  if (input.branchAccessType === 'ALL_BRANCHES') {
+  if (input.branchAccessType === 'ALL_BRANCHES' && input.isSuperAdmin) {
     return input.activeBranchId ?? input.defaultBranchId ?? null;
   }
 

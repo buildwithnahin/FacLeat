@@ -10,10 +10,14 @@ export const metadata = { title: 'Edit product' };
 export default async function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await getSession();
+  const companyId = session?.activeCompanyId ?? undefined;
   const [product, categories, brands] = await Promise.all([
     productService.getById(session, id),
     categoryService.listFlat(session),
-    prisma.productBrand.findMany({ orderBy: { name: 'asc' } }),
+    prisma.productBrand.findMany({
+      where: { companyId },
+      orderBy: { name: 'asc' },
+    }),
   ]);
 
   return (

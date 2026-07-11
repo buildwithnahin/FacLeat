@@ -15,6 +15,7 @@ export default async function RolesPage() {
   const roles = await roleService.list(session);
   const canWrite = session?.permissions.includes('roles:write') ?? false;
   const canDelete = session?.permissions.includes('roles:delete') ?? false;
+  const isSuperAdmin = session?.roles.some((role) => role.toLowerCase().includes('super admin')) ?? false;
 
   return (
     <div>
@@ -55,7 +56,7 @@ export default async function RolesPage() {
                   <td className="px-4 py-3 tabular">{r.permissions.length}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      {canWrite && (
+                      {canWrite && (isSuperAdmin || !r.isSystem) && (
                         <Button size="sm" variant="ghost" asChild>
                           <Link href={`/roles/${r.id}`}>
                             <Pencil className="h-3.5 w-3.5" />

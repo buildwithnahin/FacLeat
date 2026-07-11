@@ -2,6 +2,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { assertBranchInScope, getScopedBranchIds } from '@/server/auth/data-scope';
 import { recordAudit } from '@/server/audit/logger';
 import { approvalService } from '@/server/services/approval.service';
 import { syncConfirmationReportingManagerForEmployee } from '@/server/services/confirmations.service';
@@ -54,9 +55,10 @@ export const hrService = {
     filters: { branchId?: string; status?: string; q?: string } = {},
   ) {
     await authorize(session, 'hr:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.employee.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status as never,
         OR: filters.q
           ? [
@@ -79,11 +81,13 @@ export const hrService = {
       include: { branch: true, shift: true, reportingManager: true, systemRole: true, user: true },
     });
     if (!employee) throw new NotFoundError('Employee not found');
+    await assertBranchInScope(session, employee.branchId);
     return employee;
   },
 
   async createEmployee(session: AppSession | null, input: EmployeeCreateInput) {
     const actor = await authorize(session, 'hr:write');
+    await assertBranchInScope(actor, input.branchId);
     const dup = await prisma.employee.findUnique({
       where: { branchId_code: { branchId: input.branchId, code: input.code } },
     });
@@ -155,6 +159,8 @@ export const hrService = {
     const actor = await authorize(session, 'hr:write');
     const existing = await prisma.employee.findUnique({ where: { id: input.id } });
     if (!existing) throw new NotFoundError('Employee not found');
+    await assertBranchInScope(actor, existing.branchId);
+    await assertBranchInScope(actor, input.branchId);
     const nextReportingManagerId = input.reportingManagerId || null;
     const reportingManagerChanged = existing.reportingManagerId !== nextReportingManagerId;
     if (input.code !== existing.code || input.branchId !== existing.branchId) {
@@ -241,12 +247,13 @@ export const hrService = {
     filters: { type?: string; branchId?: string; status?: string } = {},
   ) {
     await authorize(session, 'hr:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.hrMasterData.findMany({
       where: {
         type: filters.type,
         status: filters.status,
-        OR: filters.branchId
-          ? [{ branchId: filters.branchId }, { branchId: null }]
+        OR: branchIds
+          ? [{ branchId: { in: branchIds } }, { branchId: null }]
           : undefined,
       },
       include: { branch: true },
@@ -257,6 +264,7 @@ export const hrService = {
 
   async createMasterData(session: AppSession | null, input: HrMasterDataCreateInput) {
     const actor = await authorize(session, 'hr:write');
+    if (input.branchId) await assertBranchInScope(actor, input.branchId);
 
     try {
       return await prisma.$transaction(async (tx) => {
@@ -304,6 +312,8 @@ export const hrService = {
     const actor = await authorize(session, 'hr:write');
     const existing = await prisma.hrMasterData.findUnique({ where: { id: input.id } });
     if (!existing) throw new NotFoundError('HR master data record not found');
+    if (existing.branchId) await assertBranchInScope(actor, existing.branchId);
+    if (input.branchId) await assertBranchInScope(actor, input.branchId);
 
     try {
       return await prisma.$transaction(async (tx) => {
@@ -363,13 +373,14 @@ export const hrService = {
     filters: { section?: string; branchId?: string; employeeId?: string; status?: string } = {},
   ) {
     await authorize(session, 'hr:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.hrWorkflowRecord.findMany({
       where: {
         section: filters.section,
         status: filters.status,
         employeeId: filters.employeeId,
-        OR: filters.branchId
-          ? [{ branchId: filters.branchId }, { branchId: null }]
+        OR: branchIds
+          ? [{ branchId: { in: branchIds } }, { branchId: null }]
           : undefined,
       },
       include: { branch: true, employee: true },
@@ -380,6 +391,7 @@ export const hrService = {
 
   async createWorkflowRecord(session: AppSession | null, input: HrWorkflowRecordCreateInput) {
     const actor = await authorize(session, 'hr:write');
+    if (input.branchId) await assertBranchInScope(actor, input.branchId);
 
     return prisma.$transaction(async (tx) => {
       const row = await tx.hrWorkflowRecord.create({
@@ -420,6 +432,8 @@ export const hrService = {
     const actor = await authorize(session, 'hr:write');
     const existing = await prisma.hrWorkflowRecord.findUnique({ where: { id: input.id } });
     if (!existing) throw new NotFoundError('HR workflow record not found');
+    if (existing.branchId) await assertBranchInScope(actor, existing.branchId);
+    if (input.branchId) await assertBranchInScope(actor, input.branchId);
 
     return prisma.$transaction(async (tx) => {
       const row = await tx.hrWorkflowRecord.update({
@@ -470,6 +484,12 @@ export const hrService = {
   // ─── Attendance ───────────────────────────────────────────────────────────
   async markAttendance(session: AppSession | null, input: AttendanceMarkInput) {
     const actor = await authorize(session, 'hr:attendance');
+    const employee = await prisma.employee.findUnique({
+      where: { id: input.employeeId },
+      select: { branchId: true },
+    });
+    if (!employee) throw new NotFoundError('Employee not found');
+    await assertBranchInScope(actor, employee.branchId);
     const dateStr = input.date.toISOString().slice(0, 10);
     const checkIn = input.checkIn ? parseTimeOn(dateStr, input.checkIn) : null;
     const checkOut = input.checkOut ? parseTimeOn(dateStr, input.checkOut) : null;
@@ -501,11 +521,12 @@ export const hrService = {
     filters: { employeeId?: string; from?: Date; to?: Date; branchId?: string } = {},
   ) {
     await authorize(session, 'hr:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.attendanceRecord.findMany({
       where: {
         employeeId: filters.employeeId,
         date: { gte: filters.from, lte: filters.to },
-        employee: filters.branchId ? { branchId: filters.branchId } : undefined,
+        employee: branchIds ? { branchId: { in: branchIds } } : undefined,
       },
       include: { employee: true },
       orderBy: [{ date: 'desc' }, { employeeId: 'asc' }],
@@ -518,6 +539,7 @@ export const hrService = {
     const actor = await authorize(session, 'hr:write');
     const emp = await prisma.employee.findUnique({ where: { id: input.employeeId } });
     if (!emp) throw new NotFoundError('Employee not found');
+    await assertBranchInScope(actor, emp.branchId);
     const policy = await resolveLeavePolicyForEmployee(input.employeeId, input.fromDate);
     const rule = policy.rules.find((item) => item.leaveType === input.type && item.status === 'ACTIVE');
     if (!rule) throw new ValidationError(`No active policy rule found for ${input.type}.`);
@@ -556,11 +578,12 @@ export const hrService = {
     filters: { status?: string; branchId?: string; employeeId?: string } = {},
   ) {
     await authorize(session, 'hr:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.leaveRequest.findMany({
       where: {
         status: filters.status as never,
         employeeId: filters.employeeId,
-        employee: filters.branchId ? { branchId: filters.branchId } : undefined,
+        employee: branchIds ? { branchId: { in: branchIds } } : undefined,
       },
       include: { employee: true },
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
@@ -576,6 +599,7 @@ export const hrService = {
         include: { employee: true },
       });
       if (!lr) throw new NotFoundError('Leave request not found');
+      await assertBranchInScope(actor, lr.employee.branchId);
       if (lr.status !== 'PENDING') throw new ValidationError('Leave is already decided');
 
       const updated = await tx.leaveRequest.update({
@@ -607,8 +631,9 @@ export const hrService = {
   // ─── Payroll ──────────────────────────────────────────────────────────────
   async listPayrollRuns(session: AppSession | null, filters: { branchId?: string } = {}) {
     await authorize(session, 'hr:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.payrollRun.findMany({
-      where: { branchId: filters.branchId },
+      where: branchIds ? { branchId: { in: branchIds } } : undefined,
       include: { branch: true, _count: { select: { payslips: true } } },
       orderBy: [{ period: 'desc' }],
     });
@@ -627,11 +652,13 @@ export const hrService = {
       },
     });
     if (!run) throw new NotFoundError('Payroll run not found');
+    await assertBranchInScope(session, run.branchId);
     return run;
   },
 
   async createPayrollRun(session: AppSession | null, input: PayrollRunCreateInput) {
     const actor = await authorize(session, 'hr:process-payroll');
+    await assertBranchInScope(actor, input.branchId);
     const existing = await prisma.payrollRun.findUnique({
       where: { branchId_period: { branchId: input.branchId, period: input.period } },
     });

@@ -14,6 +14,10 @@ import {
 
 const ZERO = new Prisma.Decimal(0);
 
+function hasSuperAdminScope(session: AppSession | null) {
+  return session?.roles.some((role) => role.toLowerCase().includes('super admin')) ?? false;
+}
+
 export interface RangeFilter {
   branchId?: string;
   from?: Date;
@@ -28,7 +32,7 @@ function resolveScopedBranchId(session: AppSession | null, branchId?: string) {
     }
     return branchId;
   }
-  return session.branchAccessType === 'ALL_BRANCHES'
+  return session.branchAccessType === 'ALL_BRANCHES' && hasSuperAdminScope(session)
     ? undefined
     : session.activeBranchId ?? session.defaultBranchId ?? session.allowedBranchIds[0] ?? undefined;
 }
@@ -177,6 +181,7 @@ export const reportsService = {
   async topProducts(session: AppSession | null, f: RangeFilter & { limit?: number } = {}) {
     await authorize(session, 'reports:read');
     const branchId = resolveScopedBranchId(session, f.branchId);
+    const companyId = session?.activeCompanyId ?? undefined;
     const limit = f.limit ?? 20;
     const dateFilter = { gte: f.from, lte: f.to };
 
@@ -231,17 +236,19 @@ export const reportsService = {
 
     const rows = [...map.values()].sort((a, b) => b.qty.cmp(a.qty)).slice(0, limit);
     const products = await prisma.product.findMany({
-      where: { id: { in: rows.map((r) => r.productId) } },
+      where: { id: { in: rows.map((r) => r.productId) }, companyId },
       select: { id: true, sku: true, name: true },
     });
     const byId = new Map(products.map((p) => [p.id, p]));
-    return rows.map((r) => ({
-      productId: r.productId,
-      sku: byId.get(r.productId)?.sku ?? '—',
-      name: byId.get(r.productId)?.name ?? '—',
-      qty: r.qty,
-      revenue: r.revenue,
-    }));
+    return rows
+      .filter((r) => byId.has(r.productId))
+      .map((r) => ({
+        productId: r.productId,
+        sku: byId.get(r.productId)?.sku ?? '—',
+        name: byId.get(r.productId)?.name ?? '—',
+        qty: r.qty,
+        revenue: r.revenue,
+      }));
   },
 
   /**
@@ -313,6 +320,7 @@ export const reportsService = {
   async inventoryValuation(session: AppSession | null, f: { branchId?: string } = {}) {
     await authorize(session, 'reports:read');
     const branchId = resolveScopedBranchId(session, f.branchId);
+    const companyId = session?.activeCompanyId ?? undefined;
 
     const branchFilter = branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty;
     const grouped = await prisma.$queryRaw<{ productId: string; warehouseId: string; balance: string }[]>(
@@ -337,7 +345,7 @@ export const reportsService = {
     const warehouseIds = [...new Set(grouped.map((g) => g.warehouseId))];
     const [products, warehouses] = await Promise.all([
       prisma.product.findMany({
-        where: { id: { in: productIds } },
+        where: { id: { in: productIds }, companyId },
         select: { id: true, sku: true, name: true, unit: true, type: true, costPrice: true, reorderLevel: true },
       }),
       prisma.warehouse.findMany({

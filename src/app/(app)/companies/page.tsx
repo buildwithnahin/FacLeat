@@ -13,11 +13,12 @@ export default async function CompaniesPage() {
   const session = await getSession();
   const companies = await companyService.listAll(session);
   const canWrite = session?.permissions.includes('companies:write') ?? false;
+  const isSuperAdmin = session?.roles.some((role) => role.toLowerCase().includes('super admin')) ?? false;
 
   return (
     <div>
       <PageHeader title="Companies" description="Operating entities that own branches, products, and master data.">
-        {canWrite && (
+        {canWrite && isSuperAdmin && (
           <Button asChild>
             <Link href="/companies/new">
               <Plus className="h-4 w-4" />

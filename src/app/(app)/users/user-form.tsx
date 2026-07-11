@@ -69,7 +69,7 @@ export function UserForm({ mode, initial, roles, branches, employees }: UserForm
             >
               <option value="OWN_BRANCH_ONLY">Own branch only</option>
               <option value="ASSIGNED_BRANCHES">Assigned branches</option>
-              <option value="ALL_BRANCHES">All branches</option>
+              <option value="ALL_BRANCHES">All company branches</option>
             </select>
           </div>
           <Field
