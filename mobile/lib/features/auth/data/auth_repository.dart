@@ -52,6 +52,21 @@ class AuthRepository {
     }
   }
 
+  /// Revokes this device's refresh token server-side (`MobileRefreshToken.revokedAt`)
+  /// so it can no longer be used to mint new access tokens after logout —
+  /// without this, "logging out" only cleared local state and left the
+  /// session live in the backend (and in the Settings "Active sessions" list)
+  /// until it naturally expired. Best-effort: the caller always clears local
+  /// state regardless of whether this call succeeds, since a device with no
+  /// network shouldn't be blocked from logging out locally.
+  Future<void> logout(String refreshToken) async {
+    try {
+      await _dio.post<Map<String, dynamic>>('/auth/logout', data: {'refreshToken': refreshToken});
+    } on DioException {
+      // Ignored — local logout proceeds either way (see doc comment above).
+    }
+  }
+
   String _extractError(DioException e) {
     final data = e.response?.data;
     if (data is Map && data['error'] is String) {
