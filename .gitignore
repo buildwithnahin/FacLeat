@@ -34,7 +34,8 @@ Thumbs.db
 *.swo
 
 # Uploads
-server/uploads/
+server/upload/
+backend/upload/
 
 # Git token
 .gittoken
