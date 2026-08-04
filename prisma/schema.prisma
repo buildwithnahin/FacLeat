@@ -543,6 +543,9 @@ model User {
   deliveryReceives CorporateDelivery[]           @relation("DeliveryReceivedBy")
   productionPlans  ProductionPlan[]              @relation("PlannerRelation")
 
+  announcementsAuthored  Announcement[] @relation("AnnouncementAuthor")
+  announcementAudiences  Announcement[] @relation("AnnouncementAudienceUser")
+
   @@index([status])
 }
 
@@ -724,6 +727,8 @@ model Branch {
   productionPlans              ProductionPlan[]
   outboundStockTransfers       StockTransfer[]               @relation("StockTransferFromBranch")
   inboundStockTransfers        StockTransfer[]               @relation("StockTransferToBranch")
+
+  announcementAudiences Announcement[] @relation("AnnouncementAudienceBranch")
 
   @@index([isActive])
   @@index([companyId])
@@ -5837,4 +5842,45 @@ model FinalSettlement {
 
   @@index([employeeId])
   @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Business Announcements
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum AnnouncementAudience {
+  ALL
+  BRANCH
+  DEPARTMENT
+  USER
+}
+
+/// Broadcast messages from a superadmin to all users, one branch, one
+/// department (a free-text value already in use on Employee.department —
+/// there's no normalized Department model in this schema), or one specific
+/// user. Delivery/read-tracking deliberately reuses the existing
+/// Notification model (one row fanned out per targeted recipient) rather
+/// than a parallel receipt table — an announcement is just a notification
+/// with a real, always-visible source record and optional attachments
+/// (via the existing polymorphic DocumentLink, entityType "Announcement").
+model Announcement {
+  id      String @id @default(cuid())
+  title   String
+  body    String
+
+  audienceType       AnnouncementAudience @default(ALL)
+  audienceBranchId   String?
+  audienceBranch     Branch?              @relation("AnnouncementAudienceBranch", fields: [audienceBranchId], references: [id], onDelete: SetNull)
+  audienceDepartment String?
+  audienceUserId     String?
+  audienceUser       User?                @relation("AnnouncementAudienceUser", fields: [audienceUserId], references: [id], onDelete: SetNull)
+
+  createdById String
+  createdBy   User   @relation("AnnouncementAuthor", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([audienceType, createdAt])
+  @@index([createdById])
 }
