@@ -11,8 +11,11 @@ import '../../features/roles/presentation/roles_list_screen.dart';
 import '../../features/users/presentation/user_detail_screen.dart';
 import '../../features/users/presentation/user_new_placeholder_screen.dart';
 import '../../features/users/presentation/users_list_screen.dart';
+import '../../features/approvals/presentation/approval_detail_screen.dart';
+import '../../features/approvals/presentation/approvals_list_screen.dart';
 import '../../features/audit/presentation/audit_detail_screen.dart';
 import '../../features/audit/presentation/audit_list_screen.dart';
+import '../../features/notifications/presentation/notification_center_screen.dart';
 import '../../features/reports/application/report_provider.dart';
 import '../../features/reports/data/report_catalog.dart';
 import '../../features/reports/presentation/report_detail_screen.dart';
@@ -40,6 +43,14 @@ const String auditDetailRoute = '/audit/:id';
 const String companiesRoute = '/companies';
 const String branchesRoute = '/branches';
 const String settingsRoute = '/settings';
+// TEMPORARY pre-Phase-5 routes: Approvals and Notifications don't have
+// bottom-nav slots yet (that's Phase 5's nav restructure — Approvals will
+// replace Roles, Notifications gets a bell in the app bar). Reached for now
+// via temporary drawer entries so Phase 2 can be live-verified ahead of
+// that restructure.
+const String approvalsRoute = '/approvals';
+const String approvalDetailRoute = '/approvals/:id';
+const String notificationsRoute = '/notifications';
 
 String roleDetailPath(String id) => '/roles/$id';
 String userDetailPath(String id) => '/users/$id';
@@ -47,6 +58,7 @@ String reportsGeneralPath(String type) => '/reports/general/$type';
 String reportsFinancialsPath(String type) => '/reports/financials/$type';
 String reportsHrPath(String category, String type) => '/reports/hr/$category/$type';
 String auditDetailPath(String id) => '/audit/$id';
+String approvalDetailPath(String id) => '/approvals/$id';
 
 /// Bridges Riverpod's [authControllerProvider] to go_router's
 /// [Listenable]-based `refreshListenable`, so the router re-evaluates
@@ -104,6 +116,20 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: settingsRoute,
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: approvalsRoute,
+        builder: (context, state) => const ApprovalsListScreen(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            builder: (context, state) => ApprovalDetailScreen(id: state.pathParameters['id']!),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: notificationsRoute,
+        builder: (context, state) => const NotificationCenterScreen(),
       ),
       // Five persistent bottom-nav sections, each with its own navigation
       // stack (so e.g. pushing a role detail from the Roles tab doesn't

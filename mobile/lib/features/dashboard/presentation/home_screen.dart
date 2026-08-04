@@ -8,6 +8,7 @@ import '../../../core/router/main_shell.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../audit/domain/audit_entry.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../notifications/presentation/widgets/notification_bell.dart';
 import '../../reports/application/report_provider.dart';
 import '../application/dashboard_provider.dart';
 import '../application/me_provider.dart';
@@ -33,6 +34,10 @@ class HomeScreen extends ConsumerWidget {
       appBar: AppBar(
         leading: const DrawerMenuButton(),
         title: const Text('Command Center'),
+        actions: [
+          NotificationBell(onTap: () => context.push(notificationsRoute)),
+          const SizedBox(width: 8),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {

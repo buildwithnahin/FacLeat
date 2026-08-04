@@ -70,16 +70,19 @@ async function notifyRole(
   }
 }
 
-async function syncEmployeeTransferApprovalState(args: {
-  approvalStatus: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'CANCELLED';
-  transferId: string;
-  actorUserId: string;
-  note?: string | null;
-}) {
+async function syncEmployeeTransferApprovalState(
+  args: {
+    approvalStatus: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'CANCELLED';
+    transferId: string;
+    actorUserId: string;
+    note?: string | null;
+  },
+  tx: Prisma.TransactionClient | typeof prisma = prisma,
+) {
   const now = new Date();
 
   if (args.approvalStatus === 'APPROVED') {
-    await prisma.employeeTransfer.update({
+    await tx.employeeTransfer.update({
       where: { id: args.transferId },
       data: {
         status: 'APPROVED',
@@ -92,7 +95,7 @@ async function syncEmployeeTransferApprovalState(args: {
   }
 
   if (args.approvalStatus === 'REJECTED') {
-    await prisma.employeeTransfer.update({
+    await tx.employeeTransfer.update({
       where: { id: args.transferId },
       data: {
         status: 'REJECTED',
@@ -104,7 +107,7 @@ async function syncEmployeeTransferApprovalState(args: {
     return;
   }
 
-  await prisma.employeeTransfer.update({
+  await tx.employeeTransfer.update({
     where: { id: args.transferId },
     data: {
       status: 'DRAFT',
@@ -117,19 +120,22 @@ async function syncEmployeeTransferApprovalState(args: {
  * PurchaseOrder and PurchaseInvoice have no dedicated "rejected" status —
  * reusing CANCELLED on rejection is a deliberate modeling compromise, not an oversight.
  */
-async function syncPurchaseApprovalState(args: {
-  approvalStatus: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED';
-  entityType: 'PurchaseRequisition' | 'PurchaseOrder' | 'PurchaseInvoice';
-  entityId: string;
-  actorUserId: string;
-  note?: string | null;
-}) {
+async function syncPurchaseApprovalState(
+  args: {
+    approvalStatus: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED';
+    entityType: 'PurchaseRequisition' | 'PurchaseOrder' | 'PurchaseInvoice';
+    entityId: string;
+    actorUserId: string;
+    note?: string | null;
+  },
+  tx: Prisma.TransactionClient | typeof prisma = prisma,
+) {
   if (args.approvalStatus === 'CHANGES_REQUESTED') return;
   const now = new Date();
   const approved = args.approvalStatus === 'APPROVED';
 
   if (args.entityType === 'PurchaseRequisition') {
-    await prisma.purchaseRequisition.update({
+    await tx.purchaseRequisition.update({
       where: { id: args.entityId },
       data: approved
         ? { status: 'APPROVED', approvedById: args.actorUserId, approvedAt: now, rejectedReason: null }
@@ -144,7 +150,7 @@ async function syncPurchaseApprovalState(args: {
   }
 
   if (args.entityType === 'PurchaseOrder') {
-    await prisma.purchaseOrder.update({
+    await tx.purchaseOrder.update({
       where: { id: args.entityId },
       data: approved
         ? { status: 'APPROVED', approvedById: args.actorUserId, approvedAt: now }
@@ -153,18 +159,21 @@ async function syncPurchaseApprovalState(args: {
     return;
   }
 
-  await prisma.purchaseInvoice.update({
+  await tx.purchaseInvoice.update({
     where: { id: args.entityId },
     data: { status: approved ? 'PENDING' : 'CANCELLED' },
   });
 }
 
-async function syncProductionPlanApprovalState(args: {
-  approvalStatus: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED';
-  planId: string;
-}) {
+async function syncProductionPlanApprovalState(
+  args: {
+    approvalStatus: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED';
+    planId: string;
+  },
+  tx: Prisma.TransactionClient | typeof prisma = prisma,
+) {
   if (args.approvalStatus === 'CHANGES_REQUESTED') return;
-  await prisma.productionPlan.update({
+  await tx.productionPlan.update({
     where: { id: args.planId },
     data: { status: args.approvalStatus === 'APPROVED' ? 'APPROVED' : 'CANCELLED' },
   });
@@ -519,6 +528,67 @@ export const approvalService = {
         tx,
       );
 
+      // Sync side effects on the linked entity (PurchaseRequisition,
+      // EmployeeTransfer, ProductionPlan) run INSIDE this same transaction,
+      // not after it — an approval decision that can't be reflected on its
+      // linked entity must roll back entirely, not commit as "decided" while
+      // silently failing to apply. This is the fix for a bug found live:
+      // these used to run in `.then()` after the transaction had already
+      // committed, so a missing/deleted linked entity caused the whole
+      // decide() call to reject with a 500 even though the approval's own
+      // status change had already been durably saved — the caller was told
+      // it failed when it had actually succeeded.
+      if (
+        ['APPROVED', 'REJECTED', 'CHANGES_REQUESTED'].includes(updated.status) &&
+        request.module === 'hr' &&
+        request.action === 'employee-transfer' &&
+        request.entityType === 'EmployeeTransfer' &&
+        request.entityId
+      ) {
+        await syncEmployeeTransferApprovalState(
+          {
+            approvalStatus: updated.status as 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED',
+            transferId: request.entityId,
+            actorUserId: actor.userId,
+            note: input.note,
+          },
+          tx,
+        );
+      }
+      if (
+        ['APPROVED', 'REJECTED', 'CHANGES_REQUESTED'].includes(updated.status) &&
+        request.module === 'purchase' &&
+        ['requisition-approve', 'approve', 'invoice-approve'].includes(request.action) &&
+        ['PurchaseRequisition', 'PurchaseOrder', 'PurchaseInvoice'].includes(request.entityType) &&
+        request.entityId
+      ) {
+        await syncPurchaseApprovalState(
+          {
+            approvalStatus: updated.status as 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED',
+            entityType: request.entityType as 'PurchaseRequisition' | 'PurchaseOrder' | 'PurchaseInvoice',
+            entityId: request.entityId,
+            actorUserId: actor.userId,
+            note: input.note,
+          },
+          tx,
+        );
+      }
+      if (
+        ['APPROVED', 'REJECTED', 'CHANGES_REQUESTED'].includes(updated.status) &&
+        request.module === 'factory' &&
+        request.action === 'plan-approve' &&
+        request.entityType === 'ProductionPlan' &&
+        request.entityId
+      ) {
+        await syncProductionPlanApprovalState(
+          {
+            approvalStatus: updated.status as 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED',
+            planId: request.entityId,
+          },
+          tx,
+        );
+      }
+
       return {
         actorUserId: actor.userId,
         updated,
@@ -553,47 +623,6 @@ export const approvalService = {
           title: `Approval ${result.updated.status.toLowerCase()}: ${result.title}`,
           body: input.note || undefined,
           href: `/approvals/${result.updated.id}`,
-        });
-      }
-      if (
-        ['APPROVED', 'REJECTED', 'CHANGES_REQUESTED'].includes(result.updated.status) &&
-        result.module === 'hr' &&
-        result.action === 'employee-transfer' &&
-        result.entityType === 'EmployeeTransfer' &&
-        result.entityId
-      ) {
-        await syncEmployeeTransferApprovalState({
-          approvalStatus: result.updated.status as 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED',
-          transferId: result.entityId,
-          actorUserId: result.actorUserId,
-          note: input.note,
-        });
-      }
-      if (
-        ['APPROVED', 'REJECTED', 'CHANGES_REQUESTED'].includes(result.updated.status) &&
-        result.module === 'purchase' &&
-        ['requisition-approve', 'approve', 'invoice-approve'].includes(result.action) &&
-        ['PurchaseRequisition', 'PurchaseOrder', 'PurchaseInvoice'].includes(result.entityType) &&
-        result.entityId
-      ) {
-        await syncPurchaseApprovalState({
-          approvalStatus: result.updated.status as 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED',
-          entityType: result.entityType as 'PurchaseRequisition' | 'PurchaseOrder' | 'PurchaseInvoice',
-          entityId: result.entityId,
-          actorUserId: result.actorUserId,
-          note: input.note,
-        });
-      }
-      if (
-        ['APPROVED', 'REJECTED', 'CHANGES_REQUESTED'].includes(result.updated.status) &&
-        result.module === 'factory' &&
-        result.action === 'plan-approve' &&
-        result.entityType === 'ProductionPlan' &&
-        result.entityId
-      ) {
-        await syncProductionPlanApprovalState({
-          approvalStatus: result.updated.status as 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED',
-          planId: result.entityId,
         });
       }
       if (
