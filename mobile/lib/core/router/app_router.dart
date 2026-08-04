@@ -17,6 +17,7 @@ import '../../features/reports/application/report_provider.dart';
 import '../../features/reports/data/report_catalog.dart';
 import '../../features/reports/presentation/report_detail_screen.dart';
 import '../../features/reports/presentation/reports_hub_screen.dart';
+import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/workspace/presentation/branches_screen.dart';
 import '../../features/workspace/presentation/companies_screen.dart';
 import 'main_shell.dart';
@@ -38,6 +39,7 @@ const String auditRoute = '/audit';
 const String auditDetailRoute = '/audit/:id';
 const String companiesRoute = '/companies';
 const String branchesRoute = '/branches';
+const String settingsRoute = '/settings';
 
 String roleDetailPath(String id) => '/roles/$id';
 String userDetailPath(String id) => '/users/$id';
@@ -98,6 +100,10 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: branchesRoute,
         builder: (context, state) => const BranchesScreen(),
+      ),
+      GoRoute(
+        path: settingsRoute,
+        builder: (context, state) => const SettingsScreen(),
       ),
       // Five persistent bottom-nav sections, each with its own navigation
       // stack (so e.g. pushing a role detail from the Roles tab doesn't
