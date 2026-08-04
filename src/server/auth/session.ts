@@ -71,31 +71,43 @@ const getCachedUserWithRoles = unstable_cache(
   { revalidate: 60, tags: ['rbac'] },
 );
 
-// Permissions are loaded from DB per-request (not JWT) to avoid cookie size limits
-// and to ensure permission changes take effect without requiring re-login.
-// cache() deduplicates this within a single request.
-export const getSession = cache(async (): Promise<AppSession | null> => {
+export interface BuildSessionOverrides {
+  /** Cookie-level (web) or otherwise explicit branch override. */
+  branchOverride?: string | null;
+  /** Cookie-level (web) or otherwise explicit company override. */
+  companyOverride?: string | null;
+  /** Token-level (web JWT) active branch, used as a fallback below the override. */
+  tokenActiveBranchId?: string | null;
+  /** Token-level (web JWT) active company, used as a fallback below the override. */
+  tokenActiveCompanyId?: string | null;
+  branchByCompany?: Record<string, string>;
+}
+
+/**
+ * Loads a user's roles/permissions/branch+company scope fresh from the DB
+ * and assembles an AppSession. Shared by the cookie-based web getSession()
+ * and the Bearer-token mobile getMobileSession() — both end up with an
+ * identical AppSession shape, so every existing service function works
+ * unchanged regardless of which channel the request came from.
+ */
+export async function buildSessionForUser(
+  userId: string,
+  overrides: BuildSessionOverrides = {},
+): Promise<AppSession | null> {
   try {
-    const s = await auth();
-    if (!s?.user?.id) return null;
+  const userWithRoles = await getCachedUserWithRoles(userId);
+  if (!userWithRoles) return null;
 
-    const [cookieStore, userWithRoles] = await Promise.all([
-      cookies(),
-      getCachedUserWithRoles(s.user.id),
-    ]);
+  const permSet = new Set<string>();
+  const roleNames: string[] = [];
+  for (const ur of userWithRoles.roles) {
+    roleNames.push(ur.role.name);
+    for (const rp of ur.role.permissions) permSet.add(rp.permission.key);
+  }
+  const isSuperAdmin = roleNames.some((role) => role.toLowerCase().includes('super admin'));
 
-    if (!userWithRoles) return null;
-
-    const permSet = new Set<string>();
-    const roleNames: string[] = [];
-    for (const ur of userWithRoles.roles) {
-      roleNames.push(ur.role.name);
-      for (const rp of ur.role.permissions) permSet.add(rp.permission.key);
-    }
-    const isSuperAdmin = roleNames.some((role) => role.toLowerCase().includes('super admin'));
-
-    const branchOverride = cookieStore.get(ACTIVE_BRANCH_COOKIE)?.value;
-    let allowedBranchIds =
+  const branchOverride = overrides.branchOverride ?? undefined;
+  let allowedBranchIds =
       userWithRoles.branchAccessType === 'ALL_BRANCHES'
         ? []
         : Array.from(
@@ -142,18 +154,17 @@ export const getSession = cache(async (): Promise<AppSession | null> => {
       allowedCompanyIds = Array.from(new Set(scopedBranches.map((branch) => branch.companyId)));
     }
 
-    const companyOverride = cookieStore.get(ACTIVE_COMPANY_COOKIE)?.value;
+    const companyOverride = overrides.companyOverride ?? undefined;
     const requestedActiveCompanyId = resolveSessionActiveCompanyId({
       branchAccessType: userWithRoles.branchAccessType,
       allowedCompanyIds,
       defaultCompanyId: userWithRoles.defaultCompanyId ?? null,
-      activeCompanyId: companyOverride ?? s.user.activeCompanyId ?? userWithRoles.defaultCompanyId ?? null,
+      activeCompanyId:
+        companyOverride ?? overrides.tokenActiveCompanyId ?? userWithRoles.defaultCompanyId ?? null,
       isSuperAdmin,
     });
 
-    const branchByCompany = parseActiveBranchByCompanyCookie(
-      cookieStore.get(ACTIVE_BRANCH_BY_COMPANY_COOKIE)?.value,
-    );
+    const branchByCompany = overrides.branchByCompany ?? {};
     const scopedBranchOverride =
       requestedActiveCompanyId ? branchByCompany[requestedActiveCompanyId] ?? branchOverride ?? null : branchOverride ?? null;
 
@@ -161,7 +172,8 @@ export const getSession = cache(async (): Promise<AppSession | null> => {
       branchAccessType: userWithRoles.branchAccessType,
       allowedBranchIds,
       defaultBranchId: userWithRoles.defaultBranchId ?? null,
-      activeBranchId: scopedBranchOverride ?? s.user.activeBranchId ?? userWithRoles.defaultBranchId ?? null,
+      activeBranchId:
+        scopedBranchOverride ?? overrides.tokenActiveBranchId ?? userWithRoles.defaultBranchId ?? null,
       isSuperAdmin,
     });
 
@@ -205,11 +217,31 @@ export const getSession = cache(async (): Promise<AppSession | null> => {
     };
   } catch (error) {
     if (isRecoverableSessionError(error)) {
-      console.error('Session lookup failed:', error.message);
+      console.error('Session lookup failed:', (error as Error).message);
       return null;
     }
     throw error;
   }
+}
+
+// Permissions are loaded from DB per-request (not JWT) to avoid cookie size limits
+// and to ensure permission changes take effect without requiring re-login.
+// cache() deduplicates this within a single request.
+export const getSession = cache(async (): Promise<AppSession | null> => {
+  const s = await auth();
+  if (!s?.user?.id) return null;
+
+  const cookieStore = await cookies();
+
+  return buildSessionForUser(s.user.id, {
+    branchOverride: cookieStore.get(ACTIVE_BRANCH_COOKIE)?.value ?? null,
+    companyOverride: cookieStore.get(ACTIVE_COMPANY_COOKIE)?.value ?? null,
+    tokenActiveBranchId: s.user.activeBranchId ?? null,
+    tokenActiveCompanyId: s.user.activeCompanyId ?? null,
+    branchByCompany: parseActiveBranchByCompanyCookie(
+      cookieStore.get(ACTIVE_BRANCH_BY_COMPANY_COOKIE)?.value,
+    ),
+  });
 });
 
 export async function requireSession(): Promise<AppSession> {

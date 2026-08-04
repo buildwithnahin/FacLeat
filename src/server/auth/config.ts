@@ -6,43 +6,12 @@ import { headers } from 'next/headers';
 import { prisma } from '@/server/db';
 import { authConfig } from './config.edge';
 import { recordAudit } from '@/server/audit/logger';
+import { assertLoginAllowed, recordLoginFailure, clearLoginFailures } from './rate-limit';
 
 const credentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
-
-const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const LOGIN_MAX_ATTEMPTS = 5;
-const loginAttempts = new Map<string, { count: number; resetAt: number }>();
-
-function assertLoginAllowed(email: string) {
-  const key = email.toLowerCase();
-  const now = Date.now();
-  const state = loginAttempts.get(key);
-  if (!state || state.resetAt <= now) {
-    loginAttempts.set(key, { count: 0, resetAt: now + LOGIN_WINDOW_MS });
-    return;
-  }
-  if (state.count >= LOGIN_MAX_ATTEMPTS) {
-    throw new Error('Too many login attempts. Try again later.');
-  }
-}
-
-function recordLoginFailure(email: string) {
-  const key = email.toLowerCase();
-  const now = Date.now();
-  const state = loginAttempts.get(key);
-  if (!state || state.resetAt <= now) {
-    loginAttempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
-    return;
-  }
-  state.count += 1;
-}
-
-function clearLoginFailures(email: string) {
-  loginAttempts.delete(email.toLowerCase());
-}
 
 async function getRequestAuditMeta() {
   try {

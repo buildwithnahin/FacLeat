@@ -24,5 +24,9 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ['/((?!_next|api/auth|favicon.ico|.*\\..*).*)'],
+  // api/mobile is excluded here, not via PUBLIC_PREFIXES: those mobile
+  // routes are never "public" — they gate themselves per-request via
+  // getMobileSession()'s Bearer-token check, so the cookie-session
+  // middleware must not intercept them at all.
+  matcher: ['/((?!_next|api/auth|api/mobile|favicon.ico|.*\\..*).*)'],
 };
