@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -121,7 +122,7 @@ class AppDrawer extends ConsumerWidget {
                       Navigator.of(context).pop();
                       context.push(companiesRoute);
                     },
-                  ),
+                  ).animate(delay: 40.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
                   _DrawerTile(
                     icon: Icons.store_mall_directory_outlined,
                     label: 'Branches',
@@ -129,7 +130,7 @@ class AppDrawer extends ConsumerWidget {
                       Navigator.of(context).pop();
                       context.push(branchesRoute);
                     },
-                  ),
+                  ).animate(delay: 80.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
                   const SizedBox(height: 8),
                   _SectionHeader(label: 'SUPPORT'),
                   _DrawerTile(
@@ -147,7 +148,7 @@ class AppDrawer extends ConsumerWidget {
                         ],
                       );
                     },
-                  ),
+                  ).animate(delay: 120.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
                   _DrawerTile(
                     icon: Icons.support_agent_outlined,
                     label: 'Help & Support',
@@ -169,7 +170,7 @@ class AppDrawer extends ConsumerWidget {
                         ),
                       );
                     },
-                  ),
+                  ).animate(delay: 160.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
                 ],
               ),
             ),

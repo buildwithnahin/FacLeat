@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,8 +14,11 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  // Prefilled with the local dev superadmin seed account, debug builds only
+  // (kDebugMode is stripped in release), so verification passes don't need
+  // credentials re-typed after every session/storage reset.
+  final _emailController = TextEditingController(text: kDebugMode ? 'admin@annex.local' : '');
+  final _passwordController = TextEditingController(text: kDebugMode ? 'Demo@123' : '');
   bool _obscurePassword = true;
 
   @override
