@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   audit: ['read'],
   notifications: ['read', 'write'],
   documents: ['read', 'write', 'delete'],
+  announcements: ['read', 'write'],
 
   // Phase 2
   barcode: ['read', 'generate', 'print'],
