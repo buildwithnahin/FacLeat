@@ -67,8 +67,8 @@ export default async function LoansPage({
   const sp = await searchParams;
   const canWrite = session?.permissions.includes('hr:write') ?? false;
   const q = sp.q ?? '';
-  const type = sp.type ?? '';
-  const status = sp.status ?? '';
+  const type = sp.type && sp.type !== 'all' ? sp.type : '';
+  const status = sp.status && sp.status !== 'all' ? sp.status : '';
 
   const [loans, stats, employees] = await Promise.all([
     LoansService.getLoans(session, { search: q, type, status }),
@@ -154,10 +154,10 @@ export default async function LoansPage({
             </div>
             <div className="w-40 space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Request Type</label>
-              <Select name="type" defaultValue={type}>
+              <Select name="type" defaultValue={type || 'all'}>
                 <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   <SelectItem value="EMPLOYEE_LOAN">Employee Loan</SelectItem>
                   <SelectItem value="SALARY_ADVANCE">Salary Advance</SelectItem>
                 </SelectContent>
@@ -165,10 +165,10 @@ export default async function LoansPage({
             </div>
             <div className="w-40 space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Status</label>
-              <Select name="status" defaultValue={status}>
+              <Select name="status" defaultValue={status || 'all'}>
                 <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   {Object.keys(LoanStatus).map(s => (
                     <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>
                   ))}

@@ -76,7 +76,7 @@ export default async function SalaryStructuresPage({
   const sp = await searchParams;
   const canWrite = session?.permissions.includes('hr:write') ?? false;
   const q = sp.q ?? '';
-  const status = sp.status ?? '';
+  const status = sp.status && sp.status !== 'all' ? sp.status : '';
 
   const [structures, salaryComponents, departmentRows, designationRows, employees, branches] = await Promise.all([
     SalaryStructuresService.getSalaryStructures(session, { search: q, status }),
@@ -139,12 +139,12 @@ export default async function SalaryStructuresPage({
             </div>
             <div className="w-40 space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Status</label>
-              <Select name="status" defaultValue={status}>
+              <Select name="status" defaultValue={status || 'all'}>
                 <SelectTrigger>
                   <SelectValue placeholder="All" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   <SelectItem value="ACTIVE">Active</SelectItem>
                   <SelectItem value="INACTIVE">Inactive</SelectItem>
                 </SelectContent>
