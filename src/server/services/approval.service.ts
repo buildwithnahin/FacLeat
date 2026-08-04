@@ -17,6 +17,27 @@ const REQUEST_INCLUDE = {
   steps: { orderBy: { sequence: 'asc' } },
 } satisfies Prisma.ApprovalRequestInclude;
 
+/**
+ * `ApprovalRequest.requestedById` has no Prisma relation (plain FK-by-
+ * convention, not a declared `@relation`), so it can't go in `include` —
+ * batch-fetch requester names/emails separately and attach as
+ * `requestedBy` so consumers (web + mobile) don't have to show a raw
+ * user id where a human name is expected.
+ */
+async function attachRequesters<T extends { requestedById: string }>(
+  requests: T[],
+): Promise<(T & { requestedBy: { id: string; name: string; email: string } | null })[]> {
+  const ids = [...new Set(requests.map((r) => r.requestedById))];
+  const users = ids.length
+    ? await prisma.user.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, name: true, email: true },
+      })
+    : [];
+  const byId = new Map(users.map((u) => [u.id, u]));
+  return requests.map((r) => ({ ...r, requestedBy: byId.get(r.requestedById) ?? null }));
+}
+
 async function findMatchingRule(module: string, action: string, amount: number) {
   return prisma.approvalRule.findFirst({
     where: {
@@ -309,12 +330,13 @@ export const approvalService = {
         some: { approverRole: { in: myRoles }, status: 'ACTIVE' },
       };
     }
-    return prisma.approvalRequest.findMany({
+    const requests = await prisma.approvalRequest.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       take: 200,
       include: REQUEST_INCLUDE,
     });
+    return attachRequesters(requests);
   },
 
   async getById(session: AppSession | null, id: string) {
@@ -324,7 +346,8 @@ export const approvalService = {
       include: REQUEST_INCLUDE,
     });
     if (!req) throw new NotFoundError('Approval request not found');
-    return req;
+    const [withRequester] = await attachRequesters([req]);
+    return withRequester;
   },
 
   /** Latest non-approved request for an entity, for surfacing "pending approval" banners. */
