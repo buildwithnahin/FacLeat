@@ -168,13 +168,55 @@ class _DashboardContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cards = <_KpiSpec>[
-      _KpiSpec('Companies', summary.totalCompanies, Icons.apartment_outlined, AppColors.primary),
-      _KpiSpec('Branches', summary.totalBranches, Icons.store_mall_directory_outlined, AppColors.primary),
-      _KpiSpec('Users', summary.totalUsers, Icons.people_alt_outlined, AppColors.primary),
-      _KpiSpec('Active modules', summary.activeModules, Icons.dashboard_customize_outlined, AppColors.primary),
-      _KpiSpec("Today's logins", summary.todayLoginUsers, Icons.login_outlined, AppColors.success),
-      _KpiSpec('Pending approvals', summary.pendingApprovals, Icons.pending_actions_outlined, AppColors.warning),
-      _KpiSpec('Low stock items', summary.lowStockProducts, Icons.warning_amber_outlined, AppColors.danger),
+      _KpiSpec(
+        'Companies',
+        summary.totalCompanies,
+        Icons.apartment_outlined,
+        AppColors.primary,
+        (ctx) => ctx.push(companiesRoute),
+      ),
+      _KpiSpec(
+        'Branches',
+        summary.totalBranches,
+        Icons.store_mall_directory_outlined,
+        AppColors.primary,
+        (ctx) => ctx.push(branchesRoute),
+      ),
+      _KpiSpec(
+        'Users',
+        summary.totalUsers,
+        Icons.people_alt_outlined,
+        AppColors.primary,
+        (ctx) => ctx.go(usersRoute),
+      ),
+      _KpiSpec(
+        'Active modules',
+        summary.activeModules,
+        Icons.dashboard_customize_outlined,
+        AppColors.primary,
+        (ctx) => ctx.go(rolesRoute),
+      ),
+      _KpiSpec(
+        "Today's logins",
+        summary.todayLoginUsers,
+        Icons.login_outlined,
+        AppColors.success,
+        (ctx) => ctx.go(auditRoute),
+      ),
+      _KpiSpec(
+        'Pending approvals',
+        summary.pendingApprovals,
+        Icons.pending_actions_outlined,
+        AppColors.warning,
+        (ctx) => ctx.go(auditRoute),
+      ),
+      _KpiSpec(
+        'Low stock items',
+        summary.lowStockProducts,
+        Icons.warning_amber_outlined,
+        AppColors.danger,
+        (ctx) => ctx.go(reportsGeneralPath('inventory-valuation')),
+      ),
     ];
 
     return Column(
@@ -200,6 +242,7 @@ class _DashboardContent extends StatelessWidget {
               value: spec.value,
               icon: spec.icon,
               color: spec.color,
+              onTap: () => spec.onTap(context),
             ).animate().fadeIn(delay: (index * 80).ms, duration: 400.ms).slideY(
                   begin: 0.15,
                   end: 0,
@@ -214,11 +257,12 @@ class _DashboardContent extends StatelessWidget {
 }
 
 class _KpiSpec {
-  const _KpiSpec(this.label, this.value, this.icon, this.color);
+  const _KpiSpec(this.label, this.value, this.icon, this.color, this.onTap);
   final String label;
   final int value;
   final IconData icon;
   final Color color;
+  final void Function(BuildContext context) onTap;
 }
 
 class _SystemHealthBanner extends StatelessWidget {

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/dashboard/application/me_provider.dart';
+import '../router/app_router.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_mode_controller.dart';
 
@@ -98,7 +100,71 @@ class AppDrawer extends ConsumerWidget {
                 showSelectedIcon: false,
               ),
             ),
-            const Spacer(),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  const SizedBox(height: 8),
+                  _SectionHeader(label: 'WORKSPACE'),
+                  _DrawerTile(
+                    icon: Icons.apartment_outlined,
+                    label: 'Companies',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      context.push(companiesRoute);
+                    },
+                  ),
+                  _DrawerTile(
+                    icon: Icons.store_mall_directory_outlined,
+                    label: 'Branches',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      context.push(branchesRoute);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _SectionHeader(label: 'SUPPORT'),
+                  _DrawerTile(
+                    icon: Icons.info_outline,
+                    label: 'About Annex Admin',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      showAboutDialog(
+                        context: context,
+                        applicationName: 'Annex Admin',
+                        applicationVersion: 'v1.0.0',
+                        applicationIcon: const Icon(Icons.shield_outlined, color: AppColors.primary, size: 32),
+                        children: const [
+                          Text('Superadmin console for the DeshIT-BD SME ERP — manage roles, permissions, and view every report.'),
+                        ],
+                      );
+                    },
+                  ),
+                  _DrawerTile(
+                    icon: Icons.support_agent_outlined,
+                    label: 'Help & Support',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      showDialog<void>(
+                        context: context,
+                        builder: (dialogContext) => AlertDialog(
+                          title: const Text('Help & Support'),
+                          content: const Text(
+                            'For account, permission, or data issues, contact your system administrator or reach the DeshIT-BD support team through the web console.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(dialogContext).pop(),
+                              child: const Text('Close'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
             const Divider(height: 1),
             ListTile(
               key: const Key('drawerLogoutTile'),
@@ -119,6 +185,47 @@ class AppDrawer extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          letterSpacing: 0.6,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _DrawerTile extends StatelessWidget {
+  const _DrawerTile({required this.icon, required this.label, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      key: Key('drawerTile_$label'),
+      dense: true,
+      leading: Icon(icon, color: Theme.of(context).colorScheme.onSurfaceVariant),
+      title: Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+      onTap: onTap,
     );
   }
 }

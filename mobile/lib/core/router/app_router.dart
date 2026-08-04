@@ -17,6 +17,8 @@ import '../../features/reports/application/report_provider.dart';
 import '../../features/reports/data/report_catalog.dart';
 import '../../features/reports/presentation/report_detail_screen.dart';
 import '../../features/reports/presentation/reports_hub_screen.dart';
+import '../../features/workspace/presentation/branches_screen.dart';
+import '../../features/workspace/presentation/companies_screen.dart';
 import 'main_shell.dart';
 
 const String splashRoute = '/splash';
@@ -34,6 +36,8 @@ const String reportsFinancialsRoute = '/reports/financials/:type';
 const String reportsHrRoute = '/reports/hr/:category/:type';
 const String auditRoute = '/audit';
 const String auditDetailRoute = '/audit/:id';
+const String companiesRoute = '/companies';
+const String branchesRoute = '/branches';
 
 String roleDetailPath(String id) => '/roles/$id';
 String userDetailPath(String id) => '/users/$id';
@@ -83,6 +87,17 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: loginRoute,
         builder: (context, state) => const LoginScreen(),
+      ),
+      // Lightweight lookup screens reached via push (from the dashboard KPI
+      // cards and the drawer's Workspace section) — they don't need their
+      // own bottom-nav slot, so they sit outside the shell below.
+      GoRoute(
+        path: companiesRoute,
+        builder: (context, state) => const CompaniesScreen(),
+      ),
+      GoRoute(
+        path: branchesRoute,
+        builder: (context, state) => const BranchesScreen(),
       ),
       // Five persistent bottom-nav sections, each with its own navigation
       // stack (so e.g. pushing a role detail from the Roles tab doesn't

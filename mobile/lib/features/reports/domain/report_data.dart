@@ -231,6 +231,29 @@ const _metricKeywords = [
 
     return (section: section, columns: ChartableColumn(labelIndex: labelIndex, valueIndex: numericIndex));
   }
+
+  // No list-shaped section qualified — most likely every section is a plain
+  // Field/Value summary (e.g. Purchase Summary, HR Summary, Dashboard KPIs).
+  // Rather than leave those report pages with just a bare table, synthesize
+  // a chartable section from whichever numeric-valued fields it has, so
+  // every report page gets the same stats/insight/chart/pie treatment.
+  return _chartableFromSummary(sections);
+}
+
+({ReportSection section, ChartableColumn columns})? _chartableFromSummary(List<ReportSection> sections) {
+  for (final section in sections) {
+    if (section.title != 'Summary' && section.title != 'Overview') continue;
+    if (section.columns.length != 2) continue;
+
+    final numericRows = section.rows.where((row) {
+      if (row.length < 2) return false;
+      return double.tryParse(row[1].replaceAll(',', '')) != null;
+    }).toList();
+    if (numericRows.length < 2) continue;
+
+    final synthetic = ReportSection(title: section.title, columns: section.columns, rows: numericRows);
+    return (section: synthetic, columns: const ChartableColumn(labelIndex: 0, valueIndex: 1));
+  }
   return null;
 }
 
