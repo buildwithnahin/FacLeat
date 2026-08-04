@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { calculatePayrollSchema, payrollApprovalSchema } from '../validators/payroll-run';
 import { PayrollRunService } from '../services/payroll-run.service';
+import { getSession } from '@/server/auth/session';
 
 function handleError(error: unknown) {
   if (error instanceof Error) {
@@ -13,8 +14,9 @@ function handleError(error: unknown) {
 
 export async function calculatePayrollAction(formData: unknown) {
   try {
+    const session = await getSession();
     const validatedData = calculatePayrollSchema.parse(formData);
-    const result = await PayrollRunService.calculatePayroll(validatedData);
+    const result = await PayrollRunService.calculatePayroll(session, validatedData);
     revalidatePath('/hr/payroll-run');
     return { success: true, data: result };
   } catch (error) {
@@ -24,8 +26,9 @@ export async function calculatePayrollAction(formData: unknown) {
 
 export async function approvePayrollAction(id: string, formData: unknown) {
   try {
+    const session = await getSession();
     const { level, status, remarks } = payrollApprovalSchema.parse(formData);
-    const result = await PayrollRunService.approvePayroll(id, level, status, remarks);
+    const result = await PayrollRunService.approvePayroll(session, id, level, status, remarks);
     revalidatePath('/hr/payroll-run');
     revalidatePath(`/hr/payroll-run/${id}`);
     return { success: true, data: result };
@@ -36,7 +39,8 @@ export async function approvePayrollAction(id: string, formData: unknown) {
 
 export async function closePayrollAction(id: string) {
   try {
-    const result = await PayrollRunService.closePayroll(id);
+    const session = await getSession();
+    const result = await PayrollRunService.closePayroll(session, id);
     revalidatePath('/hr/payroll-run');
     revalidatePath(`/hr/payroll-run/${id}`);
     return { success: true, data: result };

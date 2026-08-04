@@ -2,12 +2,19 @@ import { prisma } from '@/server/db';
 import { Prisma, SalaryStructureStatus } from '@prisma/client';
 import { SalaryStructureFormValues, SalaryStructureAssignmentValues } from '../validators/salary-structures';
 import { CurrencyCode } from '@prisma/client';
+import { authorize } from '@/server/auth/authorize';
+import { recordAudit } from '@/server/audit/logger';
+import type { AppSession } from '@/server/auth/session';
 
 export class SalaryStructuresService {
-  static async getSalaryStructures(params?: {
-    search?: string;
-    status?: string;
-  }) {
+  static async getSalaryStructures(
+    session: AppSession | null,
+    params?: {
+      search?: string;
+      status?: string;
+    },
+  ) {
+    await authorize(session, 'hr:read');
     const where: Prisma.SalaryStructureWhereInput = {};
 
     if (params?.search) {
@@ -16,7 +23,7 @@ export class SalaryStructuresService {
         { code: { contains: params.search, mode: 'insensitive' } },
       ];
     }
-    
+
     if (params?.status) {
       where.status = params.status as any;
     }
@@ -32,7 +39,8 @@ export class SalaryStructuresService {
     });
   }
 
-  static async getSalaryStructureById(id: string) {
+  static async getSalaryStructureById(session: AppSession | null, id: string) {
+    await authorize(session, 'hr:read');
     const structure = await prisma.salaryStructure.findUnique({
       where: { id },
       include: {
@@ -56,12 +64,13 @@ export class SalaryStructuresService {
         },
       },
     });
-    
+
     if (!structure) throw new Error('Salary structure not found');
     return structure;
   }
 
-  static async createSalaryStructure(data: SalaryStructureFormValues) {
+  static async createSalaryStructure(session: AppSession | null, data: SalaryStructureFormValues) {
+    const actor = await authorize(session, 'hr:write');
     const existing = await prisma.salaryStructure.findUnique({
       where: { code: data.code },
     });
@@ -102,15 +111,29 @@ export class SalaryStructuresService {
         });
       }
 
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'hr',
+          action: 'create-salary-structure',
+          entityType: 'SalaryStructure',
+          entityId: structure.id,
+          after: { code: structure.code, name: structure.name, grossSalary: structure.grossSalary },
+        },
+        tx,
+      );
+
       return structure;
     });
   }
 
-  static async updateSalaryStructure(id: string, data: SalaryStructureFormValues) {
+  static async updateSalaryStructure(session: AppSession | null, id: string, data: SalaryStructureFormValues) {
+    const actor = await authorize(session, 'hr:write');
     const existing = await prisma.salaryStructure.findUnique({
       where: { id },
     });
-    
+
     if (!existing) throw new Error('Salary structure not found');
 
     if (data.code !== existing.code) {
@@ -160,20 +183,39 @@ export class SalaryStructuresService {
         });
       }
 
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'hr',
+          action: 'update-salary-structure',
+          entityType: 'SalaryStructure',
+          entityId: id,
+          before: { code: existing.code, name: existing.name, grossSalary: existing.grossSalary },
+          after: { code: structure.code, name: structure.name, grossSalary: structure.grossSalary },
+        },
+        tx,
+      );
+
       return structure;
     });
   }
 
-  static async assignEmployees(salaryStructureId: string, data: SalaryStructureAssignmentValues) {
+  static async assignEmployees(
+    session: AppSession | null,
+    salaryStructureId: string,
+    data: SalaryStructureAssignmentValues,
+  ) {
+    const actor = await authorize(session, 'hr:write');
     const structure = await prisma.salaryStructure.findUnique({
       where: { id: salaryStructureId },
     });
-    
+
     if (!structure) throw new Error('Salary structure not found');
 
     return prisma.$transaction(async (tx) => {
       const assignments = [];
-      
+
       for (const employeeId of data.employeeIds) {
         // Find existing assignments that overlap or just close them
         const existingAssignments = await tx.employeeSalaryStructureAssignment.findMany({
@@ -182,7 +224,7 @@ export class SalaryStructuresService {
             effectiveTo: null,
           },
         });
-        
+
         // Close existing open assignments
         if (existingAssignments.length > 0) {
           await tx.employeeSalaryStructureAssignment.updateMany({
@@ -194,7 +236,7 @@ export class SalaryStructuresService {
             },
           });
         }
-        
+
         // Create new assignment
         const newAssignment = await tx.employeeSalaryStructureAssignment.create({
           data: {
@@ -206,12 +248,26 @@ export class SalaryStructuresService {
         });
         assignments.push(newAssignment);
       }
-      
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'hr',
+          action: 'assign-salary-structure',
+          entityType: 'SalaryStructure',
+          entityId: salaryStructureId,
+          after: { employeeIds: data.employeeIds, effectiveFrom: data.effectiveFrom },
+        },
+        tx,
+      );
+
       return assignments;
     });
   }
 
-  static async deactivateSalaryStructure(id: string) {
+  static async deactivateSalaryStructure(session: AppSession | null, id: string) {
+    const actor = await authorize(session, 'hr:write');
     const structure = await prisma.salaryStructure.findUnique({
       where: { id },
       include: {
@@ -224,9 +280,27 @@ export class SalaryStructuresService {
     if (!structure) throw new Error('Salary structure not found');
 
     // Soft delete / deactivate
-    return prisma.salaryStructure.update({
-      where: { id },
-      data: { status: SalaryStructureStatus.INACTIVE },
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.salaryStructure.update({
+        where: { id },
+        data: { status: SalaryStructureStatus.INACTIVE },
+      });
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'hr',
+          action: 'deactivate-salary-structure',
+          entityType: 'SalaryStructure',
+          entityId: id,
+          before: { status: structure.status },
+          after: { status: updated.status },
+        },
+        tx,
+      );
+
+      return updated;
     });
   }
 }

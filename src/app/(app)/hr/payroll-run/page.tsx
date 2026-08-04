@@ -9,6 +9,7 @@ import { formatCurrency } from '@/lib/utils';
 import { PayrollRunService } from '@/server/services/payroll-run.service';
 import { CalculatePayrollForm } from './calculate-form';
 import { Prisma } from '@prisma/client';
+import { getSession } from '@/server/auth/session';
 
 export default async function PayrollRunPage({
   searchParams,
@@ -16,8 +17,9 @@ export default async function PayrollRunPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const sp = await searchParams;
-  
-  const stats = await PayrollRunService.getDashboardStats();
+  const session = await getSession();
+
+  const stats = await PayrollRunService.getDashboardStats(session);
 
   const where: Prisma.PayrollRunWhereInput = {};
   if (sp.status) where.status = sp.status as any;
@@ -28,7 +30,7 @@ export default async function PayrollRunPage({
     ];
   }
 
-  const runs = await PayrollRunService.getPayrollRuns(where);
+  const runs = await PayrollRunService.getPayrollRuns(session, where);
   
   const isEditing = sp.edit === 'new';
 

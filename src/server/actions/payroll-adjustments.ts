@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { payrollAdjustmentFormSchema, payrollAdjustmentApprovalSchema } from '../validators/payroll-adjustment';
 import { PayrollAdjustmentService } from '../services/payroll-adjustment.service';
 import { PayrollAdjustmentStatus } from '@prisma/client';
+import { getSession } from '@/server/auth/session';
 
 function handleError(error: unknown) {
   if (error instanceof Error) {
@@ -14,8 +15,9 @@ function handleError(error: unknown) {
 
 export async function createPayrollAdjustment(formData: unknown) {
   try {
+    const session = await getSession();
     const validatedData = payrollAdjustmentFormSchema.parse(formData);
-    const result = await PayrollAdjustmentService.createAdjustment(validatedData);
+    const result = await PayrollAdjustmentService.createAdjustment(session, validatedData);
     revalidatePath('/hr/payroll-adjustment');
     return { success: true, data: result };
   } catch (error) {
@@ -25,9 +27,10 @@ export async function createPayrollAdjustment(formData: unknown) {
 
 export async function updatePayrollAdjustment(id: string, formData: unknown) {
   try {
+    const session = await getSession();
     const validatedData = payrollAdjustmentFormSchema.parse(formData);
     const { employeeIds, ...updateData } = validatedData;
-    const result = await PayrollAdjustmentService.updateAdjustment(id, updateData);
+    const result = await PayrollAdjustmentService.updateAdjustment(session, id, updateData);
     revalidatePath('/hr/payroll-adjustment');
     revalidatePath(`/hr/payroll-adjustment/${id}`);
     return { success: true, data: result };
@@ -38,8 +41,9 @@ export async function updatePayrollAdjustment(id: string, formData: unknown) {
 
 export async function processPayrollAdjustmentApproval(id: string, formData: unknown) {
   try {
+    const session = await getSession();
     const { status, remarks } = payrollAdjustmentApprovalSchema.parse(formData);
-    const result = await PayrollAdjustmentService.updateStatus(id, status as PayrollAdjustmentStatus, remarks);
+    const result = await PayrollAdjustmentService.updateStatus(session, id, status as PayrollAdjustmentStatus, remarks);
     revalidatePath('/hr/payroll-adjustment');
     revalidatePath(`/hr/payroll-adjustment/${id}`);
     return { success: true, data: result };
@@ -50,7 +54,8 @@ export async function processPayrollAdjustmentApproval(id: string, formData: unk
 
 export async function deletePayrollAdjustment(id: string) {
   try {
-    const result = await PayrollAdjustmentService.deleteAdjustment(id);
+    const session = await getSession();
+    const result = await PayrollAdjustmentService.deleteAdjustment(session, id);
     revalidatePath('/hr/payroll-adjustment');
     return { success: true, data: result };
   } catch (error) {

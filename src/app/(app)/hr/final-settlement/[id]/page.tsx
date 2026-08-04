@@ -8,11 +8,13 @@ import { formatCurrency } from '@/lib/utils';
 import { FinalSettlementService } from '@/server/services/final-settlement.service';
 import { ApprovalForm } from './approval-form';
 import { Printer, Download } from 'lucide-react';
+import { getSession } from '@/server/auth/session';
 
 export default async function FinalSettlementDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  
-  const fs = await FinalSettlementService.getSettlementById(id);
+  const session = await getSession();
+
+  const fs = await FinalSettlementService.getSettlementById(session, id);
   
   if (!fs) {
     notFound();

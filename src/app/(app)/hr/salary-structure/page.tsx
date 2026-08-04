@@ -79,8 +79,8 @@ export default async function SalaryStructuresPage({
   const status = sp.status ?? '';
 
   const [structures, salaryComponents, departmentRows, designationRows, employees, branches] = await Promise.all([
-    SalaryStructuresService.getSalaryStructures({ search: q, status }),
-    SalaryComponentsService.getSalaryComponents({ status: 'ACTIVE' }),
+    SalaryStructuresService.getSalaryStructures(session, { search: q, status }),
+    SalaryComponentsService.getSalaryComponents(session, { status: 'ACTIVE' }),
     prisma.hrMasterData.findMany({
       where: { type: 'departments', status: 'ACTIVE' },
       select: { name: true, id: true },
@@ -102,7 +102,7 @@ export default async function SalaryStructuresPage({
   ]);
 
   const initialId = sp.edit && sp.edit !== 'new' ? sp.edit : null;
-  const initial = initialId ? await SalaryStructuresService.getSalaryStructureById(initialId).catch(() => null) : null;
+  const initial = initialId ? await SalaryStructuresService.getSalaryStructureById(session, initialId).catch(() => null) : null;
   const serializedSalaryComponents = salaryComponents.map(serializeSalaryComponent);
   
   const departments = Array.from(new Set([...departmentRows.map((row) => row.id), ...employees.map((row) => row.department).filter(Boolean) as string[]]));

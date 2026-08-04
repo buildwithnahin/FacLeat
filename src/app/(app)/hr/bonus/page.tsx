@@ -9,6 +9,7 @@ import { formatCurrency } from '@/lib/utils';
 import { BonusService } from '@/server/services/bonus.service';
 import { BonusForm } from './bonus-form';
 import { Prisma } from '@prisma/client';
+import { getSession } from '@/server/auth/session';
 
 function serializeEmployee(employee: {
   id: string;
@@ -55,8 +56,9 @@ export default async function BonusPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const sp = await searchParams;
-  
-  const stats = await BonusService.getDashboardStats();
+  const session = await getSession();
+
+  const stats = await BonusService.getDashboardStats(session);
 
   const where: Prisma.BonusWhereInput = {};
   if (sp.status) where.status = sp.status as any;
@@ -68,12 +70,12 @@ export default async function BonusPage({
     ];
   }
 
-  const bonuses = await BonusService.getBonuses(where);
-  
+  const bonuses = await BonusService.getBonuses(session, where);
+
   const isEditing = sp.edit;
   let initial = null;
   if (isEditing && isEditing !== 'new') {
-    initial = await BonusService.getBonusById(isEditing as string);
+    initial = await BonusService.getBonusById(session, isEditing as string);
   }
 
   // Fetch employees for creation

@@ -20,7 +20,7 @@ export default async function LoanViewPage({
   const session = await getSession();
   const isAdmin = session?.permissions.includes('admin') || session?.systemRole === 'ADMIN';
 
-  const loan = await LoansService.getLoanById(p.id).catch(() => null);
+  const loan = await LoansService.getLoanById(session, p.id).catch(() => null);
 
   if (!loan) {
     notFound();

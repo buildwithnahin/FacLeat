@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { payrollPeriodFormSchema, payrollPeriodStatusSchema } from '../validators/payroll-periods';
 import { PayrollPeriodsService } from '../services/payroll-periods.service';
+import { getSession } from '@/server/auth/session';
 
 function handleError(error: unknown) {
   if (error instanceof Error) {
@@ -13,8 +14,9 @@ function handleError(error: unknown) {
 
 export async function createPayrollPeriod(formData: unknown) {
   try {
+    const session = await getSession();
     const validatedData = payrollPeriodFormSchema.parse(formData);
-    const result = await PayrollPeriodsService.createPayrollPeriod(validatedData);
+    const result = await PayrollPeriodsService.createPayrollPeriod(session, validatedData);
     revalidatePath('/hr/payroll-period');
     return { success: true, data: result };
   } catch (error) {
@@ -24,8 +26,9 @@ export async function createPayrollPeriod(formData: unknown) {
 
 export async function updatePayrollPeriod(id: string, formData: unknown) {
   try {
+    const session = await getSession();
     const validatedData = payrollPeriodFormSchema.parse(formData);
-    const result = await PayrollPeriodsService.updatePayrollPeriod(id, validatedData);
+    const result = await PayrollPeriodsService.updatePayrollPeriod(session, id, validatedData);
     revalidatePath('/hr/payroll-period');
     revalidatePath(`/hr/payroll-period/${id}`);
     return { success: true, data: result };
@@ -36,8 +39,9 @@ export async function updatePayrollPeriod(id: string, formData: unknown) {
 
 export async function changePayrollPeriodStatus(id: string, formData: unknown) {
   try {
+    const session = await getSession();
     const { status, reason } = payrollPeriodStatusSchema.parse(formData);
-    const result = await PayrollPeriodsService.changeStatus(id, status, reason);
+    const result = await PayrollPeriodsService.changeStatus(session, id, status, reason);
     revalidatePath('/hr/payroll-period');
     revalidatePath(`/hr/payroll-period/${id}`);
     return { success: true, data: result };

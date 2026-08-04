@@ -1,12 +1,21 @@
 import { prisma } from '@/server/db';
 import { differenceInMinutes, parse, format, isAfter, isBefore, addMinutes, subMinutes, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
 import { AttendanceStatus, MissingPunchType } from '@/generated/prisma';
+import { authorize } from '@/server/auth/authorize';
+import type { AppSession } from '@/server/auth/session';
 
 export const attendanceEngineService = {
   /**
    * Main processor for a single employee's daily attendance logic.
    */
-  async processEmployeeDay(employeeId: string, date: Date, actualCheckIn: Date | null, actualCheckOut: Date | null) {
+  async processEmployeeDay(
+    session: AppSession | null,
+    employeeId: string,
+    date: Date,
+    actualCheckIn: Date | null,
+    actualCheckOut: Date | null,
+  ) {
+    await authorize(session, 'hr:attendance');
     // 1. Find the employee and their shift (defaulting to a global shift or the one assigned)
     const employee = await prisma.employee.findUnique({
       where: { id: employeeId },

@@ -23,10 +23,10 @@ export default async function PayrollPeriodsPage({
   const canWrite = session?.permissions.includes('hr:write') ?? false;
   const q = sp.q ?? '';
 
-  const periods = await PayrollPeriodsService.getPayrollPeriods({ search: q });
+  const periods = await PayrollPeriodsService.getPayrollPeriods(session, { search: q });
 
   const initialId = sp.edit && sp.edit !== 'new' ? sp.edit : null;
-  const initial = initialId ? await PayrollPeriodsService.getPayrollPeriodById(initialId).catch(() => null) : null;
+  const initial = initialId ? await PayrollPeriodsService.getPayrollPeriodById(session, initialId).catch(() => null) : null;
 
   return (
     <div className="space-y-6">

@@ -9,6 +9,7 @@ import { formatCurrency } from '@/lib/utils';
 import { FinalSettlementService } from '@/server/services/final-settlement.service';
 import { CalculateForm } from './calculate-form';
 import { Prisma } from '@prisma/client';
+import { getSession } from '@/server/auth/session';
 
 export default async function FinalSettlementPage({
   searchParams,
@@ -16,8 +17,9 @@ export default async function FinalSettlementPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const sp = await searchParams;
-  
-  const stats = await FinalSettlementService.getDashboardStats();
+  const session = await getSession();
+
+  const stats = await FinalSettlementService.getDashboardStats(session);
 
   const where: Prisma.FinalSettlementWhereInput = {};
   if (sp.status) where.status = sp.status as any;
@@ -30,7 +32,7 @@ export default async function FinalSettlementPage({
     ];
   }
 
-  const settlements = await FinalSettlementService.getSettlements(where);
+  const settlements = await FinalSettlementService.getSettlements(session, where);
   
   const isEditing = sp.edit === 'new';
 

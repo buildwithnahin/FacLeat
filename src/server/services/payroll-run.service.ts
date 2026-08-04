@@ -1,6 +1,9 @@
 import { prisma } from '@/server/db';
 import { Prisma, PayrollRunStatus } from '@prisma/client';
 import { CalculatePayrollFormValues } from '../validators/payroll-run';
+import { authorize } from '@/server/auth/authorize';
+import { recordAudit } from '@/server/audit/logger';
+import type { AppSession } from '@/server/auth/session';
 
 function resolveSalaryFromStructure(
   assignment:
@@ -86,7 +89,8 @@ function resolveSalaryFromStructure(
 }
 
 export class PayrollRunService {
-  static async getDashboardStats() {
+  static async getDashboardStats(session: AppSession | null) {
+    await authorize(session, 'hr:read');
     const currentPeriod = await prisma.payrollPeriod.findFirst({
       where: { status: 'OPEN' },
       orderBy: { startDate: 'desc' }
@@ -125,7 +129,8 @@ export class PayrollRunService {
     return stats;
   }
 
-  static async getPayrollRuns(where?: Prisma.PayrollRunWhereInput) {
+  static async getPayrollRuns(session: AppSession | null, where?: Prisma.PayrollRunWhereInput) {
+    await authorize(session, 'hr:read');
     return prisma.payrollRun.findMany({
       where,
       include: {
@@ -136,7 +141,8 @@ export class PayrollRunService {
     });
   }
 
-  static async getPayrollRunById(id: string) {
+  static async getPayrollRunById(session: AppSession | null, id: string) {
+    await authorize(session, 'hr:read');
     return prisma.payrollRun.findUnique({
       where: { id },
       include: {
@@ -151,7 +157,8 @@ export class PayrollRunService {
     });
   }
 
-  static async calculatePayroll(data: CalculatePayrollFormValues) {
+  static async calculatePayroll(session: AppSession | null, data: CalculatePayrollFormValues) {
+    const actor = await authorize(session, 'hr:process-payroll');
     const { payrollPeriodId, branchId, departmentId, sectionId, employmentType } = data;
 
     return prisma.$transaction(async (tx) => {
@@ -393,11 +400,37 @@ export class PayrollRunService {
         }
       });
 
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'hr',
+          action: 'calculate-payroll',
+          entityType: 'PayrollRun',
+          entityId: updatedRun.id,
+          after: {
+            period: updatedRun.period,
+            branchId: updatedRun.branchId,
+            totalEmployees: updatedRun.totalEmployees,
+            totalGross,
+            totalNet,
+          },
+        },
+        tx,
+      );
+
       return updatedRun;
     });
   }
 
-  static async approvePayroll(id: string, level: string, status: string, remarks?: string) {
+  static async approvePayroll(
+    session: AppSession | null,
+    id: string,
+    level: string,
+    status: string,
+    remarks?: string,
+  ) {
+    const actor = await authorize(session, 'hr:approve-payroll');
     const run = await prisma.payrollRun.findUnique({ where: { id } });
     if (!run) throw new Error('Payroll run not found');
 
@@ -426,14 +459,34 @@ export class PayrollRunService {
       }
     }
 
-    return prisma.payrollRun.update({
-      where: { id },
-      data
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.payrollRun.update({
+        where: { id },
+        data,
+      });
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'hr',
+          action: 'approve-payroll',
+          entityType: 'PayrollRun',
+          entityId: id,
+          before: { status: run.status },
+          after: { status: updated.status, level, decision: status, remarks },
+        },
+        tx,
+      );
+
+      return updated;
     });
   }
 
-  static async closePayroll(id: string) {
+  static async closePayroll(session: AppSession | null, id: string) {
+    const actor = await authorize(session, 'hr:pay-payroll');
     return prisma.$transaction(async (tx) => {
+      const before = await tx.payrollRun.findUnique({ where: { id } });
       const run = await tx.payrollRun.update({
         where: { id },
         data: { status: 'COMPLETED' } // Assuming COMPLETED triggers lock
@@ -479,7 +532,21 @@ export class PayrollRunService {
           data: { status: 'APPLIED', payrollRunId: run.id }
         });
       }
-      
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'hr',
+          action: 'close-payroll',
+          entityType: 'PayrollRun',
+          entityId: id,
+          before: { status: before?.status },
+          after: { status: run.status, totalEmployees: run.totalEmployees, totalNet: run.totalNet },
+        },
+        tx,
+      );
+
       return run;
     });
   }

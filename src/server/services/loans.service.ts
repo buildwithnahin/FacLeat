@@ -1,10 +1,16 @@
 import { prisma } from '@/server/db';
 import { Prisma, LoanStatus } from '@prisma/client';
 import { LoanFormValues } from '../validators/loans';
-import { getSession } from '../auth/session';
+import { authorize } from '@/server/auth/authorize';
+import { recordAudit } from '@/server/audit/logger';
+import type { AppSession } from '@/server/auth/session';
 
 export class LoansService {
-  static async getLoans(params?: { search?: string; type?: string; status?: string }) {
+  static async getLoans(
+    session: AppSession | null,
+    params?: { search?: string; type?: string; status?: string },
+  ) {
+    await authorize(session, 'hr:read');
     const where: Prisma.LoanRequestWhereInput = {};
 
     if (params?.search) {
@@ -34,7 +40,12 @@ export class LoansService {
     });
   }
 
-  static async getLoanById(id: string) {
+  static async getLoanById(session: AppSession | null, id: string) {
+    await authorize(session, 'hr:read');
+    return this._getLoanByIdRaw(id);
+  }
+
+  private static async _getLoanByIdRaw(id: string) {
     const loan = await prisma.loanRequest.findUnique({
       where: { id },
       include: {
@@ -62,7 +73,8 @@ export class LoansService {
     return loan;
   }
 
-  static async getDashboardStats() {
+  static async getDashboardStats(session: AppSession | null) {
+    await authorize(session, 'hr:read');
     const stats = await prisma.loanRequest.groupBy({
       by: ['status', 'requestType'],
       _count: { id: true },
@@ -89,7 +101,8 @@ export class LoansService {
     };
   }
 
-  static async createLoan(data: LoanFormValues) {
+  static async createLoan(session: AppSession | null, data: LoanFormValues) {
+    const actor = await authorize(session, 'hr:write');
     const prefix = data.requestType === 'SALARY_ADVANCE' ? 'AD' : 'LN';
     const count = await prisma.loanRequest.count({ where: { requestType: data.requestType } });
     const referenceNo = `${prefix}-${String(count + 1).padStart(4, '0')}`;
@@ -107,54 +120,95 @@ export class LoansService {
       throw new Error(`Employee already has a pending ${data.requestType.replace('_', ' ')} request.`);
     }
 
-    return prisma.loanRequest.create({
-      data: {
-        referenceNo,
-        requestType: data.requestType,
-        employeeId: data.employeeId,
-        loanAmount: new Prisma.Decimal(data.loanAmount),
-        purpose: data.purpose,
-        disbursementDate: data.disbursementDate,
-        repaymentStartMonth: data.repaymentStartMonth,
-        installmentType: data.installmentType,
-        numberOfInstallments: data.numberOfInstallments,
-        monthlyDeduction: new Prisma.Decimal(data.monthlyDeduction),
-        outstandingBalance: new Prisma.Decimal(data.loanAmount),
-        remarks: data.remarks,
-        status: data.status,
-      },
+    return prisma.$transaction(async (tx) => {
+      const loan = await tx.loanRequest.create({
+        data: {
+          referenceNo,
+          requestType: data.requestType,
+          employeeId: data.employeeId,
+          loanAmount: new Prisma.Decimal(data.loanAmount),
+          purpose: data.purpose,
+          disbursementDate: data.disbursementDate,
+          repaymentStartMonth: data.repaymentStartMonth,
+          installmentType: data.installmentType,
+          numberOfInstallments: data.numberOfInstallments,
+          monthlyDeduction: new Prisma.Decimal(data.monthlyDeduction),
+          outstandingBalance: new Prisma.Decimal(data.loanAmount),
+          remarks: data.remarks,
+          status: data.status,
+        },
+      });
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'hr',
+          action: 'create-loan',
+          entityType: 'LoanRequest',
+          entityId: loan.id,
+          after: { referenceNo: loan.referenceNo, requestType: loan.requestType, loanAmount: loan.loanAmount },
+        },
+        tx,
+      );
+
+      return loan;
     });
   }
 
-  static async updateLoan(id: string, data: LoanFormValues) {
-    const existing = await this.getLoanById(id);
+  static async updateLoan(session: AppSession | null, id: string, data: LoanFormValues) {
+    const actor = await authorize(session, 'hr:write');
+    const existing = await this._getLoanByIdRaw(id);
 
     if (!['DRAFT', 'SUBMITTED'].includes(existing.status)) {
       throw new Error('Cannot edit a loan request after it has been reviewed.');
     }
 
-    return prisma.loanRequest.update({
-      where: { id },
-      data: {
-        requestType: data.requestType,
-        employeeId: data.employeeId,
-        loanAmount: new Prisma.Decimal(data.loanAmount),
-        purpose: data.purpose,
-        disbursementDate: data.disbursementDate,
-        repaymentStartMonth: data.repaymentStartMonth,
-        installmentType: data.installmentType,
-        numberOfInstallments: data.numberOfInstallments,
-        monthlyDeduction: new Prisma.Decimal(data.monthlyDeduction),
-        outstandingBalance: new Prisma.Decimal(data.loanAmount),
-        remarks: data.remarks,
-        status: data.status,
-      },
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.loanRequest.update({
+        where: { id },
+        data: {
+          requestType: data.requestType,
+          employeeId: data.employeeId,
+          loanAmount: new Prisma.Decimal(data.loanAmount),
+          purpose: data.purpose,
+          disbursementDate: data.disbursementDate,
+          repaymentStartMonth: data.repaymentStartMonth,
+          installmentType: data.installmentType,
+          numberOfInstallments: data.numberOfInstallments,
+          monthlyDeduction: new Prisma.Decimal(data.monthlyDeduction),
+          outstandingBalance: new Prisma.Decimal(data.loanAmount),
+          remarks: data.remarks,
+          status: data.status,
+        },
+      });
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'hr',
+          action: 'update-loan',
+          entityType: 'LoanRequest',
+          entityId: id,
+          before: { loanAmount: existing.loanAmount, status: existing.status },
+          after: { loanAmount: updated.loanAmount, status: updated.status },
+        },
+        tx,
+      );
+
+      return updated;
     });
   }
 
-  static async processApproval(id: string, newStatus: LoanStatus, remarks?: string | null) {
-    const session = await getSession();
-    const existing = await this.getLoanById(id);
+  static async processApproval(
+    session: AppSession | null,
+    id: string,
+    newStatus: LoanStatus,
+    remarks?: string | null,
+  ) {
+    const actor = await authorize(session, 'hr:write');
+    const existing = await this._getLoanByIdRaw(id);
 
     const updateData: any = {
       status: newStatus,
@@ -214,6 +268,20 @@ export class LoansService {
           data: schedules,
         });
       }
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'hr',
+          action: 'process-loan-approval',
+          entityType: 'LoanRequest',
+          entityId: id,
+          before: { status: existing.status },
+          after: { status: updatedLoan.status, remarks },
+        },
+        tx,
+      );
 
       return updatedLoan;
     });

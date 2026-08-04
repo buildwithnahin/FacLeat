@@ -7,11 +7,13 @@ import { notFound } from 'next/navigation';
 import { formatCurrency } from '@/lib/utils';
 import { BonusService } from '@/server/services/bonus.service';
 import { ApprovalForm } from './approval-form';
+import { getSession } from '@/server/auth/session';
 
 export default async function BonusDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  
-  const bonus = await BonusService.getBonusById(id);
+  const session = await getSession();
+
+  const bonus = await BonusService.getBonusById(session, id);
   
   if (!bonus) {
     notFound();

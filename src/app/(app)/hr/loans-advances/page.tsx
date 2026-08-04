@@ -71,8 +71,8 @@ export default async function LoansPage({
   const status = sp.status ?? '';
 
   const [loans, stats, employees] = await Promise.all([
-    LoansService.getLoans({ search: q, type, status }),
-    LoansService.getDashboardStats(),
+    LoansService.getLoans(session, { search: q, type, status }),
+    LoansService.getDashboardStats(session),
     prisma.employee.findMany({
       where: { status: { in: ['ACTIVE'] } },
       select: { id: true, firstName: true, lastName: true, code: true, basicSalary: true },
@@ -81,7 +81,7 @@ export default async function LoansPage({
   ]);
 
   const initialId = sp.edit && sp.edit !== 'new' ? sp.edit : null;
-  const initial = initialId ? await LoansService.getLoanById(initialId).catch(() => null) : null;
+  const initial = initialId ? await LoansService.getLoanById(session, initialId).catch(() => null) : null;
   const serializedEmployees = employees.map(serializeEmployee);
   const serializedInitial = serializeLoanForForm(initial);
 

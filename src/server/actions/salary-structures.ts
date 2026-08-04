@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { salaryStructureFormSchema, salaryStructureAssignmentSchema } from '../validators/salary-structures';
 import { SalaryStructuresService } from '../services/salary-structures.service';
+import { getSession } from '@/server/auth/session';
 
 function handleError(error: unknown) {
   if (error instanceof Error) {
@@ -13,8 +14,9 @@ function handleError(error: unknown) {
 
 export async function createSalaryStructure(formData: unknown) {
   try {
+    const session = await getSession();
     const validatedData = salaryStructureFormSchema.parse(formData);
-    const result = await SalaryStructuresService.createSalaryStructure(validatedData);
+    const result = await SalaryStructuresService.createSalaryStructure(session, validatedData);
     revalidatePath('/hr/salary-structure');
     return { success: true, data: result };
   } catch (error) {
@@ -24,8 +26,9 @@ export async function createSalaryStructure(formData: unknown) {
 
 export async function updateSalaryStructure(id: string, formData: unknown) {
   try {
+    const session = await getSession();
     const validatedData = salaryStructureFormSchema.parse(formData);
-    const result = await SalaryStructuresService.updateSalaryStructure(id, validatedData);
+    const result = await SalaryStructuresService.updateSalaryStructure(session, id, validatedData);
     revalidatePath('/hr/salary-structure');
     revalidatePath(`/hr/salary-structure/${id}`);
     return { success: true, data: result };
@@ -36,8 +39,9 @@ export async function updateSalaryStructure(id: string, formData: unknown) {
 
 export async function assignSalaryStructureEmployees(id: string, formData: unknown) {
   try {
+    const session = await getSession();
     const validatedData = salaryStructureAssignmentSchema.parse(formData);
-    const result = await SalaryStructuresService.assignEmployees(id, validatedData);
+    const result = await SalaryStructuresService.assignEmployees(session, id, validatedData);
     revalidatePath('/hr/salary-structure');
     revalidatePath(`/hr/salary-structure/${id}`);
     return { success: true, data: result };
@@ -48,7 +52,8 @@ export async function assignSalaryStructureEmployees(id: string, formData: unkno
 
 export async function deactivateSalaryStructure(id: string) {
   try {
-    const result = await SalaryStructuresService.deactivateSalaryStructure(id);
+    const session = await getSession();
+    const result = await SalaryStructuresService.deactivateSalaryStructure(session, id);
     revalidatePath('/hr/salary-structure');
     revalidatePath(`/hr/salary-structure/${id}`);
     return { success: true, data: result };

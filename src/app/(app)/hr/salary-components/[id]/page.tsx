@@ -17,7 +17,7 @@ export default async function SalaryComponentViewPage({
   const session = await getSession();
   const canWrite = session?.permissions.includes('hr:write') ?? false;
 
-  const component = await SalaryComponentsService.getSalaryComponentById(p.id).catch(() => null);
+  const component = await SalaryComponentsService.getSalaryComponentById(session, p.id).catch(() => null);
 
   if (!component) {
     notFound();

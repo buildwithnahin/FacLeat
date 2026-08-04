@@ -7,11 +7,13 @@ import { notFound } from 'next/navigation';
 import { formatCurrency } from '@/lib/utils';
 import { PayrollAdjustmentService } from '@/server/services/payroll-adjustment.service';
 import { ApprovalForm } from './approval-form';
+import { getSession } from '@/server/auth/session';
 
 export default async function PayrollAdjustmentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  
-  const adjustment = await PayrollAdjustmentService.getAdjustmentById(id);
+  const session = await getSession();
+
+  const adjustment = await PayrollAdjustmentService.getAdjustmentById(session, id);
   
   if (!adjustment) {
     notFound();

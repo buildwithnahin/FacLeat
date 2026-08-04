@@ -19,7 +19,7 @@ export default async function PayrollPeriodViewPage({
   const session = await getSession();
   const isAdmin = session?.permissions.includes('admin') || session?.systemRole === 'ADMIN';
 
-  const period = await PayrollPeriodsService.getPayrollPeriodById(p.id).catch(() => null);
+  const period = await PayrollPeriodsService.getPayrollPeriodById(session, p.id).catch(() => null);
 
   if (!period) {
     notFound();

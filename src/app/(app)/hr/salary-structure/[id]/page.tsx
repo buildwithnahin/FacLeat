@@ -20,7 +20,7 @@ export default async function SalaryStructureViewPage({
   const session = await getSession();
   const canWrite = session?.permissions.includes('hr:write') ?? false;
 
-  const structure = await SalaryStructuresService.getSalaryStructureById(p.id).catch(() => null);
+  const structure = await SalaryStructuresService.getSalaryStructureById(session, p.id).catch(() => null);
 
   if (!structure) {
     notFound();

@@ -9,6 +9,7 @@ import { formatCurrency } from '@/lib/utils';
 import { PayrollAdjustmentService } from '@/server/services/payroll-adjustment.service';
 import { PayrollAdjustmentForm } from './adjustment-form';
 import { Prisma } from '@prisma/client';
+import { getSession } from '@/server/auth/session';
 
 export default async function PayrollAdjustmentPage({
   searchParams,
@@ -16,8 +17,9 @@ export default async function PayrollAdjustmentPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const sp = await searchParams;
-  
-  const stats = await PayrollAdjustmentService.getDashboardStats();
+  const session = await getSession();
+
+  const stats = await PayrollAdjustmentService.getDashboardStats(session);
 
   const where: Prisma.PayrollAdjustmentWhereInput = {};
   if (sp.status) where.status = sp.status as any;
@@ -30,12 +32,12 @@ export default async function PayrollAdjustmentPage({
     ];
   }
 
-  const adjustments = await PayrollAdjustmentService.getAdjustments(where);
-  
+  const adjustments = await PayrollAdjustmentService.getAdjustments(session, where);
+
   const isEditing = sp.edit;
   let initial = null;
   if (isEditing && isEditing !== 'new') {
-    initial = await PayrollAdjustmentService.getAdjustmentById(isEditing as string);
+    initial = await PayrollAdjustmentService.getAdjustmentById(session, isEditing as string);
   }
 
   const employees = await prisma.employee.findMany({

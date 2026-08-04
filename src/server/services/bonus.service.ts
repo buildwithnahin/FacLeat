@@ -1,28 +1,32 @@
 import { prisma } from '@/server/db';
 import { Prisma, BonusStatus } from '@prisma/client';
 import { BonusFormValues } from '../validators/bonus';
+import { authorize } from '@/server/auth/authorize';
+import { recordAudit } from '@/server/audit/logger';
+import type { AppSession } from '@/server/auth/session';
 
 export class BonusService {
-  static async getDashboardStats() {
+  static async getDashboardStats(session: AppSession | null) {
+    await authorize(session, 'hr:read');
     const pendingBonus = await prisma.bonus.count({
       where: { status: { in: ['SUBMITTED', 'PENDING_HR', 'PENDING_MANAGEMENT'] } },
     });
-    
+
     const approvedBonus = await prisma.bonus.count({
       where: { status: 'APPROVED' },
     });
-    
+
     // Get current month stats (naive approach)
     const currentMonth = new Date().toISOString().substring(0, 7);
     const thisMonthBonuses = await prisma.bonus.findMany({
       where: { effectivePayrollMonth: currentMonth, status: { in: ['APPROVED', 'PUBLISHED', 'PAID'] } },
       include: { employeeBonuses: true },
     });
-    
+
     const thisMonthAmount = thisMonthBonuses.reduce((acc, bonus) => {
       return acc + bonus.employeeBonuses.reduce((sum, eb) => sum + Number(eb.amount), 0);
     }, 0);
-    
+
     const eligibleEmployees = thisMonthBonuses.reduce((acc, bonus) => acc + bonus.employeeBonuses.length, 0);
 
     return {
@@ -33,7 +37,8 @@ export class BonusService {
     };
   }
 
-  static async getBonuses(where?: Prisma.BonusWhereInput) {
+  static async getBonuses(session: AppSession | null, where?: Prisma.BonusWhereInput) {
+    await authorize(session, 'hr:read');
     return prisma.bonus.findMany({
       where,
       include: {
@@ -45,7 +50,8 @@ export class BonusService {
     });
   }
 
-  static async getBonusById(id: string) {
+  static async getBonusById(session: AppSession | null, id: string) {
+    await authorize(session, 'hr:read');
     return prisma.bonus.findUnique({
       where: { id },
       include: {
@@ -79,10 +85,10 @@ export class BonusService {
     if (bonus.calculationMethod === 'FIXED_AMOUNT') {
       return Number(bonus.amount) || 0;
     }
-    
+
     if (bonus.calculationMethod === 'PERCENTAGE' && bonus.percentage) {
       let baseAmount = 0;
-      
+
       if (bonus.basedOn === 'BASIC_SALARY') {
         baseAmount = Number(employee.basicSalary) || 0;
       } else if (bonus.basedOn === 'GROSS_SALARY' || bonus.basedOn === 'NET_SALARY') {
@@ -95,16 +101,17 @@ export class BonusService {
           baseAmount = Number(employee.basicSalary) || 0;
         }
       }
-      
+
       return (baseAmount * Number(bonus.percentage)) / 100;
     }
-    
+
     return 0;
   }
 
-  static async createBonus(data: BonusFormValues) {
+  static async createBonus(session: AppSession | null, data: BonusFormValues) {
+    const actor = await authorize(session, 'hr:write');
     const { employeeIds, ...bonusData } = data;
-    
+
     return prisma.$transaction(async (tx) => {
       // 1. Create Bonus
       const bonus = await tx.bonus.create({
@@ -129,7 +136,7 @@ export class BonusService {
       // 3. Create EmployeeBonuses
       for (const employee of employees) {
         const amount = await this.calculateBonusAmountForEmployee(data, employee);
-        
+
         await tx.employeeBonus.create({
           data: {
             bonusId: bonus.id,
@@ -139,14 +146,30 @@ export class BonusService {
         });
       }
 
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'hr',
+          action: 'create-bonus',
+          entityType: 'Bonus',
+          entityId: bonus.id,
+          after: { title: bonus.title, effectivePayrollMonth: bonus.effectivePayrollMonth, employeeCount: employees.length },
+        },
+        tx,
+      );
+
       return bonus;
     });
   }
 
-  static async updateBonus(id: string, data: BonusFormValues) {
+  static async updateBonus(session: AppSession | null, id: string, data: BonusFormValues) {
+    const actor = await authorize(session, 'hr:write');
     const { employeeIds, ...bonusData } = data;
 
     return prisma.$transaction(async (tx) => {
+      const existing = await tx.bonus.findUnique({ where: { id } });
+
       // 1. Update Bonus
       const bonus = await tx.bonus.update({
         where: { id },
@@ -174,7 +197,7 @@ export class BonusService {
 
       for (const employee of employees) {
         const amount = await this.calculateBonusAmountForEmployee(data, employee);
-        
+
         await tx.employeeBonus.create({
           data: {
             bonusId: bonus.id,
@@ -184,13 +207,28 @@ export class BonusService {
         });
       }
 
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'hr',
+          action: 'update-bonus',
+          entityType: 'Bonus',
+          entityId: id,
+          before: { title: existing?.title, status: existing?.status },
+          after: { title: bonus.title, status: bonus.status, employeeCount: employees.length },
+        },
+        tx,
+      );
+
       return bonus;
     });
   }
-  
-  static async updateStatus(id: string, status: BonusStatus, remarks?: string) {
+
+  static async updateStatus(session: AppSession | null, id: string, status: BonusStatus, remarks?: string) {
+    const actor = await authorize(session, 'hr:write');
     const data: Prisma.BonusUpdateInput = { status };
-    
+
     if (remarks) {
       if (status === 'APPROVED') {
         data.remarks = remarks;
@@ -200,16 +238,54 @@ export class BonusService {
         data.remarks = remarks;
       }
     }
-    
-    return prisma.bonus.update({
-      where: { id },
-      data,
+
+    return prisma.$transaction(async (tx) => {
+      const existing = await tx.bonus.findUnique({ where: { id } });
+      const bonus = await tx.bonus.update({
+        where: { id },
+        data,
+      });
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'hr',
+          action: 'update-bonus-status',
+          entityType: 'Bonus',
+          entityId: id,
+          before: { status: existing?.status },
+          after: { status: bonus.status, remarks },
+        },
+        tx,
+      );
+
+      return bonus;
     });
   }
 
-  static async deleteBonus(id: string) {
-    return prisma.bonus.delete({
-      where: { id },
+  static async deleteBonus(session: AppSession | null, id: string) {
+    const actor = await authorize(session, 'hr:write');
+    return prisma.$transaction(async (tx) => {
+      const existing = await tx.bonus.findUnique({ where: { id } });
+      const deleted = await tx.bonus.delete({
+        where: { id },
+      });
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: actor.activeBranchId,
+          module: 'hr',
+          action: 'delete-bonus',
+          entityType: 'Bonus',
+          entityId: id,
+          before: { title: existing?.title, status: existing?.status },
+        },
+        tx,
+      );
+
+      return deleted;
     });
   }
 }

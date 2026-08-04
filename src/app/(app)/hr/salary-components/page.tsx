@@ -67,7 +67,7 @@ export default async function SalaryComponentsPage({
   const status = sp.status ?? '';
 
   const [components, departmentRows, designationRows, employees] = await Promise.all([
-    SalaryComponentsService.getSalaryComponents({ search: q, category, type, status }),
+    SalaryComponentsService.getSalaryComponents(session, { search: q, category, type, status }),
     prisma.hrMasterData.findMany({
       where: { type: 'departments', status: 'ACTIVE' },
       select: { name: true },

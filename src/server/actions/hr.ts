@@ -98,7 +98,7 @@ export async function markAttendanceAction(fd: FormData) {
     
     // 🔥 Hook up the automated Attendance Engine!
     const { attendanceEngineService } = await import('@/server/services/attendance-engine.service');
-    await attendanceEngineService.processEmployeeDay(record.employeeId, record.date, record.checkIn, record.checkOut);
+    await attendanceEngineService.processEmployeeDay(session, record.employeeId, record.date, record.checkIn, record.checkOut);
     
   } catch (e) {
     if (e instanceof ApiError) return;

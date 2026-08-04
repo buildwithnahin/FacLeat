@@ -7,11 +7,13 @@ import { notFound } from 'next/navigation';
 import { formatCurrency } from '@/lib/utils';
 import { PayrollRunService } from '@/server/services/payroll-run.service';
 import { ApprovalForm } from './approval-form';
+import { getSession } from '@/server/auth/session';
 
 export default async function PayrollRunDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  
-  const run = await PayrollRunService.getPayrollRunById(id);
+  const session = await getSession();
+
+  const run = await PayrollRunService.getPayrollRunById(session, id);
 
   if (!run) {
     notFound();
