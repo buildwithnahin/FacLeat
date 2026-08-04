@@ -1,30 +1,54 @@
-// This is a basic Flutter widget test.
+// Widget tests for the Annex Admin mobile app foundation.
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Covers:
+//  - LoginScreen renders its email/password fields and sign-in button.
+//  - AppTheme's light/dark ColorScheme.primary matches the brand blue.
 
+import 'package:annex_mobile/core/theme/app_colors.dart';
+import 'package:annex_mobile/core/theme/app_theme.dart';
+import 'package:annex_mobile/features/auth/presentation/login_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:annex_mobile/main.dart';
-
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('LoginScreen renders email, password fields and sign-in button',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: LoginScreen(),
+        ),
+      ),
+    );
+    // Let the entrance animation (flutter_animate) run to completion so no
+    // timers are left pending when the test tears down.
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.byKey(const Key('emailField')), findsOneWidget);
+    expect(find.byKey(const Key('passwordField')), findsOneWidget);
+    expect(find.byKey(const Key('signInButton')), findsOneWidget);
+    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('Annex Admin'), findsOneWidget);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('AppTheme primary color matches the brand blue (#2563EB)',
+      (WidgetTester tester) async {
+    expect(AppTheme.light.colorScheme.primary, AppColors.primary);
+    expect(AppTheme.dark.colorScheme.primary, AppColors.primary);
+    expect(AppColors.primary, const Color(0xFF2563EB));
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Sanity check the theme actually resolves through a real widget tree.
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Builder(
+          builder: (context) {
+            expect(Theme.of(context).colorScheme.primary, const Color(0xFF2563EB));
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
   });
 }
