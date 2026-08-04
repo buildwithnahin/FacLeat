@@ -16,8 +16,8 @@ next-env.d.ts
 prisma/migrations/**/migration_lock.toml.bak
 src/generated/
 
-# Build output
-client/dist/
+# TypeScript build cache
+tsconfig.tsbuildinfo
 
 # Logs
 *.log
@@ -34,7 +34,6 @@ Thumbs.db
 *.swo
 
 # Uploads
-server/upload/
 backend/upload/
 
 # Git token
