@@ -6,8 +6,8 @@ import { authorize } from '@/server/auth/authorize';
 import { assertBranchInScope } from '@/server/auth/data-scope';
 import { recordAudit } from '@/server/audit/logger';
 import type { AppSession } from '@/server/auth/session';
-import type { UserCreateInput, UserUpdateInput } from '@/server/validators/users';
-import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/errors';
+import type { ChangeOwnPasswordInput, UserCreateInput, UserUpdateInput } from '@/server/validators/users';
+import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from '@/lib/errors';
 
 const USER_INCLUDE = {
   employee: { select: { id: true, code: true, firstName: true, lastName: true, designation: true, department: true } },
@@ -365,5 +365,40 @@ export const userService = {
     });
     revalidateTag('rbac');
     return updated;
+  },
+
+  async changeOwnPassword(session: AppSession | null, input: ChangeOwnPasswordInput) {
+    if (!session) throw new UnauthorizedError();
+
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { id: true, passwordHash: true },
+    });
+    if (!user) throw new NotFoundError('User not found');
+
+    const matches = await bcrypt.compare(input.currentPassword, user.passwordHash);
+    if (!matches) throw new ValidationError('Current password is incorrect');
+
+    const passwordHash = await bcrypt.hash(input.newPassword, 10);
+
+    return prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: session.userId }, data: { passwordHash } });
+
+      await recordAudit(
+        {
+          actorId: session.userId,
+          branchId: session.activeBranchId,
+          module: 'users',
+          action: 'change-password',
+          entityType: 'User',
+          entityId: session.userId,
+          before: { changed: true },
+          after: { changed: true },
+        },
+        tx,
+      );
+
+      return { changed: true };
+    });
   },
 };

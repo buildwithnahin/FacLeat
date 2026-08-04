@@ -26,22 +26,31 @@ export async function GET(req: NextRequest) {
     await authorize(session, 'dashboard:read');
 
     const today = startOfDay();
-    const [companies, branches, users, todayLogins, kpis] = await Promise.all([
-      prisma.company.count({ where: { isActive: true } }),
-      prisma.branch.count(),
-      prisma.user.count(),
-      prisma.auditLog.findMany({
-        where: {
-          module: 'auth',
-          action: 'LOGIN_SUCCESS',
-          actorId: { not: null },
-          createdAt: { gte: today },
-        },
-        select: { actorId: true },
-        distinct: ['actorId'],
-      }),
-      reportsService.dashboardKpis(session, {}),
-    ]);
+    const [companies, branches, users, todayLogins, kpis, pendingOrders, presentToday, activeEmployees] =
+      await Promise.all([
+        prisma.company.count({ where: { isActive: true } }),
+        prisma.branch.count(),
+        prisma.user.count(),
+        prisma.auditLog.findMany({
+          where: {
+            module: 'auth',
+            action: 'LOGIN_SUCCESS',
+            actorId: { not: null },
+            createdAt: { gte: today },
+          },
+          select: { actorId: true },
+          distinct: ['actorId'],
+        }),
+        reportsService.dashboardKpis(session, {}),
+        prisma.purchaseOrder.count({ where: { status: 'PENDING' } }),
+        // Mirrors loadHrData()'s presentToday query in role-dashboard.tsx —
+        // AttendanceRecord.date is a @db.Date column, so it lines up exactly
+        // with startOfDay().
+        prisma.attendanceRecord.count({
+          where: { date: today, status: { in: ['PRESENT', 'LATE', 'HALF_DAY'] } },
+        }),
+        prisma.employee.count({ where: { status: 'ACTIVE' } }),
+      ]);
 
     const data = {
       totalCompanies: companies,
@@ -53,6 +62,16 @@ export async function GET(req: NextRequest) {
       pendingApprovals: kpis.pendingApprovals,
       lowStockProducts: kpis.lowStockProducts,
       activeProducts: kpis.activeProducts,
+      totalSales: kpis.salesGross.toNumber(),
+      totalPurchases: kpis.purchaseTotal.toNumber(),
+      // Gross sales stands in for "revenue" here — this is not a net-of-COGS
+      // accounting revenue figure, which would need accountsService's income
+      // statement and is out of scope for this pass.
+      revenue: kpis.salesGross.toNumber(),
+      outstandingPayments: kpis.salesOutstanding.toNumber() + kpis.purchaseOutstanding.toNumber(),
+      pendingOrders,
+      employeeAttendance:
+        activeEmployees > 0 ? Math.round((presentToday / activeEmployees) * 1000) / 10 : null,
     };
 
     return Response.json(apiOk(data));
