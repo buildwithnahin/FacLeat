@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../settings/application/notification_prefs_provider.dart';
 import '../data/notifications_repository.dart';
 import '../domain/notification_item.dart';
 
@@ -104,6 +105,13 @@ final StreamProvider<void> notificationsSseProvider = StreamProvider<void>((ref)
       if (decoded is! Map<String, dynamic>) continue;
       if (decoded['type'] == 'connected') continue; // initial handshake payload
       if (decoded['id'] == null) continue; // not a NotificationItem-shaped event
+
+      final severity = decoded['severity'] as String? ?? 'INFO';
+      final prefs = ref.read(notificationPrefsProvider);
+      if (!prefs.mutedSeverities.contains(severity)) {
+        if (prefs.soundEnabled) unawaited(SystemSound.play(SystemSoundType.alert));
+        if (prefs.vibrateEnabled) unawaited(HapticFeedback.vibrate());
+      }
 
       ref.invalidate(notificationsListProvider);
       ref.invalidate(unreadCountProvider);

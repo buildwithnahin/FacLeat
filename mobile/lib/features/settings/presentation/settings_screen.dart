@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 
+import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/theme_mode_controller.dart';
+import '../../app_lock/presentation/widgets/app_lock_settings_section.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../dashboard/application/me_provider.dart';
 import '../application/settings_providers.dart';
 import '../domain/mobile_session.dart';
+import 'widgets/language_section.dart';
+import 'widgets/notification_prefs_section.dart';
 
 /// Full account-settings screen — profile detail, appearance, and active
 /// session management. Distinct from the drawer's inline appearance toggle
@@ -41,6 +46,20 @@ class SettingsScreen extends ConsumerWidget {
           const _SectionLabel(label: 'Appearance', icon: Icons.palette_outlined),
           const SizedBox(height: 10),
           _AppearanceCard(mode: mode, ref: ref),
+          const SizedBox(height: 24),
+          const _SectionLabel(label: 'Security', icon: Icons.shield_outlined),
+          const SizedBox(height: 10),
+          _ChangePasswordCard(onTap: () => context.push(changePasswordRoute)),
+          const SizedBox(height: 12),
+          const AppLockSettingsSection(),
+          const SizedBox(height: 24),
+          const _SectionLabel(label: 'Notifications', icon: Icons.notifications_outlined),
+          const SizedBox(height: 10),
+          const NotificationPrefsSection(),
+          const SizedBox(height: 24),
+          const _SectionLabel(label: 'Language', icon: Icons.translate_outlined),
+          const SizedBox(height: 10),
+          const LanguageSection(),
           const SizedBox(height: 24),
           const _SectionLabel(label: 'Active sessions', icon: Icons.devices_outlined),
           const SizedBox(height: 10),
@@ -180,6 +199,35 @@ class _AppearanceCard extends StatelessWidget {
         selected: {mode},
         onSelectionChanged: (selection) => ref.read(themeModeProvider.notifier).setThemeMode(selection.first),
         showSelectedIcon: false,
+      ),
+    );
+  }
+}
+
+class _ChangePasswordCard extends StatelessWidget {
+  const _ChangePasswordCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.cardTheme.color ?? theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
+        ),
+        child: ListTile(
+          key: const Key('changePasswordTile'),
+          leading: const Icon(Icons.password_outlined),
+          title: const Text('Change password'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onTap,
+        ),
       ),
     );
   }

@@ -4,9 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_mode_controller.dart';
+import 'features/app_lock/presentation/widgets/app_lock_lifecycle_observer.dart';
 
 void main() {
-  runApp(const ProviderScope(child: AnnexMobileApp()));
+  runApp(const ProviderScope(child: AppLockLifecycleObserver(child: AnnexMobileApp())));
 }
 
 class AnnexMobileApp extends ConsumerWidget {

@@ -27,6 +27,10 @@ import '../../features/branch_monitoring/presentation/branch_monitoring_screen.d
 import '../../features/announcements/presentation/announcements_list_screen.dart';
 import '../../features/announcements/presentation/announcement_detail_screen.dart';
 import '../../features/announcements/presentation/announcement_compose_screen.dart';
+import '../../features/app_lock/application/app_lock_controller.dart';
+import '../../features/app_lock/domain/app_lock_status.dart';
+import '../../features/app_lock/presentation/app_lock_screen.dart';
+import '../../features/settings/presentation/change_password_screen.dart';
 import 'main_shell.dart';
 
 const String splashRoute = '/splash';
@@ -52,6 +56,8 @@ const String auditRoute = '/audit';
 const String auditDetailRoute = '/audit/:id';
 const String companiesRoute = '/companies';
 const String settingsRoute = '/settings';
+const String changePasswordRoute = '/settings/change-password';
+const String lockRoute = '/lock';
 const String notificationsRoute = '/notifications';
 const String searchRoute = '/search';
 const String announcementsRoute = '/announcements';
@@ -65,12 +71,17 @@ String reportsHrPath(String category, String type) => '/reports/hr/$category/$ty
 String auditDetailPath(String id) => '/audit/$id';
 String approvalDetailPath(String id) => '/approvals/$id';
 
-/// Bridges Riverpod's [authControllerProvider] to go_router's
-/// [Listenable]-based `refreshListenable`, so the router re-evaluates
-/// [GoRouter.redirect] whenever the auth status changes.
+/// Bridges Riverpod's [authControllerProvider]/[appLockControllerProvider]
+/// to go_router's [Listenable]-based `refreshListenable`, so the router
+/// re-evaluates [GoRouter.redirect] whenever either status changes.
 class _RouterRefreshNotifier extends ChangeNotifier {
   _RouterRefreshNotifier(Ref ref) {
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
+      if (previous?.status != next.status) {
+        notifyListeners();
+      }
+    });
+    ref.listen<AppLockState>(appLockControllerProvider, (previous, next) {
       if (previous?.status != next.status) {
         notifyListeners();
       }
@@ -95,7 +106,12 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
           return location == loginRoute ? null : loginRoute;
         case AuthStatus.authenticated:
           final onAuthOnlyRoute = location == loginRoute || location == splashRoute;
-          return onAuthOnlyRoute ? homeRoute : null;
+          if (onAuthOnlyRoute) return homeRoute;
+
+          final isLocked = ref.read(appLockControllerProvider).status == AppLockStatus.locked;
+          if (isLocked) return location == lockRoute ? null : lockRoute;
+          if (location == lockRoute) return homeRoute;
+          return null;
       }
     },
     routes: [
@@ -107,6 +123,10 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
         path: loginRoute,
         builder: (context, state) => const LoginScreen(),
       ),
+      GoRoute(
+        path: lockRoute,
+        builder: (context, state) => const AppLockScreen(),
+      ),
       // Lightweight lookup / drawer-only screens reached via push — none of
       // these need their own bottom-nav slot, so they sit outside the shell.
       GoRoute(
@@ -116,6 +136,12 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: settingsRoute,
         builder: (context, state) => const SettingsScreen(),
+        routes: [
+          GoRoute(
+            path: 'change-password',
+            builder: (context, state) => const ChangePasswordScreen(),
+          ),
+        ],
       ),
       GoRoute(
         path: rolesRoute,
