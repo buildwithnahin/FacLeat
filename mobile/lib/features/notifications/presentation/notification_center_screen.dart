@@ -46,7 +46,21 @@ class NotificationCenterScreen extends ConsumerWidget {
     final href = item.href;
     if (href == null) return;
     final mobileRoute = _mapHrefToMobileRoute(href);
-    if (mobileRoute != null && context.mounted) {
+    if (mobileRoute == null || !context.mounted) return;
+
+    // This screen is a top-level pushed route, outside the bottom-nav
+    // shell. `/approvals/:id` and `/users/:id` are nested INSIDE the shell
+    // (Approvals and Users are both shell branches) — pushing a shell-nested
+    // route from outside the shell makes go_router try to mount the same
+    // branch's Navigator in two places at once, which crashes with a
+    // GlobalKey collision (`!keyReservation.contains(key)`). `go()` instead
+    // cleanly hands off to the shell and selects the right branch. The
+    // other three mapped routes (audit/roles/announcements) are genuinely
+    // top-level, so `push()` is correct there — it keeps this screen on the
+    // back stack, matching how every other push in this app behaves.
+    if (mobileRoute.startsWith(approvalsRoute) || mobileRoute.startsWith(usersRoute)) {
+      context.go(mobileRoute);
+    } else {
       context.push(mobileRoute);
     }
   }

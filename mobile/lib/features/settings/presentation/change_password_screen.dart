@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/change_password_provider.dart';
@@ -177,7 +178,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                         ),
                       ],
                     ),
-                  ),
+                  ).animate().shakeX(hz: 4, amount: 6),
                 ],
                 const SizedBox(height: 24),
                 FilledButton(
