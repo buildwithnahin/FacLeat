@@ -23,6 +23,11 @@ import '../../features/reports/presentation/reports_hub_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/workspace/presentation/branches_screen.dart';
 import '../../features/workspace/presentation/companies_screen.dart';
+import '../../features/search/presentation/global_search_screen.dart';
+import '../../features/branch_monitoring/presentation/branch_monitoring_screen.dart';
+import '../../features/announcements/presentation/announcements_list_screen.dart';
+import '../../features/announcements/presentation/announcement_detail_screen.dart';
+import '../../features/announcements/presentation/announcement_compose_screen.dart';
 import 'main_shell.dart';
 
 const String splashRoute = '/splash';
@@ -51,6 +56,10 @@ const String settingsRoute = '/settings';
 const String approvalsRoute = '/approvals';
 const String approvalDetailRoute = '/approvals/:id';
 const String notificationsRoute = '/notifications';
+const String searchRoute = '/search';
+const String branchMonitoringRoute = '/branch-monitoring';
+const String announcementsRoute = '/announcements';
+const String announcementDetailRoute = '/announcements/:id';
 
 String roleDetailPath(String id) => '/roles/$id';
 String userDetailPath(String id) => '/users/$id';
@@ -130,6 +139,34 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: notificationsRoute,
         builder: (context, state) => const NotificationCenterScreen(),
+      ),
+      // TEMPORARY pre-Phase-5 routes: Search, Multi-Branch Monitoring, and
+      // Announcements are new in Phase 4 and don't have bottom-nav slots yet
+      // either — same temporary-drawer-entry pattern as Approvals/Notifications
+      // above until Phase 5's nav restructure gives them permanent homes.
+      GoRoute(
+        path: searchRoute,
+        builder: (context, state) => const GlobalSearchScreen(),
+      ),
+      GoRoute(
+        path: branchMonitoringRoute,
+        builder: (context, state) => const BranchMonitoringScreen(),
+      ),
+      GoRoute(
+        path: announcementsRoute,
+        builder: (context, state) => const AnnouncementsListScreen(),
+        routes: [
+          // Literal 'new' registered before ':id' so it wins the match,
+          // same ordering rule as roles/users routes below.
+          GoRoute(
+            path: 'new',
+            builder: (context, state) => const AnnouncementComposeScreen(),
+          ),
+          GoRoute(
+            path: ':id',
+            builder: (context, state) => AnnouncementDetailScreen(id: state.pathParameters['id']!),
+          ),
+        ],
       ),
       // Five persistent bottom-nav sections, each with its own navigation
       // stack (so e.g. pushing a role detail from the Roles tab doesn't
