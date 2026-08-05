@@ -80,44 +80,48 @@ class AppLockSettingsSection extends ConsumerWidget {
     final biometricEnabledAsync = ref.watch(_biometricEnabledProvider);
     final biometricAvailable = biometricAvailableAsync.valueOrNull ?? false;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color ?? theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
-      ),
-      child: Column(
-        children: [
-          SwitchListTile(
-            key: const Key('appLockToggle'),
-            secondary: const Icon(Icons.lock_outline),
-            title: const Text('App Lock'),
-            subtitle: const Text('Require a PIN when the app is reopened'),
-            value: isEnabled,
-            onChanged: (value) => _onToggleAppLock(context, ref, value),
-          ),
-          if (isEnabled) ...[
-            const Divider(height: 1),
-            ListTile(
-              key: const Key('appLockChangePinTile'),
-              leading: const Icon(Icons.password_outlined),
-              title: const Text('Change PIN'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _openChangePin(context),
-            ),
-          ],
-          if (isEnabled && biometricAvailable) ...[
-            const Divider(height: 1),
+    return Material(
+      color: theme.cardTheme.color ?? theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
+        ),
+        child: Column(
+          children: [
             SwitchListTile(
-              key: const Key('appLockBiometricToggle'),
-              secondary: const Icon(Icons.fingerprint),
-              title: const Text('Use biometric unlock'),
-              subtitle: const Text('Fingerprint or face unlock, with your PIN as a fallback'),
-              value: biometricEnabledAsync.valueOrNull ?? false,
-              onChanged: (value) => _onToggleBiometric(ref, value),
+              key: const Key('appLockToggle'),
+              secondary: const Icon(Icons.lock_outline),
+              title: const Text('App Lock'),
+              subtitle: const Text('Require a PIN when the app is reopened'),
+              value: isEnabled,
+              onChanged: (value) => _onToggleAppLock(context, ref, value),
             ),
+            if (isEnabled) ...[
+              const Divider(height: 1),
+              ListTile(
+                key: const Key('appLockChangePinTile'),
+                leading: const Icon(Icons.password_outlined),
+                title: const Text('Change PIN'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _openChangePin(context),
+              ),
+            ],
+            if (isEnabled && biometricAvailable) ...[
+              const Divider(height: 1),
+              SwitchListTile(
+                key: const Key('appLockBiometricToggle'),
+                secondary: const Icon(Icons.fingerprint),
+                title: const Text('Use biometric unlock'),
+                subtitle: const Text('Fingerprint or face unlock, with your PIN as a fallback'),
+                value: biometricEnabledAsync.valueOrNull ?? false,
+                onChanged: (value) => _onToggleBiometric(ref, value),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

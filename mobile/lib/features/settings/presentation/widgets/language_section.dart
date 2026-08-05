@@ -18,23 +18,27 @@ class LanguageSection extends ConsumerWidget {
     final theme = Theme.of(context);
     final selected = ref.watch(languageProvider);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color ?? theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
-      ),
-      child: Column(
-        key: const Key('languageOptionsList'),
-        children: [
-          for (var i = 0; i < supportedLanguages.length; i++) ...[
-            if (i > 0) const Divider(height: 1),
-            _LanguageRow(
-              option: supportedLanguages[i],
-              selected: supportedLanguages[i].code == selected,
-            ),
+    return Material(
+      color: theme.cardTheme.color ?? theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
+        ),
+        child: Column(
+          key: const Key('languageOptionsList'),
+          children: [
+            for (var i = 0; i < supportedLanguages.length; i++) ...[
+              if (i > 0) const Divider(height: 1),
+              _LanguageRow(
+                option: supportedLanguages[i],
+                selected: supportedLanguages[i].code == selected,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

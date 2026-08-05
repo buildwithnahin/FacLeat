@@ -22,54 +22,58 @@ class NotificationPrefsSection extends ConsumerWidget {
     final prefs = ref.watch(notificationPrefsProvider);
     final controller = ref.read(notificationPrefsProvider.notifier);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color ?? theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SwitchListTile.adaptive(
-            key: const Key('notifSoundSwitch'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Sound'),
-            subtitle: const Text('Play a sound when a new alert arrives'),
-            value: prefs.soundEnabled,
-            onChanged: (value) => controller.setSoundEnabled(value),
-          ),
-          SwitchListTile.adaptive(
-            key: const Key('notifVibrateSwitch'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Vibrate'),
-            subtitle: const Text('Vibrate when a new alert arrives'),
-            value: prefs.vibrateEnabled,
-            onChanged: (value) => controller.setVibrateEnabled(value),
-          ),
-          const Divider(height: 24),
-          Text('Mute alerts for', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text(
-            'Muted severities are still delivered, just without sound/vibration',
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final (severity, label) in _severities)
-                FilterChip(
-                  key: Key('notifMuteChip_$severity'),
-                  label: Text(label),
-                  selected: prefs.mutedSeverities.contains(severity),
-                  onSelected: (muted) => controller.setSeverityMuted(severity, muted),
-                ),
-            ],
-          ),
-        ],
+    return Material(
+      color: theme.cardTheme.color ?? theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SwitchListTile.adaptive(
+              key: const Key('notifSoundSwitch'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Sound'),
+              subtitle: const Text('Play a sound when a new alert arrives'),
+              value: prefs.soundEnabled,
+              onChanged: (value) => controller.setSoundEnabled(value),
+            ),
+            SwitchListTile.adaptive(
+              key: const Key('notifVibrateSwitch'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Vibrate'),
+              subtitle: const Text('Vibrate when a new alert arrives'),
+              value: prefs.vibrateEnabled,
+              onChanged: (value) => controller.setVibrateEnabled(value),
+            ),
+            const Divider(height: 24),
+            Text('Mute alerts for', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            Text(
+              'Muted severities are still delivered, just without sound/vibration',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final (severity, label) in _severities)
+                  FilterChip(
+                    key: Key('notifMuteChip_$severity'),
+                    label: Text(label),
+                    selected: prefs.mutedSeverities.contains(severity),
+                    onSelected: (muted) => controller.setSeverityMuted(severity, muted),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
