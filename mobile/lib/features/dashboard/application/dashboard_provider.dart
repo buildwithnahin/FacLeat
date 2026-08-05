@@ -19,6 +19,12 @@ class DashboardSummary extends Equatable {
     required this.pendingApprovals,
     required this.lowStockProducts,
     required this.activeProducts,
+    required this.totalSales,
+    required this.totalPurchases,
+    required this.revenue,
+    required this.outstandingPayments,
+    required this.pendingOrders,
+    required this.employeeAttendance,
   });
 
   factory DashboardSummary.fromJson(Map<String, dynamic> json) => DashboardSummary(
@@ -31,6 +37,12 @@ class DashboardSummary extends Equatable {
         pendingApprovals: _asInt(json['pendingApprovals']),
         lowStockProducts: _asInt(json['lowStockProducts']),
         activeProducts: _asInt(json['activeProducts']),
+        totalSales: _asDouble(json['totalSales']),
+        totalPurchases: _asDouble(json['totalPurchases']),
+        revenue: _asDouble(json['revenue']),
+        outstandingPayments: _asDouble(json['outstandingPayments']),
+        pendingOrders: _asInt(json['pendingOrders']),
+        employeeAttendance: json['employeeAttendance'] == null ? null : _asDouble(json['employeeAttendance']),
       );
 
   final int totalCompanies;
@@ -42,12 +54,27 @@ class DashboardSummary extends Equatable {
   final int pendingApprovals;
   final int lowStockProducts;
   final int activeProducts;
+  final double totalSales;
+  final double totalPurchases;
+  final double revenue;
+  final double outstandingPayments;
+  final int pendingOrders;
+  /// Percentage (0-100) of active employees present today, or `null` when
+  /// there are zero active employees to measure — matches the backend's
+  /// own null-when-no-denominator contract, don't coerce to 0.
+  final double? employeeAttendance;
 
   static int _asInt(dynamic value) {
     if (value == null) return 0;
     if (value is int) return value;
     if (value is num) return value.round();
     return int.tryParse(value.toString()) ?? 0;
+  }
+
+  static double _asDouble(dynamic value) {
+    if (value == null) return 0;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0;
   }
 
   @override
@@ -61,6 +88,12 @@ class DashboardSummary extends Equatable {
         pendingApprovals,
         lowStockProducts,
         activeProducts,
+        totalSales,
+        totalPurchases,
+        revenue,
+        outstandingPayments,
+        pendingOrders,
+        employeeAttendance,
       ];
 }
 

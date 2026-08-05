@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/router/app_router.dart';
 import '../../../core/router/main_shell.dart';
@@ -172,7 +173,74 @@ class _DashboardContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cards = <_KpiSpec>[
+    final grouped = NumberFormat.decimalPattern();
+    String money(int value) => grouped.format(value);
+
+    final businessCards = <_KpiSpec>[
+      _KpiSpec(
+        'Total sales',
+        summary.totalSales.round(),
+        Icons.point_of_sale_outlined,
+        AppColors.success,
+        (ctx) => ctx.go(reportsGeneralPath('sales-summary')),
+        valueFormatter: money,
+      ),
+      _KpiSpec(
+        'Total purchases',
+        summary.totalPurchases.round(),
+        Icons.shopping_cart_outlined,
+        AppColors.primary,
+        (ctx) => ctx.go(reportsGeneralPath('purchase-summary')),
+        valueFormatter: money,
+      ),
+      _KpiSpec(
+        'Revenue',
+        summary.revenue.round(),
+        Icons.trending_up_outlined,
+        AppColors.success,
+        (ctx) => ctx.go(reportsFinancialsPath('income-statement')),
+        valueFormatter: money,
+      ),
+      _KpiSpec(
+        'Pending orders',
+        summary.pendingOrders,
+        Icons.local_shipping_outlined,
+        AppColors.warning,
+        (ctx) => ctx.go(reportsGeneralPath('purchase-summary')),
+      ),
+      _KpiSpec(
+        'Pending approvals',
+        summary.pendingApprovals,
+        Icons.pending_actions_outlined,
+        AppColors.warning,
+        (ctx) => ctx.go(approvalsRoute),
+      ),
+      _KpiSpec(
+        'Low stock items',
+        summary.lowStockProducts,
+        Icons.warning_amber_outlined,
+        AppColors.danger,
+        (ctx) => ctx.go(reportsGeneralPath('inventory-valuation')),
+      ),
+      _KpiSpec(
+        'Employee attendance',
+        (summary.employeeAttendance ?? 0).round(),
+        Icons.badge_outlined,
+        AppColors.primary,
+        (ctx) => ctx.go(reportsHrPath('attendance', 'ATTENDANCE_SUMMARY')),
+        suffix: '%',
+      ),
+      _KpiSpec(
+        'Outstanding payments',
+        summary.outstandingPayments.round(),
+        Icons.account_balance_wallet_outlined,
+        AppColors.danger,
+        (ctx) => ctx.go(reportsFinancialsPath('balance-sheet')),
+        valueFormatter: money,
+      ),
+    ];
+
+    final systemCards = <_KpiSpec>[
       _KpiSpec(
         'Companies',
         summary.totalCompanies,
@@ -185,7 +253,7 @@ class _DashboardContent extends StatelessWidget {
         summary.totalBranches,
         Icons.store_mall_directory_outlined,
         AppColors.primary,
-        (ctx) => ctx.push(branchesRoute),
+        (ctx) => ctx.go(branchMonitoringRoute),
       ),
       _KpiSpec(
         'Users',
@@ -199,28 +267,14 @@ class _DashboardContent extends StatelessWidget {
         summary.activeModules,
         Icons.dashboard_customize_outlined,
         AppColors.primary,
-        (ctx) => ctx.go(rolesRoute),
+        (ctx) => ctx.push(rolesRoute),
       ),
       _KpiSpec(
         "Today's logins",
         summary.todayLoginUsers,
         Icons.login_outlined,
         AppColors.success,
-        (ctx) => ctx.go(auditRoute),
-      ),
-      _KpiSpec(
-        'Pending approvals',
-        summary.pendingApprovals,
-        Icons.pending_actions_outlined,
-        AppColors.warning,
-        (ctx) => ctx.go(auditRoute),
-      ),
-      _KpiSpec(
-        'Low stock items',
-        summary.lowStockProducts,
-        Icons.warning_amber_outlined,
-        AppColors.danger,
-        (ctx) => ctx.go(reportsGeneralPath('inventory-valuation')),
+        (ctx) => ctx.push(auditRoute),
       ),
     ];
 
@@ -229,44 +283,72 @@ class _DashboardContent extends StatelessWidget {
       children: [
         _SystemHealthBanner(health: summary.systemHealth),
         const SizedBox(height: 16),
-        GridView.builder(
-          key: const Key('kpiGrid'),
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: cards.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 1.45,
-          ),
-          itemBuilder: (context, index) {
-            final spec = cards[index];
-            return KpiCard(
-              label: spec.label,
-              value: spec.value,
-              icon: spec.icon,
-              color: spec.color,
-              onTap: () => spec.onTap(context),
-            ).animate().fadeIn(delay: (index * 80).ms, duration: 400.ms).slideY(
-                  begin: 0.15,
-                  end: 0,
-                  duration: 400.ms,
-                  curve: Curves.easeOutCubic,
-                );
-          },
-        ),
+        _KpiGrid(key: const Key('kpiGrid'), cards: businessCards),
+        const SizedBox(height: 24),
+        const _SectionLabel(label: 'System', icon: Icons.settings_outlined),
+        const SizedBox(height: 10),
+        _KpiGrid(key: const Key('systemKpiGrid'), cards: systemCards, delayOffset: businessCards.length * 60),
       ],
     );
   }
 }
 
+class _KpiGrid extends StatelessWidget {
+  const _KpiGrid({super.key, required this.cards, this.delayOffset = 0});
+
+  final List<_KpiSpec> cards;
+  final int delayOffset;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: cards.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 1.45,
+      ),
+      itemBuilder: (context, index) {
+        final spec = cards[index];
+        return KpiCard(
+          label: spec.label,
+          value: spec.value,
+          icon: spec.icon,
+          color: spec.color,
+          suffix: spec.suffix,
+          valueFormatter: spec.valueFormatter,
+          onTap: () => spec.onTap(context),
+        ).animate().fadeIn(delay: (delayOffset + index * 60).ms, duration: 400.ms).slideY(
+              begin: 0.15,
+              end: 0,
+              duration: 400.ms,
+              curve: Curves.easeOutCubic,
+            );
+      },
+    );
+  }
+}
+
 class _KpiSpec {
-  const _KpiSpec(this.label, this.value, this.icon, this.color, this.onTap);
+  const _KpiSpec(
+    this.label,
+    this.value,
+    this.icon,
+    this.color,
+    this.onTap, {
+    this.suffix = '',
+    this.valueFormatter,
+  });
+
   final String label;
   final int value;
   final IconData icon;
   final Color color;
+  final String suffix;
+  final String Function(int value)? valueFormatter;
   final void Function(BuildContext context) onTap;
 }
 
@@ -530,7 +612,7 @@ class _RecentActivityCard extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.all(10),
                 child: TextButton.icon(
-                  onPressed: () => context.go(auditRoute),
+                  onPressed: () => context.push(auditRoute),
                   icon: const Icon(Icons.history, size: 16),
                   label: const Text('View full audit log'),
                 ),

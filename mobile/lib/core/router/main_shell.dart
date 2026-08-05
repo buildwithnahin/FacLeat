@@ -11,8 +11,9 @@ import '../widgets/app_drawer.dart';
 final GlobalKey<ScaffoldState> mainShellScaffoldKey = GlobalKey<ScaffoldState>();
 
 /// Persistent chrome for the authenticated app: a bottom nav bar across the
-/// five primary sections (Home, Roles, Users, Reports, Audit) plus a shared
-/// drawer for secondary actions (theme, logout).
+/// five primary sections (Home, Approvals, Users, Reports, Multi-Branch
+/// Monitoring) plus a shared drawer for secondary actions (Roles, Audit,
+/// Companies, Settings, theme, logout).
 class MainShell extends StatelessWidget {
   const MainShell({super.key, required this.navigationShell});
 
@@ -42,9 +43,9 @@ class MainShell extends StatelessWidget {
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Icon(Icons.admin_panel_settings_outlined),
-            selectedIcon: Icon(Icons.admin_panel_settings),
-            label: 'Roles',
+            icon: Icon(Icons.fact_check_outlined),
+            selectedIcon: Icon(Icons.fact_check),
+            label: 'Approvals',
           ),
           NavigationDestination(
             icon: Icon(Icons.group_outlined),
@@ -57,9 +58,9 @@ class MainShell extends StatelessWidget {
             label: 'Reports',
           ),
           NavigationDestination(
-            icon: Icon(Icons.history_outlined),
-            selectedIcon: Icon(Icons.history),
-            label: 'Audit',
+            icon: Icon(Icons.insights_outlined),
+            selectedIcon: Icon(Icons.insights),
+            label: 'Branches',
           ),
         ],
       ),

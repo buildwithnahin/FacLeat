@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 
+import '../../../core/router/main_shell.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../reports/application/report_provider.dart' show formatIsoDate;
 import '../application/branch_monitoring_providers.dart';
@@ -12,9 +13,10 @@ import '../domain/branch_metrics.dart';
 
 /// Superadmin comparison dashboard — every branch's key metrics side by
 /// side, so an admin can spot which branch is over/underperforming at a
-/// glance. Absorbs the old [BranchesScreen]'s "list every branch" job via
-/// the switcher strip at the top, while adding the actual comparison value
-/// (bar chart + expandable detail cards) below it.
+/// glance. This is the app's one and only "list every branch" screen — its
+/// switcher strip at the top covers what a plain branch list would, while
+/// adding the actual comparison value (bar chart + expandable detail cards)
+/// below it. Now a bottom-nav tab.
 ///
 /// Sibling of [ReportDetailScreen]: same date-range filter bar shape, same
 /// stat-chip/chart-then-table rhythm, just comparing branches instead of
@@ -49,6 +51,7 @@ class BranchMonitoringScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const DrawerMenuButton(),
         title: const Text('Branch Monitoring'),
         actions: [
           if (range.isSet)

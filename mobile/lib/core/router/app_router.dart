@@ -21,7 +21,6 @@ import '../../features/reports/data/report_catalog.dart';
 import '../../features/reports/presentation/report_detail_screen.dart';
 import '../../features/reports/presentation/reports_hub_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
-import '../../features/workspace/presentation/branches_screen.dart';
 import '../../features/workspace/presentation/companies_screen.dart';
 import '../../features/search/presentation/global_search_screen.dart';
 import '../../features/branch_monitoring/presentation/branch_monitoring_screen.dart';
@@ -33,9 +32,8 @@ import 'main_shell.dart';
 const String splashRoute = '/splash';
 const String loginRoute = '/login';
 const String homeRoute = '/home';
-const String rolesRoute = '/roles';
-const String roleNewRoute = '/roles/new';
-const String roleDetailRoute = '/roles/:id';
+const String approvalsRoute = '/approvals';
+const String approvalDetailRoute = '/approvals/:id';
 const String usersRoute = '/users';
 const String userNewRoute = '/users/new';
 const String userDetailRoute = '/users/:id';
@@ -43,21 +41,19 @@ const String reportsHubRoute = '/reports';
 const String reportsGeneralRoute = '/reports/general/:type';
 const String reportsFinancialsRoute = '/reports/financials/:type';
 const String reportsHrRoute = '/reports/hr/:category/:type';
+const String branchMonitoringRoute = '/branch-monitoring';
+// Secondary screens reached from the drawer — none of these carry enough
+// standalone traffic to earn a bottom-nav slot, so they're pushed on top of
+// whichever tab the drawer was opened from rather than being shell branches.
+const String rolesRoute = '/roles';
+const String roleNewRoute = '/roles/new';
+const String roleDetailRoute = '/roles/:id';
 const String auditRoute = '/audit';
 const String auditDetailRoute = '/audit/:id';
 const String companiesRoute = '/companies';
-const String branchesRoute = '/branches';
 const String settingsRoute = '/settings';
-// TEMPORARY pre-Phase-5 routes: Approvals and Notifications don't have
-// bottom-nav slots yet (that's Phase 5's nav restructure — Approvals will
-// replace Roles, Notifications gets a bell in the app bar). Reached for now
-// via temporary drawer entries so Phase 2 can be live-verified ahead of
-// that restructure.
-const String approvalsRoute = '/approvals';
-const String approvalDetailRoute = '/approvals/:id';
 const String notificationsRoute = '/notifications';
 const String searchRoute = '/search';
-const String branchMonitoringRoute = '/branch-monitoring';
 const String announcementsRoute = '/announcements';
 const String announcementDetailRoute = '/announcements/:id';
 
@@ -111,28 +107,39 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
         path: loginRoute,
         builder: (context, state) => const LoginScreen(),
       ),
-      // Lightweight lookup screens reached via push (from the dashboard KPI
-      // cards and the drawer's Workspace section) — they don't need their
-      // own bottom-nav slot, so they sit outside the shell below.
+      // Lightweight lookup / drawer-only screens reached via push — none of
+      // these need their own bottom-nav slot, so they sit outside the shell.
       GoRoute(
         path: companiesRoute,
         builder: (context, state) => const CompaniesScreen(),
-      ),
-      GoRoute(
-        path: branchesRoute,
-        builder: (context, state) => const BranchesScreen(),
       ),
       GoRoute(
         path: settingsRoute,
         builder: (context, state) => const SettingsScreen(),
       ),
       GoRoute(
-        path: approvalsRoute,
-        builder: (context, state) => const ApprovalsListScreen(),
+        path: rolesRoute,
+        builder: (context, state) => const RolesListScreen(),
+        routes: [
+          // Literal 'new' registered before ':id' so it wins the match
+          // instead of being captured as `id: "new"`.
+          GoRoute(
+            path: 'new',
+            builder: (context, state) => const RoleFormScreen(),
+          ),
+          GoRoute(
+            path: ':id',
+            builder: (context, state) => RoleFormScreen(roleId: state.pathParameters['id']),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: auditRoute,
+        builder: (context, state) => const AuditListScreen(),
         routes: [
           GoRoute(
             path: ':id',
-            builder: (context, state) => ApprovalDetailScreen(id: state.pathParameters['id']!),
+            builder: (context, state) => AuditDetailScreen(id: state.pathParameters['id']!),
           ),
         ],
       ),
@@ -140,24 +147,16 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
         path: notificationsRoute,
         builder: (context, state) => const NotificationCenterScreen(),
       ),
-      // TEMPORARY pre-Phase-5 routes: Search, Multi-Branch Monitoring, and
-      // Announcements are new in Phase 4 and don't have bottom-nav slots yet
-      // either — same temporary-drawer-entry pattern as Approvals/Notifications
-      // above until Phase 5's nav restructure gives them permanent homes.
       GoRoute(
         path: searchRoute,
         builder: (context, state) => const GlobalSearchScreen(),
-      ),
-      GoRoute(
-        path: branchMonitoringRoute,
-        builder: (context, state) => const BranchMonitoringScreen(),
       ),
       GoRoute(
         path: announcementsRoute,
         builder: (context, state) => const AnnouncementsListScreen(),
         routes: [
           // Literal 'new' registered before ':id' so it wins the match,
-          // same ordering rule as roles/users routes below.
+          // same ordering rule as roles/users routes above.
           GoRoute(
             path: 'new',
             builder: (context, state) => const AnnouncementComposeScreen(),
@@ -168,10 +167,12 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
-      // Five persistent bottom-nav sections, each with its own navigation
-      // stack (so e.g. pushing a role detail from the Roles tab doesn't
-      // disturb the Users tab's stack) sharing one Scaffold — the bottom
-      // nav bar and drawer — via MainShell.
+      // Five persistent bottom-nav sections — Home, Approvals, Users,
+      // Reports, Multi-Branch Monitoring — each with its own navigation
+      // stack (so e.g. pushing a user detail from the Users tab doesn't
+      // disturb the Reports tab's stack) sharing one Scaffold — the bottom
+      // nav bar and drawer — via MainShell. Order here must match
+      // MainShell's NavigationDestination order exactly (index-mapped).
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => MainShell(navigationShell: navigationShell),
         branches: [
@@ -186,20 +187,12 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: rolesRoute,
-                builder: (context, state) => const RolesListScreen(),
+                path: approvalsRoute,
+                builder: (context, state) => const ApprovalsListScreen(),
                 routes: [
-                  // Nested under rolesRoute so both share this branch's stack;
-                  // the literal 'new' path is registered before the ':id'
-                  // pattern so it wins the match instead of being captured
-                  // as `id: "new"`.
-                  GoRoute(
-                    path: 'new',
-                    builder: (context, state) => const RoleFormScreen(),
-                  ),
                   GoRoute(
                     path: ':id',
-                    builder: (context, state) => RoleFormScreen(roleId: state.pathParameters['id']),
+                    builder: (context, state) => ApprovalDetailScreen(id: state.pathParameters['id']!),
                   ),
                 ],
               ),
@@ -271,14 +264,8 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: auditRoute,
-                builder: (context, state) => const AuditListScreen(),
-                routes: [
-                  GoRoute(
-                    path: ':id',
-                    builder: (context, state) => AuditDetailScreen(id: state.pathParameters['id']!),
-                  ),
-                ],
+                path: branchMonitoringRoute,
+                builder: (context, state) => const BranchMonitoringScreen(),
               ),
             ],
           ),

@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../../../core/router/app_router.dart';
-import '../../../core/router/main_shell.dart';
 import '../application/roles_providers.dart';
 import '../domain/role.dart';
 
@@ -32,7 +31,6 @@ class _RolesListScreenState extends ConsumerState<RolesListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: const DrawerMenuButton(),
         title: const Text('Roles'),
         actions: [
           IconButton(

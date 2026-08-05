@@ -17,6 +17,7 @@ class KpiCard extends StatelessWidget {
     this.suffix = '',
     this.duration = const Duration(milliseconds: 800),
     this.onTap,
+    this.valueFormatter,
   });
 
   final String label;
@@ -25,6 +26,13 @@ class KpiCard extends StatelessWidget {
   final Color color;
   final String suffix;
   final Duration duration;
+
+  /// When set, formats the mid-tween int for display (e.g. comma-grouped
+  /// currency, a percentage) instead of the plain `'$value$suffix'` text.
+  /// The tween itself still animates over a plain int — for money this
+  /// means animating the rounded whole-currency-unit value, which is
+  /// visually indistinguishable from animating the exact decimal.
+  final String Function(int value)? valueFormatter;
 
   /// When set, the whole card becomes tappable (with a ripple + chevron
   /// hint) to jump to whatever screen best explains this metric.
@@ -74,7 +82,7 @@ class KpiCard extends StatelessWidget {
                 curve: Curves.easeOutCubic,
                 builder: (context, animatedValue, child) {
                   return Text(
-                    '$animatedValue$suffix',
+                    valueFormatter?.call(animatedValue) ?? '$animatedValue$suffix',
                     key: Key('kpiValue_$label'),
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w700,

@@ -10,8 +10,10 @@ import '../theme/app_colors.dart';
 import '../theme/theme_mode_controller.dart';
 
 /// Secondary navigation: profile summary, theme choice, and logout. Primary
-/// navigation (Roles/Users/Reports/Audit/Home) lives in the bottom nav bar —
-/// this drawer is for things that don't need their own bottom-nav slot.
+/// navigation (Home/Approvals/Users/Reports/Branches) lives in the bottom
+/// nav bar — this drawer is for things that don't need their own
+/// bottom-nav slot (Roles, Audit, Companies, plus Notifications/Search/
+/// Announcements).
 class AppDrawer extends ConsumerWidget {
   const AppDrawer({super.key});
 
@@ -114,19 +116,7 @@ class AppDrawer extends ConsumerWidget {
                 padding: EdgeInsets.zero,
                 children: [
                   const SizedBox(height: 8),
-                  // TEMPORARY: Approvals/Notifications don't have their
-                  // permanent home yet (Phase 5 gives Approvals a bottom-nav
-                  // tab and Notifications a bell in the app bar) — this
-                  // section is removed once that lands.
-                  _SectionHeader(label: 'PREVIEW'),
-                  _DrawerTile(
-                    icon: Icons.fact_check_outlined,
-                    label: 'Approvals',
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      context.push(approvalsRoute);
-                    },
-                  ).animate(delay: 40.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
+                  _SectionHeader(label: 'TOOLS'),
                   _DrawerTile(
                     icon: Icons.notifications_outlined,
                     label: 'Notifications',
@@ -134,7 +124,7 @@ class AppDrawer extends ConsumerWidget {
                       Navigator.of(context).pop();
                       context.push(notificationsRoute);
                     },
-                  ).animate(delay: 80.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
+                  ).animate(delay: 40.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
                   _DrawerTile(
                     icon: Icons.search_outlined,
                     label: 'Global Search',
@@ -142,15 +132,7 @@ class AppDrawer extends ConsumerWidget {
                       Navigator.of(context).pop();
                       context.push(searchRoute);
                     },
-                  ).animate(delay: 120.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
-                  _DrawerTile(
-                    icon: Icons.insights_outlined,
-                    label: 'Multi-Branch Monitoring',
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      context.push(branchMonitoringRoute);
-                    },
-                  ).animate(delay: 160.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
+                  ).animate(delay: 80.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
                   _DrawerTile(
                     icon: Icons.campaign_outlined,
                     label: 'Announcements',
@@ -158,9 +140,25 @@ class AppDrawer extends ConsumerWidget {
                       Navigator.of(context).pop();
                       context.push(announcementsRoute);
                     },
-                  ).animate(delay: 200.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
+                  ).animate(delay: 120.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
                   const SizedBox(height: 8),
                   _SectionHeader(label: 'WORKSPACE'),
+                  _DrawerTile(
+                    icon: Icons.admin_panel_settings_outlined,
+                    label: 'Roles',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      context.push(rolesRoute);
+                    },
+                  ).animate(delay: 160.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
+                  _DrawerTile(
+                    icon: Icons.history_outlined,
+                    label: 'Audit Log',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      context.push(auditRoute);
+                    },
+                  ).animate(delay: 200.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
                   _DrawerTile(
                     icon: Icons.apartment_outlined,
                     label: 'Companies',
@@ -169,14 +167,6 @@ class AppDrawer extends ConsumerWidget {
                       context.push(companiesRoute);
                     },
                   ).animate(delay: 240.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
-                  _DrawerTile(
-                    icon: Icons.store_mall_directory_outlined,
-                    label: 'Branches',
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      context.push(branchesRoute);
-                    },
-                  ).animate(delay: 280.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
                   const SizedBox(height: 8),
                   _SectionHeader(label: 'SUPPORT'),
                   _DrawerTile(
@@ -194,7 +184,7 @@ class AppDrawer extends ConsumerWidget {
                         ],
                       );
                     },
-                  ).animate(delay: 320.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
+                  ).animate(delay: 280.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
                   _DrawerTile(
                     icon: Icons.support_agent_outlined,
                     label: 'Help & Support',
@@ -216,7 +206,7 @@ class AppDrawer extends ConsumerWidget {
                         ),
                       );
                     },
-                  ).animate(delay: 360.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
+                  ).animate(delay: 320.ms).fadeIn(duration: 250.ms).slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOut),
                 ],
               ),
             ),

@@ -22,6 +22,12 @@ const _summary = DashboardSummary(
   pendingApprovals: 2,
   lowStockProducts: 4,
   activeProducts: 31,
+  totalSales: 210035,
+  totalPurchases: 1434514,
+  revenue: 210035,
+  outstandingPayments: 36222,
+  pendingOrders: 7,
+  employeeAttendance: 92.3,
 );
 
 const _me = MeProfile(id: 'u1', email: 'admin@annex.local', name: 'Admin User');
@@ -40,6 +46,20 @@ Widget _wrap() {
       GoRoute(path: '/users', builder: (context, state) => const SizedBox()),
       GoRoute(path: '/reports', builder: (context, state) => const SizedBox()),
       GoRoute(path: '/audit', builder: (context, state) => const SizedBox()),
+      GoRoute(path: '/approvals', builder: (context, state) => const SizedBox()),
+      GoRoute(path: '/branch-monitoring', builder: (context, state) => const SizedBox()),
+      GoRoute(
+        path: '/reports/general/:type',
+        builder: (context, state) => const SizedBox(),
+      ),
+      GoRoute(
+        path: '/reports/financials/:type',
+        builder: (context, state) => const SizedBox(),
+      ),
+      GoRoute(
+        path: '/reports/hr/:category/:type',
+        builder: (context, state) => const SizedBox(),
+      ),
     ],
   );
   return ProviderScope(

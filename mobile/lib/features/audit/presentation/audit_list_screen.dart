@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_router.dart';
-import '../../../core/router/main_shell.dart';
 import '../../../core/theme/app_colors.dart';
 import '../application/audit_provider.dart';
 import '../domain/audit_entry.dart';
@@ -62,7 +61,6 @@ class _AuditListScreenState extends ConsumerState<AuditListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: const DrawerMenuButton(),
         title: const Text('Audit Log'),
         actions: [
           IconButton(
