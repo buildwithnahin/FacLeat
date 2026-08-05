@@ -1,6 +1,7 @@
 import 'server-only';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { getScopedBranchIds } from '@/server/auth/data-scope';
 import { customerService } from '@/server/services/customer.service';
 import { supplierService } from '@/server/services/supplier.service';
 import { posService } from '@/server/services/pos.service';
@@ -147,8 +148,11 @@ async function searchProducts(session: AppSession | null, query: string, limit: 
 async function searchPurchaseInvoices(session: AppSession | null, query: string, limit: number) {
   if (!query) return [];
   await authorize(session, 'purchase:read');
+  const branchIds = await getScopedBranchIds(session);
+  if (branchIds && branchIds.length === 0) return [];
   const invoices = await prisma.purchaseInvoice.findMany({
     where: {
+      ...(branchIds ? { branchId: { in: branchIds } } : {}),
       OR: [
         { number: { contains: query, mode: 'insensitive' } },
         { supplier: { name: { contains: query, mode: 'insensitive' } } },

@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 const _summary = DashboardSummary(
   totalCompanies: 1,
@@ -100,7 +101,10 @@ void main() {
   testWidgets('HomeScreen shows KPI cards with animated values reaching the fetched totals', (tester) async {
     await pumpUntilLoaded(tester);
 
+    // Two distinct grids now exist: the Business KPI grid (kpiGrid) and the
+    // System KPI grid (systemKpiGrid) below it.
     expect(find.byKey(const Key('kpiGrid')), findsOneWidget);
+    expect(find.byKey(const Key('systemKpiGrid')), findsOneWidget);
     expect(find.byKey(const Key('kpiValue_Branches')), findsOneWidget);
     expect(find.text('5'), findsOneWidget); // Branches count-up settled value
     expect(find.text('9'), findsOneWidget); // Users
@@ -111,6 +115,39 @@ void main() {
 
     // Greeting header shows the user's first name.
     expect(find.text('Admin'), findsOneWidget);
+  });
+
+  testWidgets('HomeScreen renders the Business KPI grid with money formatting and a percentage suffix', (
+    tester,
+  ) async {
+    await pumpUntilLoaded(tester);
+
+    final businessGrid = find.byKey(const Key('kpiGrid'));
+    final systemGrid = find.byKey(const Key('systemKpiGrid'));
+    expect(businessGrid, findsOneWidget);
+    expect(systemGrid, findsOneWidget);
+
+    // `kpiGrid` must resolve to the Business grid specifically — it holds
+    // "Total sales", not "Branches" (which lives in the System grid).
+    expect(find.descendant(of: businessGrid, matching: find.text('Total sales')), findsOneWidget);
+    expect(find.descendant(of: businessGrid, matching: find.text('Branches')), findsNothing);
+    expect(find.descendant(of: systemGrid, matching: find.text('Branches')), findsOneWidget);
+    expect(find.descendant(of: systemGrid, matching: find.text('Total sales')), findsNothing);
+
+    // Money cards use `NumberFormat.decimalPattern()` comma-grouping via
+    // KpiCard's `valueFormatter`. Total sales and Revenue share the fixture
+    // value (210035), so the formatted string appears twice.
+    final moneyFormat = NumberFormat.decimalPattern();
+    expect(moneyFormat.format(210035), '210,035');
+    expect(moneyFormat.format(1434514), '1,434,514');
+    expect(moneyFormat.format(36222), '36,222');
+
+    expect(find.text(moneyFormat.format(210035)), findsNWidgets(2)); // Total sales + Revenue
+    expect(find.text(moneyFormat.format(1434514)), findsOneWidget); // Total purchases
+    expect(find.text(moneyFormat.format(36222)), findsOneWidget); // Outstanding payments
+
+    // Employee attendance (92.3) rounds and gets the '%' suffix appended.
+    expect(find.text('92%'), findsOneWidget);
   });
 
   testWidgets('HomeScreen renders the branch strip and recent-activity sections', (tester) async {

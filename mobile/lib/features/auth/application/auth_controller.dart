@@ -2,6 +2,8 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/storage/secure_storage.dart';
+import '../../app_lock/application/app_lock_controller.dart';
+import '../../notifications/application/notifications_providers.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_exception.dart';
 import '../domain/mobile_user.dart';
@@ -118,6 +120,12 @@ class AuthController extends Notifier<AuthState> {
       await ref.read(authRepositoryProvider).logout(refreshToken);
     }
     await storage.clearRefreshToken();
+    // A regular logout must also clear App Lock — otherwise a second user
+    // signing into the same device inherits the first user's still-`unlocked`
+    // app-lock state with no PIN prompt (see AppLockController.disable()'s
+    // doc comment for the full scenario this prevents).
+    await ref.read(appLockControllerProvider.notifier).disable();
+    await teardownNotificationsSse(ref);
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 

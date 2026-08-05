@@ -81,7 +81,15 @@ Future<void> markAllNotificationsRead(WidgetRef ref) async {
 /// non-2xx response, decode failure) are funneled into this provider's
 /// `AsyncValue.error` state rather than thrown — a consumer can retry by
 /// re-watching; there's no automatic reconnect-with-backoff in this pass.
-final StreamProvider<void> notificationsSseProvider = StreamProvider<void>((ref) {
+///
+/// Declared `.autoDispose` so the connection is actually torn down (via the
+/// `ref.onDispose` below) once its last watcher unmounts -- e.g. when logout
+/// unmounts the authenticated widget tree that hosts `NotificationBell` /
+/// `NotificationCenterScreen`. Without `.autoDispose`, a plain
+/// `StreamProvider` is kept alive for the app's lifetime by Riverpod even
+/// with zero watchers, which would leave this SSE connection open (and
+/// reconnecting) in the background indefinitely.
+final AutoDisposeStreamProvider<void> notificationsSseProvider = StreamProvider.autoDispose<void>((ref) {
   final dio = ref.watch(apiClientProvider);
   final controller = StreamController<void>();
   StreamSubscription<Uint8List>? subscription;
@@ -161,3 +169,17 @@ final StreamProvider<void> notificationsSseProvider = StreamProvider<void>((ref)
 
   return controller.stream;
 });
+
+/// Explicit belt-and-suspenders teardown for [notificationsSseProvider],
+/// meant to be called from the logout flow. `.autoDispose` already tears the
+/// SSE connection down once the last widget watching the provider unmounts,
+/// but invalidating it directly here guarantees the connection closes at the
+/// moment of logout regardless of widget-tree teardown timing.
+///
+/// Takes the plain [Ref] base type (not [WidgetRef]) since the primary
+/// caller is [AuthController], a `Notifier` — not a widget — whose `ref` is
+/// a `Ref`. `WidgetRef` is itself a `Ref`, so this still works from widget
+/// call sites too.
+Future<void> teardownNotificationsSse(Ref ref) async {
+  ref.invalidate(notificationsSseProvider);
+}

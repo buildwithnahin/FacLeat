@@ -6,7 +6,7 @@ import { publishNotification } from '@/server/notifications/publisher';
 import { documentService } from '@/server/services/document.service';
 import type { AppSession } from '@/server/auth/session';
 import type { CreateAnnouncementInput } from '@/server/validators/announcements';
-import { NotFoundError } from '@/lib/errors';
+import { NotFoundError, ForbiddenError } from '@/lib/errors';
 
 const ANNOUNCEMENT_INCLUDE = {
   createdBy: { select: { id: true, name: true } },
@@ -17,10 +17,27 @@ export const announcementService = {
   async create(session: AppSession | null, input: CreateAnnouncementInput) {
     const actor = await authorize(session, 'announcements:write');
 
+    // Company scoping for broad audiences (ALL / DEPARTMENT) mirrors the
+    // pattern in user.service.ts's list(): a user is "in" the actor's active
+    // company if their defaultCompanyId matches it, their default branch
+    // belongs to it, or any of their branch accesses belong to it. When the
+    // actor has no active company selected (e.g. a true super admin with
+    // ALL_BRANCHES access and nothing scoped), the query stays unscoped —
+    // same fallback user.service.ts uses.
+    const companyScope = actor.activeCompanyId
+      ? {
+          OR: [
+            { defaultCompanyId: actor.activeCompanyId },
+            { defaultBranch: { companyId: actor.activeCompanyId } },
+            { branchAccesses: { some: { branch: { companyId: actor.activeCompanyId } } } },
+          ],
+        }
+      : {};
+
     let recipientIds: string[] = [];
     if (input.audienceType === 'ALL') {
       const users = await prisma.user.findMany({
-        where: { status: 'ACTIVE' },
+        where: { status: 'ACTIVE', ...companyScope },
         select: { id: true },
       });
       recipientIds = users.map((u) => u.id);
@@ -32,7 +49,11 @@ export const announcementService = {
       recipientIds = users.map((u) => u.id);
     } else if (input.audienceType === 'DEPARTMENT') {
       const users = await prisma.user.findMany({
-        where: { status: 'ACTIVE', employee: { department: input.audienceDepartment } },
+        where: {
+          status: 'ACTIVE',
+          employee: { department: input.audienceDepartment },
+          ...companyScope,
+        },
         select: { id: true },
       });
       recipientIds = users.map((u) => u.id);
@@ -82,12 +103,26 @@ export const announcementService = {
     });
 
     if (input.documentIds?.length) {
+      // The announcement row is already committed at this point. If linking
+      // an attachment fails, don't let it bubble up and error out a request
+      // whose announcement was in fact created successfully — that would
+      // read as total failure to the caller and invite a retry that creates
+      // a duplicate announcement, while the first one sits un-notified and
+      // orphaned. Log and continue on to the notification fan-out instead;
+      // a missing attachment link is recoverable, a phantom announcement isn't.
       for (const documentId of input.documentIds) {
-        await documentService.link(session, {
-          documentId,
-          entityType: 'Announcement',
-          entityId: announcement.id,
-        });
+        try {
+          await documentService.link(session, {
+            documentId,
+            entityType: 'Announcement',
+            entityId: announcement.id,
+          });
+        } catch (err) {
+          console.error(
+            `announcement.create: failed to link document ${documentId} to announcement ${announcement.id}`,
+            err,
+          );
+        }
       }
     }
 
@@ -129,7 +164,18 @@ export const announcementService = {
     });
     if (!announcement) throw new NotFoundError('Announcement not found');
 
-    const attachments = await documentService.listForEntity(session, 'Announcement', id);
+    // Attachments are best-effort here: a caller with announcements:read but
+    // not documents:read should still be able to view the announcement.
+    // documentService.listForEntity() gates on documents:read internally, so
+    // degrade to an empty list on that specific denial rather than failing
+    // the whole request — any other error (e.g. a genuine DB failure) still
+    // propagates normally.
+    let attachments: Awaited<ReturnType<typeof documentService.listForEntity>> = [];
+    try {
+      attachments = await documentService.listForEntity(session, 'Announcement', id);
+    } catch (err) {
+      if (!(err instanceof ForbiddenError)) throw err;
+    }
     return { ...announcement, attachments };
   },
 };

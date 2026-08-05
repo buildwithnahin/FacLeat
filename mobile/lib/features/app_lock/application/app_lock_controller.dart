@@ -11,18 +11,48 @@ import '../../../core/storage/secure_storage.dart';
 import '../domain/app_lock_status.dart';
 
 class AppLockState extends Equatable {
-  const AppLockState({this.status = AppLockStatus.disabled});
+  const AppLockState({
+    this.status = AppLockStatus.disabled,
+    this.failedAttempts = 0,
+    this.lockedOutUntil,
+  });
 
   final AppLockStatus status;
 
+  /// Consecutive wrong-PIN guesses since the last successful `verifyPin`
+  /// (or since `enable()`/`changePin()` reset it). Drives the brute-force
+  /// lockout in `verifyPin` — see [lockedOutUntil].
+  final int failedAttempts;
+
+  /// Set once [failedAttempts] hits a lockout threshold inside `verifyPin`;
+  /// `null` means no lockout is in effect. Compare against `DateTime.now()`
+  /// via [isLockedOut] rather than reading this directly — it isn't cleared
+  /// the instant the cooldown elapses, only recomputed against the clock.
+  /// In-memory only: a cold app restart clears it, same as [failedAttempts].
+  final DateTime? lockedOutUntil;
+
   bool get isLocked => status == AppLockStatus.locked;
 
-  AppLockState copyWith({AppLockStatus? status}) {
-    return AppLockState(status: status ?? this.status);
+  /// True while a PIN-attempt cooldown is active. `verifyPin` short-circuits
+  /// to `false` (no hashing, no further attempt counted) whenever this is
+  /// true, and the lock screen can read it to show a "try again in Ns"
+  /// message instead of (or in addition to) "Incorrect PIN".
+  bool get isLockedOut => lockedOutUntil != null && DateTime.now().isBefore(lockedOutUntil!);
+
+  AppLockState copyWith({
+    AppLockStatus? status,
+    int? failedAttempts,
+    DateTime? lockedOutUntil,
+  }) {
+    return AppLockState(
+      status: status ?? this.status,
+      failedAttempts: failedAttempts ?? this.failedAttempts,
+      lockedOutUntil: lockedOutUntil ?? this.lockedOutUntil,
+    );
   }
 
   @override
-  List<Object?> get props => [status];
+  List<Object?> get props => [status, failedAttempts, lockedOutUntil];
 }
 
 /// Single source of truth for the app-lock feature — an OPTIONAL PIN +
@@ -39,6 +69,22 @@ class AppLockState extends Equatable {
 /// existing `_RouterRefreshNotifier` (mirroring how it already listens to
 /// `authControllerProvider`) so the router re-evaluates when `lock()` fires.
 class AppLockController extends Notifier<AppLockState> {
+  /// Consecutive wrong-PIN guesses allowed before a cooldown kicks in. A
+  /// 4-digit PIN (`appLockPinLength`) is only 10,000 combinations, so
+  /// unlimited undelayed guessing is a real brute-force surface even though
+  /// it requires physical access to the unlocked device.
+  static const int _maxAttemptsBeforeLockout = 5;
+
+  /// Flat 30-second cooldown, re-applied every time another
+  /// [_maxAttemptsBeforeLockout] wrong guesses accumulate (5, 10, 15, ...).
+  /// Deliberately not escalating: this is a local, physical-access-only
+  /// PIN pad (see the constant-time-compare note on [_constantTimeEquals]
+  /// for the same reasoning) — a flat cooldown already cuts the practical
+  /// guess rate to ~2/minute, and an escalating/doubling scheme would add
+  /// extra state and edge cases (persistence across restarts, cap tuning)
+  /// without a proportionate benefit for this threat model.
+  static const Duration _lockoutDuration = Duration(seconds: 30);
+
   @override
   AppLockState build() {
     // Mirrors ThemeModeController's pattern: return a safe synchronous
@@ -68,37 +114,67 @@ class AppLockController extends Notifier<AppLockState> {
     state = const AppLockState(status: AppLockStatus.unlocked);
   }
 
-  /// Turns App Lock off entirely and wipes the stored PIN/biometric flag.
+  /// Turns App Lock off entirely: wipes the stored PIN/biometric flag and
+  /// resets [state] to a fresh `AppLockState` (`disabled`, zero
+  /// `failedAttempts`, no `lockedOutUntil`) — the same as a brand-new
+  /// install. This is also the right call for a *real* account logout (not
+  /// the lock screen's own "Log out instead" escape hatch): without it, a
+  /// device left `unlocked` by one user would hand the next user who logs
+  /// in on the same device an already-unlocked app until the next
+  /// background/foreground cycle re-arms the lock. Call this from the
+  /// logout flow, e.g. `ref.read(appLockControllerProvider.notifier).disable()`.
   Future<void> disable() async {
     await ref.read(secureStorageProvider).clearAppLock();
     state = const AppLockState(status: AppLockStatus.disabled);
   }
 
   /// Hashes [pin] with the stored salt and compares against the stored
-  /// hash. On a match, unlocks and returns true. On a mismatch (or if no
-  /// PIN has been set at all), returns false and leaves [state] untouched
-  /// so the lock screen can show its shake/error feedback.
+  /// hash (constant-time — see [_constantTimeEquals]). On a match, unlocks,
+  /// resets the failed-attempt/lockout counters, and returns true. On a
+  /// mismatch (or if no PIN has been set at all), returns false and leaves
+  /// [state]'s `status` untouched so the lock screen can show its
+  /// shake/error feedback — but bumps `failedAttempts`, and once
+  /// [_maxAttemptsBeforeLockout] consecutive misses accumulate, sets
+  /// `lockedOutUntil` [_lockoutDuration] into the future.
+  ///
+  /// While `state.isLockedOut` is true, this returns false immediately
+  /// without touching the stored hash/salt or the attempt counter at all —
+  /// callers (the lock screen) should check `state.isLockedOut` /
+  /// `state.lockedOutUntil` to show a "try again in Ns" message rather than
+  /// a plain "Incorrect PIN" for these calls.
   Future<bool> verifyPin(String pin) async {
+    if (state.isLockedOut) return false;
+
     final storage = ref.read(secureStorageProvider);
     final hash = await storage.getAppLockPinHash();
     final salt = await storage.getAppLockPinSalt();
     if (hash == null || salt == null) return false;
 
     final candidate = _hashPin(pin, salt);
-    if (candidate != hash) return false;
+    if (!_constantTimeEquals(candidate, hash)) {
+      final attempts = state.failedAttempts + 1;
+      final justLockedOut = attempts % _maxAttemptsBeforeLockout == 0;
+      state = state.copyWith(
+        failedAttempts: attempts,
+        lockedOutUntil: justLockedOut ? DateTime.now().add(_lockoutDuration) : null,
+      );
+      return false;
+    }
 
     state = const AppLockState(status: AppLockStatus.unlocked);
     return true;
   }
 
-  /// Verifies [currentPin] first — throwing [AppLockException] with a
+  /// Verifies [currentPin] first (constant-time — see
+  /// [_constantTimeEquals]) — throwing [AppLockException] with a
   /// user-facing message if it doesn't match — then stores [newPin] as the
-  /// new PIN.
+  /// new PIN. Also resets the `verifyPin` failed-attempt/lockout counters,
+  /// same as a successful `verifyPin` would.
   Future<void> changePin(String currentPin, String newPin) async {
     final storage = ref.read(secureStorageProvider);
     final hash = await storage.getAppLockPinHash();
     final salt = await storage.getAppLockPinSalt();
-    if (hash == null || salt == null || _hashPin(currentPin, salt) != hash) {
+    if (hash == null || salt == null || !_constantTimeEquals(_hashPin(currentPin, salt), hash)) {
       throw const AppLockException('Current PIN is incorrect');
     }
 
@@ -177,6 +253,25 @@ class AppLockController extends Notifier<AppLockState> {
 
   String _hashPin(String pin, String salt) {
     return sha256.convert(utf8.encode('$salt$pin')).toString();
+  }
+
+  /// Constant-time equality check for two hex digest strings. `package:crypto`
+  /// doesn't expose a constant-time compare, so this is a small manual one:
+  /// XOR every character pair and accumulate the differences in `result`
+  /// rather than returning as soon as a mismatch is found, so the number of
+  /// loop iterations (and therefore the time taken) never depends on *where*
+  /// the first differing character is.
+  ///
+  /// Low real-world severity here — PIN entry needs physical device access,
+  /// and this is a local, in-process comparison with no network-observable
+  /// timing surface — but cheap to do properly.
+  bool _constantTimeEquals(String a, String b) {
+    if (a.length != b.length) return false;
+    var result = 0;
+    for (var i = 0; i < a.length; i++) {
+      result |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
+    }
+    return result == 0;
   }
 }
 

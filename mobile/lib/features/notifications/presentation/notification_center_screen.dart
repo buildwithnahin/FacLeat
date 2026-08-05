@@ -6,13 +6,14 @@ import 'package:shimmer/shimmer.dart';
 
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../announcements/presentation/announcements_list_screen.dart' show announcementDetailPath;
 import '../application/notifications_providers.dart';
 import '../domain/notification_item.dart';
 
 /// Best-effort mapping from a web-app `href` (e.g. `/audit/abc123`) to an
 /// existing mobile route. Only patterns with a confident 1:1 mobile
-/// equivalent are matched; anything else (e.g. `/approvals/...`, which has
-/// no mobile screen yet) falls through to `null` and is simply not followed.
+/// equivalent are matched; anything else falls through to `null` and is
+/// simply not followed.
 String? _mapHrefToMobileRoute(String href) {
   final auditMatch = RegExp(r'^/audit/([^/]+)/?$').firstMatch(href);
   if (auditMatch != null) return auditDetailPath(auditMatch.group(1)!);
@@ -22,6 +23,12 @@ String? _mapHrefToMobileRoute(String href) {
 
   final roleMatch = RegExp(r'^/roles/([^/]+)/?$').firstMatch(href);
   if (roleMatch != null) return roleDetailPath(roleMatch.group(1)!);
+
+  final approvalMatch = RegExp(r'^/approvals/([^/]+)/?$').firstMatch(href);
+  if (approvalMatch != null) return approvalDetailPath(approvalMatch.group(1)!);
+
+  final announcementMatch = RegExp(r'^/announcements/([^/]+)/?$').firstMatch(href);
+  if (announcementMatch != null) return announcementDetailPath(announcementMatch.group(1)!);
 
   return null;
 }

@@ -194,7 +194,14 @@ class _DashboardContent extends StatelessWidget {
         valueFormatter: money,
       ),
       _KpiSpec(
-        'Revenue',
+        // Labelled "(gross)" because the backend currently derives this from
+        // gross sales, not a real net-of-COGS income-statement figure — see
+        // the comment on `revenue` in src/app/api/mobile/dashboard/route.ts.
+        // Without this qualifier the card is indistinguishable from "Total
+        // sales" and reads as a rendering bug rather than a known backend
+        // simplification. A real net revenue figure needs accountsService's
+        // income statement wired in, which is out of scope for this fix.
+        'Revenue (gross)',
         summary.revenue.round(),
         Icons.trending_up_outlined,
         AppColors.success,
@@ -222,14 +229,34 @@ class _DashboardContent extends StatelessWidget {
         AppColors.danger,
         (ctx) => ctx.go(reportsGeneralPath('inventory-valuation')),
       ),
-      _KpiSpec(
-        'Employee attendance',
-        (summary.employeeAttendance ?? 0).round(),
-        Icons.badge_outlined,
-        AppColors.primary,
-        (ctx) => ctx.go(reportsHrPath('attendance', 'ATTENDANCE_SUMMARY')),
-        suffix: '%',
-      ),
+      summary.employeeAttendance == null
+          ? _KpiSpec(
+              'Employee attendance',
+              0,
+              Icons.badge_outlined,
+              AppColors.primary,
+              (ctx) => ctx.go(reportsHrPath('attendance', 'ATTENDANCE_SUMMARY')),
+              // Zero active employees to measure is a distinct "no data"
+              // case, not a genuine 0% attendance rate — render a static
+              // dash/label instead of a number so it can't be misread as
+              // "everyone is absent". See DashboardSummary.employeeAttendance
+              // doc comment for the backend's null-when-no-denominator
+              // contract this mirrors.
+              customBuilder: (ctx) => _NoDataKpiCard(
+                label: 'Employee attendance',
+                icon: Icons.badge_outlined,
+                color: AppColors.primary,
+                onTap: () => ctx.go(reportsHrPath('attendance', 'ATTENDANCE_SUMMARY')),
+              ),
+            )
+          : _KpiSpec(
+              'Employee attendance',
+              summary.employeeAttendance!.round(),
+              Icons.badge_outlined,
+              AppColors.primary,
+              (ctx) => ctx.go(reportsHrPath('attendance', 'ATTENDANCE_SUMMARY')),
+              suffix: '%',
+            ),
       _KpiSpec(
         'Outstanding payments',
         summary.outstandingPayments.round(),
@@ -313,15 +340,18 @@ class _KpiGrid extends StatelessWidget {
       ),
       itemBuilder: (context, index) {
         final spec = cards[index];
-        return KpiCard(
-          label: spec.label,
-          value: spec.value,
-          icon: spec.icon,
-          color: spec.color,
-          suffix: spec.suffix,
-          valueFormatter: spec.valueFormatter,
-          onTap: () => spec.onTap(context),
-        ).animate().fadeIn(delay: (delayOffset + index * 60).ms, duration: 400.ms).slideY(
+        final card = spec.customBuilder != null
+            ? spec.customBuilder!(context)
+            : KpiCard(
+                label: spec.label,
+                value: spec.value,
+                icon: spec.icon,
+                color: spec.color,
+                suffix: spec.suffix,
+                valueFormatter: spec.valueFormatter,
+                onTap: () => spec.onTap(context),
+              );
+        return card.animate().fadeIn(delay: (delayOffset + index * 60).ms, duration: 400.ms).slideY(
               begin: 0.15,
               end: 0,
               duration: 400.ms,
@@ -341,6 +371,7 @@ class _KpiSpec {
     this.onTap, {
     this.suffix = '',
     this.valueFormatter,
+    this.customBuilder,
   });
 
   final String label;
@@ -350,6 +381,92 @@ class _KpiSpec {
   final String suffix;
   final String Function(int value)? valueFormatter;
   final void Function(BuildContext context) onTap;
+
+  /// When set, fully replaces the normal `KpiCard` count-up rendering for
+  /// this slot — used for "no data" states a plain int `value` can't
+  /// represent (e.g. a null percentage that must not look like a genuine
+  /// 0%). `value`/`suffix`/`valueFormatter` are ignored when this is set.
+  final Widget Function(BuildContext context)? customBuilder;
+}
+
+/// Visual sibling of [KpiCard] for a metric that has no numeric value to
+/// show yet (as opposed to a real `0`) — same icon box / label / padding /
+/// border conventions, but a static "No data yet" line instead of a
+/// count-up tween, so it can never be mistaken for an actual zero reading.
+class _NoDataKpiCard extends StatelessWidget {
+  const _NoDataKpiCard({
+    required this.label,
+    required this.icon,
+    required this.color,
+    this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.cardTheme.color ?? theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        key: Key('kpiCardTap_$label'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withValues(alpha: 0.16)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(icon, size: 19, color: color),
+                  ),
+                  const Spacer(),
+                  if (onTap != null)
+                    Icon(Icons.chevron_right, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'No data yet',
+                key: Key('kpiValue_$label'),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _SystemHealthBanner extends StatelessWidget {

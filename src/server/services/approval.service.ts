@@ -390,41 +390,58 @@ export const approvalService = {
 
   async cancel(session: AppSession | null, input: ApprovalDecisionInput) {
     const actor = await authorize(session, 'approvals:read');
-    const req = await prisma.approvalRequest.findUnique({ where: { id: input.requestId } });
-    if (!req) throw new NotFoundError('Request not found');
-    if (req.requestedById !== actor.userId) {
-      throw new ForbiddenError('Only the requester can cancel');
-    }
-    if (req.status !== 'PENDING' && req.status !== 'CHANGES_REQUESTED') {
-      throw new ValidationError('Only pending requests can be cancelled');
-    }
-    const updated = await prisma.approvalRequest.update({
-      where: { id: req.id },
-      data: { status: 'CANCELLED', decidedAt: new Date(), note: input.note || null },
-    });
-    await recordAudit({
-      actorId: actor.userId,
-      branchId: req.branchId,
-      module: 'approvals',
-      action: 'cancel',
-      entityType: 'ApprovalRequest',
-      entityId: req.id,
-      after: { status: updated.status },
-    });
-    if (
-      updated.module === 'hr' &&
-      updated.action === 'employee-transfer' &&
-      updated.entityType === 'EmployeeTransfer' &&
-      updated.entityId
-    ) {
-      await syncEmployeeTransferApprovalState({
-        approvalStatus: 'CANCELLED',
-        transferId: updated.entityId,
-        actorUserId: actor.userId,
-        note: input.note,
+
+    return prisma.$transaction(async (tx) => {
+      const request = await tx.approvalRequest.findUnique({ where: { id: input.requestId } });
+      if (!request) throw new NotFoundError('Request not found');
+      if (request.requestedById !== actor.userId) {
+        throw new ForbiddenError('Only the requester can cancel');
+      }
+      if (request.status !== 'PENDING' && request.status !== 'CHANGES_REQUESTED') {
+        throw new ValidationError('Only pending requests can be cancelled');
+      }
+
+      const updated = await tx.approvalRequest.update({
+        where: { id: request.id },
+        data: { status: 'CANCELLED', decidedAt: new Date(), note: input.note || null },
       });
-    }
-    return updated;
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: request.branchId,
+          module: 'approvals',
+          action: 'cancel',
+          entityType: 'ApprovalRequest',
+          entityId: request.id,
+          after: { status: updated.status },
+        },
+        tx,
+      );
+
+      // Sync side effect on the linked entity runs INSIDE this same
+      // transaction, not after it — see the identical fix in decide() above.
+      // A cancellation that can't be reflected on its linked entity must roll
+      // back entirely, not commit as "cancelled" while silently failing to apply.
+      if (
+        request.module === 'hr' &&
+        request.action === 'employee-transfer' &&
+        request.entityType === 'EmployeeTransfer' &&
+        request.entityId
+      ) {
+        await syncEmployeeTransferApprovalState(
+          {
+            approvalStatus: 'CANCELLED',
+            transferId: request.entityId,
+            actorUserId: actor.userId,
+            note: input.note,
+          },
+          tx,
+        );
+      }
+
+      return updated;
+    });
   },
 
   async decide(

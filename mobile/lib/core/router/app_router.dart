@@ -92,6 +92,14 @@ class _RouterRefreshNotifier extends ChangeNotifier {
 final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
   final refreshNotifier = _RouterRefreshNotifier(ref);
 
+  // Captures whatever location the user was on the instant App Lock engaged,
+  // so unlocking can return them there instead of always dumping them at
+  // Home. Only ever written right before redirecting TO the lock screen
+  // (never while already on it, so repeated `redirect` re-evaluations for
+  // the same locked navigation don't clobber it), and consumed exactly once
+  // on the redirect that fires immediately after a successful unlock.
+  String? preLockLocation;
+
   return GoRouter(
     initialLocation: splashRoute,
     refreshListenable: refreshNotifier,
@@ -109,8 +117,16 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
           if (onAuthOnlyRoute) return homeRoute;
 
           final isLocked = ref.read(appLockControllerProvider).status == AppLockStatus.locked;
-          if (isLocked) return location == lockRoute ? null : lockRoute;
-          if (location == lockRoute) return homeRoute;
+          if (isLocked) {
+            if (location == lockRoute) return null;
+            preLockLocation = location;
+            return lockRoute;
+          }
+          if (location == lockRoute) {
+            final target = preLockLocation;
+            preLockLocation = null;
+            return target ?? homeRoute;
+          }
           return null;
       }
     },

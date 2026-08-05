@@ -229,7 +229,13 @@ class _RoleFormBodyState extends ConsumerState<_RoleFormBody> {
       if (context.canPop()) {
         context.pop();
       } else {
-        context.go(rolesRoute);
+        // No back stack (e.g. a cold deep link straight into this form) —
+        // `rolesRoute` is a top-level pushed route post Phase-5's nav
+        // restructure, not a shell branch, so going there would still leave
+        // the user without the bottom nav / drawer. Land on Home instead,
+        // which is a shell branch and gives access to everywhere, Roles
+        // included.
+        context.go(homeRoute);
       }
     } on RoleApiException catch (e) {
       setState(() {
@@ -276,7 +282,8 @@ class _RoleFormBodyState extends ConsumerState<_RoleFormBody> {
       if (context.canPop()) {
         context.pop();
       } else {
-        context.go(rolesRoute);
+        // Same cold-deep-link fallback reasoning as the save handler above.
+        context.go(homeRoute);
       }
     } on RoleApiException catch (e) {
       if (!mounted) return;

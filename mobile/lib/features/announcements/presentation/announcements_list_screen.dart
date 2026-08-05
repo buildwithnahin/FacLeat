@@ -9,10 +9,9 @@ import '../../../core/theme/app_colors.dart';
 import '../application/announcements_providers.dart';
 import '../domain/announcement.dart';
 
-// NOTE: `/announcements/:id` and `/announcements/new` aren't registered in
-// app_router.dart yet — that wiring happens in a later integration step.
-// These literal paths match the convention used by roleDetailPath /
-// approvalDetailPath so they'll resolve once registered.
+// NOTE: `/announcements/:id` and `/announcements/new` are registered in
+// app_router.dart. These literal paths match the convention used by
+// roleDetailPath / approvalDetailPath so they'll resolve consistently.
 String announcementDetailPath(String id) => '/announcements/$id';
 const String announcementComposeRoute = '/announcements/new';
 
