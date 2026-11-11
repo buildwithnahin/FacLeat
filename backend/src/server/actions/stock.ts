@@ -52,7 +52,9 @@ export async function postReceiptAction(_prev: StockFormState, formData: FormDat
 
   revalidatePath('/inventory/stock');
   revalidatePath('/inventory/ledger');
-  redirect('/inventory/stock');
+  revalidatePath('/warehouse');
+  revalidatePath('/warehouse/receive');
+  redirect('/warehouse');
 }
 
 export async function postIssueAction(_prev: StockFormState, formData: FormData): Promise<StockFormState> {
@@ -88,7 +90,10 @@ export async function postIssueAction(_prev: StockFormState, formData: FormData)
 
   revalidatePath('/inventory/stock');
   revalidatePath('/inventory/ledger');
-  redirect('/inventory/stock');
+  revalidatePath('/warehouse');
+  revalidatePath('/warehouse/issue');
+  revalidatePath('/warehouse/issued');
+  redirect('/warehouse/issued');
 }
 
 export async function postPhysicalCountAction(_prev: StockFormState, formData: FormData): Promise<StockFormState> {
@@ -110,7 +115,9 @@ export async function postPhysicalCountAction(_prev: StockFormState, formData: F
 
   revalidatePath('/inventory/stock');
   revalidatePath('/inventory/ledger');
-  redirect('/inventory/stock');
+  revalidatePath('/warehouse');
+  revalidatePath('/warehouse/count');
+  redirect('/warehouse');
 }
 
 export async function postTransferAction(_prev: StockFormState, formData: FormData): Promise<StockFormState> {
@@ -144,5 +151,7 @@ export async function postTransferAction(_prev: StockFormState, formData: FormDa
 
   revalidatePath('/inventory/stock');
   revalidatePath('/inventory/ledger');
-  redirect('/inventory/stock');
+  revalidatePath('/warehouse');
+  revalidatePath('/warehouse/transfer');
+  redirect('/warehouse');
 }

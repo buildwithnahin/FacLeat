@@ -1,6 +1,7 @@
 import { PageHeader } from '@/components/shared/page-header';
 import { RequisitionForm } from '../_components/requisition-form';
 import { backendFetch } from '@/lib/backend-client';
+import { getSession } from '@/server/auth/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,12 @@ interface PurchaseLookups {
 }
 
 export default async function NewRequisitionPage() {
-  const { branches, products } = await backendFetch<PurchaseLookups>('/api/mobile/purchase/lookups');
+  const session = await getSession();
+  const defaultBranchId =
+    session?.activeBranchId ?? session?.defaultBranchId ?? session?.allowedBranchIds?.[0];
+  const { branches, products } = await backendFetch<PurchaseLookups>(
+    `/api/mobile/purchase/lookups${defaultBranchId ? `?branchId=${defaultBranchId}` : ''}`,
+  );
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -22,6 +28,7 @@ export default async function NewRequisitionPage() {
       />
       <RequisitionForm
         branches={branches}
+        defaultBranchId={defaultBranchId}
         products={products.map((product) => ({
           id: product.id,
           sku: product.sku,

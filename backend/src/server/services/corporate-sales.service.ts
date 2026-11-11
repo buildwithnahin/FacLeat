@@ -104,6 +104,7 @@ export const corporateService = {
           ? [
               { number: { contains: filters.search } },
               { customer: { name: { contains: filters.search } } },
+              { customer: { code: { contains: filters.search } } },
             ]
           : undefined,
       },
@@ -312,6 +313,7 @@ export const corporateService = {
           ? [
               { number: { contains: filters.search } },
               { customer: { name: { contains: filters.search } } },
+              { customer: { code: { contains: filters.search } } },
             ]
           : undefined,
       },
@@ -919,6 +921,8 @@ export const corporateService = {
           ? [
               { number: { contains: filters.search } },
               { customer: { name: { contains: filters.search } } },
+              { customer: { code: { contains: filters.search } } },
+              { order: { number: { contains: filters.search } } },
             ]
           : undefined,
       },

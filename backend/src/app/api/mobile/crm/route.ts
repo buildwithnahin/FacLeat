@@ -10,8 +10,16 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
   const sp = req.nextUrl.searchParams;
+  const branchId =
+    sp.get('branchId') ??
+    session.activeBranchId ??
+    session.defaultBranchId ??
+    session.allowedBranchIds?.[0] ??
+    undefined;
+
   try {
     const customers = await customerService.list(session, {
+      branchId,
       status: sp.get('status') ?? undefined,
       type: sp.get('type') ?? undefined,
       search: sp.get('search') ?? undefined,
@@ -31,7 +39,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const parsed = customerCreateSchema.safeParse(body);
   if (!parsed.success) {
-    return Response.json(apiError('Validation failed', parsed.error.flatten()), { status: 422 });
+    return Response.json(
+      apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten()),
+      { status: 422 },
+    );
   }
 
   try {

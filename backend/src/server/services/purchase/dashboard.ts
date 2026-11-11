@@ -2,11 +2,15 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { getScopedBranchIds } from '@/server/auth/scope';
 import type { AppSession } from '@/server/auth/session';
 
 export const dashboardMethods = {
-  async dashboardSummary(session: AppSession | null) {
+  async dashboardSummary(session: AppSession | null, filters: { branchId?: string } = {}) {
     await authorize(session, 'purchase:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
+    const branchFilter = branchIds ? { branchId: { in: branchIds } } : {};
+
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -15,22 +19,29 @@ export const dashboardMethods = {
       await Promise.all([
         prisma.purchaseOrder.aggregate({
           _sum: { grandTotal: true },
-          where: { orderDate: { gte: todayStart } },
+          where: { ...branchFilter, orderDate: { gte: todayStart } },
         }),
         prisma.purchaseOrder.aggregate({
           _sum: { grandTotal: true },
-          where: { orderDate: { gte: monthStart } },
+          where: { ...branchFilter, orderDate: { gte: monthStart } },
         }),
         prisma.purchaseOrder.count({
-          where: { status: { in: ['APPROVED', 'PARTIALLY_RECEIVED'] } },
+          where: { ...branchFilter, status: { in: ['APPROVED', 'PARTIALLY_RECEIVED'] } },
         }),
-        prisma.purchaseRequisition.count({ where: { status: 'PENDING' } }),
-        prisma.purchaseOrder.count({ where: { status: 'PENDING' } }),
+        prisma.purchaseRequisition.count({ where: { ...branchFilter, status: 'PENDING' } }),
+        prisma.purchaseOrder.count({ where: { ...branchFilter, status: 'PENDING' } }),
         prisma.purchaseOrder.count({
-          where: { status: { in: ['APPROVED', 'PARTIALLY_RECEIVED'] } },
+          where: { ...branchFilter, status: { in: ['APPROVED', 'PARTIALLY_RECEIVED'] } },
         }),
-        prisma.$queryRaw<{ total: number }[]>`SELECT CAST(COALESCE(SUM(debit - credit), 0) AS DECIMAL(18,4)) AS total FROM \`SupplierLedger\``,
+        prisma.supplierLedger.aggregate({
+          _sum: { debit: true, credit: true },
+          where: branchFilter,
+        }),
       ]);
+
+    const totalPayable = (payableAgg._sum.debit ?? new Prisma.Decimal(0)).minus(
+      payableAgg._sum.credit ?? new Prisma.Decimal(0),
+    );
 
     return {
       todayTotal: todayAgg._sum.grandTotal ?? new Prisma.Decimal(0),
@@ -39,7 +50,7 @@ export const dashboardMethods = {
       pendingPR,
       pendingPO,
       pendingGRN,
-      totalPayable: new Prisma.Decimal(payableAgg[0]?.total ?? 0),
+      totalPayable,
     };
   },
 };

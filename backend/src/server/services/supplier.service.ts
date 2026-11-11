@@ -37,6 +37,7 @@ export const supplierService = {
               { name: { contains: filters.search } },
               { code: { contains: filters.search } },
               { email: { contains: filters.search } },
+              { phone: { contains: filters.search } },
               { contactPerson: { contains: filters.search } },
             ]
           : undefined,
@@ -434,9 +435,9 @@ export const supplierService = {
     });
   },
 
-  async listPayments(session: AppSession | null, limit = 20) {
+  async listPayments(session: AppSession | null, limit = 20, branchId?: string) {
     await authorize(session, 'suppliers:read');
-    const branchIds = await getScopedBranchIds(session);
+    const branchIds = await getScopedBranchIds(session, branchId);
     return prisma.supplierPayment.findMany({
       where: branchIds ? { branchId: { in: branchIds } } : undefined,
       orderBy: { paymentDate: 'desc' },

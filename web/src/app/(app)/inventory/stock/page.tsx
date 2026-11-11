@@ -3,32 +3,18 @@ import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight } from 'lucide-react';
 import { getSession } from '@/server/auth/session';
 import { backendFetch } from '@/lib/backend-client';
 import { PageHeader } from '@/components/shared/page-header';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { d, formatCurrency } from '@/lib/money';
 import {
   INVENTORY_SECTION_META,
   INVENTORY_SECTION_SLUGS,
   parseInventorySection,
   type InventorySectionSlug,
 } from '@/lib/inventory-sections';
+import { StockTable, type StockRow } from './stock-table';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = { title: 'Stock balance' };
-
-type Product = {
-  id: string;
-  sku: string;
-  name: string;
-  unit: string;
-  type: string;
-  reorderLevel: string;
-  costPrice: string;
-  sellPrice: string;
-};
-type Warehouse = { id: string; name: string; code: string; type: string };
-type Row = { product: Product; warehouse: Warehouse; qty: string };
 
 type StockBalancePageProps = {
   searchParams: Promise<{ section?: string }>;
@@ -37,29 +23,35 @@ type StockBalancePageProps = {
 export default async function StockBalancePage({ searchParams }: StockBalancePageProps) {
   const session = await getSession();
   const sp = await searchParams;
-  const section = parseInventorySection(sp.section) ?? 'raw-material';
-  const branchId = session?.activeBranchId ?? undefined;
+  const section = parseInventorySection(sp.section);
+  const branchId = session?.activeBranchId || session?.defaultBranchId || undefined;
 
-  const qs = new URLSearchParams({ section });
+  const qs = new URLSearchParams();
+  if (section) qs.set('section', section);
   if (branchId) qs.set('branchId', branchId);
-  const allRows = await backendFetch<Row[]>(`/api/mobile/inventory/stock?${qs.toString()}`);
+  const qsStr = qs.toString();
+  const allRows = await backendFetch<StockRow[]>(`/api/mobile/inventory/stock${qsStr ? `?${qsStr}` : ''}`);
+
+  const pageTitle = section
+    ? `${INVENTORY_SECTION_META[section].label} Stock Balance`
+    : 'All Stock Balance';
+  const pageDescription = section
+    ? INVENTORY_SECTION_META[section].description
+    : 'Live inventory balance across all warehouses and production stages.';
 
   return (
     <div>
-      <PageHeader
-        title={`${INVENTORY_SECTION_META[section].label} Stock Balance`}
-        description={INVENTORY_SECTION_META[section].description}
-      >
+      <PageHeader title={pageTitle} description={pageDescription}>
         <Button variant="outline" asChild>
           <Link href="/warehouse/receive">
             <ArrowDownToLine className="h-4 w-4" />
-            Receive
+            Stock In
           </Link>
         </Button>
         <Button variant="outline" asChild>
           <Link href="/warehouse/issue">
             <ArrowUpFromLine className="h-4 w-4" />
-            Issue
+            Stock Out
           </Link>
         </Button>
         <Button asChild>
@@ -72,11 +64,11 @@ export default async function StockBalancePage({ searchParams }: StockBalancePag
 
       <div className="space-y-6">
         <SectionLinks activeSection={section} page="stock" />
-        <StockSection
-          title={INVENTORY_SECTION_META[section].label}
-          description={INVENTORY_SECTION_META[section].description}
+        <StockTable
+          title={pageTitle}
+          description={pageDescription}
           rows={allRows}
-          emptyLabel={`No ${INVENTORY_SECTION_META[section].label.toLowerCase()} stock yet.`}
+          emptyLabel={`No ${section ? INVENTORY_SECTION_META[section].label.toLowerCase() : 'inventory'} stock balance recorded yet.`}
         />
       </div>
     </div>
@@ -92,106 +84,16 @@ function SectionLinks({
 }) {
   return (
     <div className="flex flex-wrap gap-2">
+      <Button variant={!activeSection ? 'default' : 'outline'} asChild>
+        <Link href={`/inventory/${page}`}>All Categories</Link>
+      </Button>
       {INVENTORY_SECTION_SLUGS.map((slug) => (
         <Button key={slug} variant={activeSection === slug ? 'default' : 'outline'} asChild>
-          <Link href={`/inventory/${page}?section=${slug}`}>{INVENTORY_SECTION_META[slug].label}</Link>
+          <Link href={`/inventory/${page}?section=${slug}`}>
+            {INVENTORY_SECTION_META[slug].label}
+          </Link>
         </Button>
       ))}
     </div>
-  );
-}
-
-function StockSection({
-  title,
-  description,
-  rows,
-  emptyLabel,
-}: {
-  title: string;
-  description: string;
-  rows: Row[];
-  emptyLabel: string;
-}) {
-  return (
-    <section>
-      <div className="mb-3 flex items-baseline justify-between">
-        <div>
-          <h2 className="text-base font-semibold">{title}</h2>
-          <p className="text-xs text-muted-foreground">{description}</p>
-        </div>
-        <span className="text-xs text-muted-foreground">
-          {rows.length} {rows.length === 1 ? 'row' : 'rows'}
-        </span>
-      </div>
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="text-left font-semibold px-4 py-3">SKU</th>
-                <th className="text-left font-semibold px-4 py-3">Product</th>
-                <th className="text-left font-semibold px-4 py-3">Warehouse</th>
-                <th className="text-right font-semibold px-4 py-3">Balance</th>
-                <th className="text-left font-semibold px-4 py-3">Unit</th>
-                <th className="text-right font-semibold px-4 py-3">Buy / unit</th>
-                <th className="text-right font-semibold px-4 py-3">Sell / unit</th>
-                <th className="text-right font-semibold px-4 py-3">Total Cost</th>
-                <th className="text-right font-semibold px-4 py-3">Total Sell</th>
-                <th className="text-right font-semibold px-4 py-3">Reorder level</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center text-muted-foreground">
-                    {emptyLabel}
-                  </td>
-                </tr>
-              )}
-              {rows.map((r) => {
-                const qty = d(r.qty);
-                const reorderLevel = d(r.product.reorderLevel);
-                const low =
-                  reorderLevel.gt(0) && qty.lte(reorderLevel)
-                    ? 'text-warning'
-                    : qty.lte(0)
-                      ? 'text-destructive'
-                      : '';
-                const totalCost = d(r.product.costPrice).mul(qty);
-                const totalSell = d(r.product.sellPrice).mul(qty);
-                return (
-                  <tr key={`${r.product.id}-${r.warehouse.id}`} className="hover:bg-muted/30">
-                    <td className="px-4 py-3 font-mono text-xs">{r.product.sku}</td>
-                    <td className="px-4 py-3 font-medium">{r.product.name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {r.warehouse.name} <span className="text-xs">({r.warehouse.code})</span>
-                    </td>
-                    <td className={`px-4 py-3 text-right tabular-nums font-semibold ${low}`}>
-                      {r.qty}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{r.product.unit}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                      {formatCurrency(r.product.costPrice)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                      {formatCurrency(r.product.sellPrice)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                      {formatCurrency(totalCost)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums font-medium">
-                      {formatCurrency(totalSell)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                      {reorderLevel.gt(0) ? r.product.reorderLevel : '—'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </section>
   );
 }

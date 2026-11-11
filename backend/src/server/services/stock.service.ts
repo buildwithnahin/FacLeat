@@ -86,15 +86,25 @@ function assertPositiveItems(items: MovementItem[]) {
 
 async function getBalances(
   tx: Prisma.TransactionClient | typeof prisma,
-  branchId: string,
+  branchFilter?: string | string[],
   warehouseId?: string,
   productIds?: string[],
 ): Promise<BalanceRow[]> {
-  const params: unknown[] = [branchId];
-  let where = `\`branchId\` = ?`;
-  if (warehouseId) {
-    params.push(warehouseId);
-    where += ` AND \`warehouseId\` = ?`;
+  const params: unknown[] = [];
+  let where = '1=1';
+  if (Array.isArray(branchFilter)) {
+    const valid = branchFilter.filter((b) => b && typeof b === 'string' && b.trim());
+    if (valid.length > 0) {
+      where += ` AND \`branchId\` IN (${valid.map(() => '?').join(', ')})`;
+      params.push(...valid);
+    }
+  } else if (branchFilter && typeof branchFilter === 'string' && branchFilter.trim()) {
+    params.push(branchFilter.trim());
+    where += ' AND `branchId` = ?';
+  }
+  if (warehouseId && typeof warehouseId === 'string' && warehouseId.trim()) {
+    params.push(warehouseId.trim());
+    where += ' AND `warehouseId` = ?';
   }
   if (productIds && productIds.length > 0) {
     where += ` AND \`productId\` IN (${productIds.map(() => '?').join(', ')})`;
@@ -175,7 +185,7 @@ export const stockService = {
   async balanceSnapshotDetailed(
     session: AppSession | null,
     filters: {
-      branchId: string;
+      branchId?: string;
       warehouseId?: string;
       section?: InventorySectionSlug | null;
     },
@@ -184,11 +194,15 @@ export const stockService = {
     const branchIds = await getScopedBranchIds(session, filters.branchId);
     if (filters.branchId && branchIds && branchIds.length === 0) return [];
 
+    const effectiveBranchFilter = filters.branchId && filters.branchId.trim()
+      ? filters.branchId.trim()
+      : (branchIds && branchIds.length > 0 ? branchIds : undefined);
+
     const [balances, warehouses, products] = await Promise.all([
-      getBalances(prisma, filters.branchId, filters.warehouseId),
+      getBalances(prisma, effectiveBranchFilter, filters.warehouseId),
       prisma.warehouse.findMany({
         where: {
-          ...(branchIds ? { branchId: { in: branchIds } } : {}),
+          ...(branchIds && branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
           ...(filters.warehouseId ? { id: filters.warehouseId } : {}),
         },
         select: { id: true, name: true, code: true, type: true },

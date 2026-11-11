@@ -64,18 +64,21 @@ export function AddShipmentButton({ tradeOrderId }: { tradeOrderId: string }) {
                   <FormItem>
                     <FormLabel>Vessel Name</FormLabel>
                     <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="voyageNumber" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Voyage Number</FormLabel>
                     <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="blNumber" render={({ field }) => (
                   <FormItem>
                     <FormLabel>BL Number</FormLabel>
                     <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="blDate" render={({ field }) => (
@@ -84,18 +87,21 @@ export function AddShipmentButton({ tradeOrderId }: { tradeOrderId: string }) {
                     <FormControl>
                       <Input type="date" value={field.value instanceof Date ? field.value.toISOString().slice(0, 10) : ''} onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)} />
                     </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="carrierName" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Carrier</FormLabel>
                     <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="bookingRef" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Booking Ref</FormLabel>
                     <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="etd" render={({ field }) => (
@@ -104,6 +110,7 @@ export function AddShipmentButton({ tradeOrderId }: { tradeOrderId: string }) {
                     <FormControl>
                       <Input type="date" value={field.value instanceof Date ? field.value.toISOString().slice(0, 10) : ''} onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)} />
                     </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="eta" render={({ field }) => (
@@ -112,24 +119,28 @@ export function AddShipmentButton({ tradeOrderId }: { tradeOrderId: string }) {
                     <FormControl>
                       <Input type="date" value={field.value instanceof Date ? field.value.toISOString().slice(0, 10) : ''} onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)} />
                     </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="containerNumbers" render={({ field }) => (
                   <FormItem className="col-span-2">
                     <FormLabel>Container Numbers</FormLabel>
                     <FormControl><Input placeholder="MSCU1234567, HLXU9876543" {...field} /></FormControl>
+                    <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="grossWeight" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Gross Weight (kg)</FormLabel>
                     <FormControl><Input type="number" step="0.001" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)} /></FormControl>
+                    <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="packages" render={({ field }) => (
                   <FormItem>
                     <FormLabel>No. of Packages</FormLabel>
                     <FormControl><Input type="number" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)} /></FormControl>
+                    <FormMessage />
                   </FormItem>
                 )} />
               </div>

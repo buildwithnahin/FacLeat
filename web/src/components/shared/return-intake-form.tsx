@@ -349,7 +349,7 @@ export function ReturnIntakeForm({
       {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
 
       <div className="flex items-center gap-2">
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || rows.length === 0}>
           {pending ? 'Saving…' : 'Create return inspection case'}
         </Button>
       </div>

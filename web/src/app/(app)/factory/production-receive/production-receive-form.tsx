@@ -35,6 +35,21 @@ export function ProductionReceiveForm({
     [orders, orderId],
   );
 
+  const stages = selectedOrder?.stages ?? [];
+  const [fromStageId, setFromStageId] = useState(stages[0]?.id ?? '');
+  const [toStageId, setToStageId] = useState(stages[1]?.id ?? stages[0]?.id ?? '');
+
+  const handleOrderChange = (newOrderId: string) => {
+    setOrderId(newOrderId);
+    const order = orders.find((o) => o.id === newOrderId);
+    const s = order?.stages ?? [];
+    setFromStageId(s[0]?.id ?? '');
+    setToStageId(s[1]?.id ?? s[0]?.id ?? '');
+  };
+
+  const sameStage = Boolean(fromStageId && toStageId && fromStageId === toStageId);
+  const insufficientStages = stages.length < 2;
+
   return (
     <form action={formAction} className="space-y-6">
       <Card className="p-6 space-y-4">
@@ -45,7 +60,7 @@ export function ProductionReceiveForm({
               id="orderId"
               name="orderId"
               value={orderId}
-              onChange={(e) => setOrderId(e.target.value)}
+              onChange={(e) => handleOrderChange(e.target.value)}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
             >
               {orders.map((order) => (
@@ -64,9 +79,11 @@ export function ProductionReceiveForm({
             <select
               id="fromStageId"
               name="fromStageId"
+              value={fromStageId}
+              onChange={(e) => setFromStageId(e.target.value)}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
             >
-              {selectedOrder?.stages.map((stage) => (
+              {stages.map((stage) => (
                 <option key={stage.id} value={stage.id}>
                   {stage.label}
                 </option>
@@ -78,9 +95,11 @@ export function ProductionReceiveForm({
             <select
               id="toStageId"
               name="toStageId"
+              value={toStageId}
+              onChange={(e) => setToStageId(e.target.value)}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
             >
-              {selectedOrder?.stages.map((stage) => (
+              {stages.map((stage) => (
                 <option key={stage.id} value={stage.id}>
                   {stage.label}
                 </option>
@@ -89,12 +108,24 @@ export function ProductionReceiveForm({
           </div>
         </div>
 
+        {insufficientStages && (
+          <p className="text-sm text-amber-600">
+            This production order needs at least 2 stages defined to transfer work between stages.
+          </p>
+        )}
+
+        {sameStage && !insufficientStages && (
+          <p className="text-sm text-amber-600">
+            From process and To process cannot be the same. Please select a different receiving stage.
+          </p>
+        )}
+
         <input type="hidden" name="productId" value={selectedOrder?.productId ?? ''} />
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <Label htmlFor="receivedQty">Received Qty *</Label>
-            <Input id="receivedQty" name="receivedQty" type="number" step="0.0001" min="0" required />
+            <Input id="receivedQty" name="receivedQty" type="number" step="0.0001" min="0.0001" required />
           </div>
           <div>
             <Label htmlFor="rejectedQty">Rejected Qty</Label>
@@ -123,12 +154,25 @@ export function ProductionReceiveForm({
 
         <div>
           <Label htmlFor="remarks">Remarks</Label>
-          <Textarea id="remarks" name="remarks" rows={3} />
+          <Textarea id="remarks" name="remarks" rows={3} placeholder="Notes or observations…" />
         </div>
       </Card>
 
-      {state?.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
-      <Button type="submit" disabled={pending}>
+      {state?.error ? (
+        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+          {state.error}
+        </div>
+      ) : null}
+      {state?.success ? (
+        <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-700">
+          Production receive created successfully.
+        </div>
+      ) : null}
+
+      <Button
+        type="submit"
+        disabled={pending || !orderId || insufficientStages || sameStage}
+      >
         {pending ? 'Saving...' : 'Create Production Receive'}
       </Button>
     </form>

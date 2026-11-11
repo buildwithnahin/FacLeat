@@ -36,10 +36,14 @@ interface ProductApiRow {
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
   const session = await getSession();
   const sp = await searchParams;
-  const section = parseInventorySection(sp.section) ?? 'raw-material';
-  const products = await backendFetch<ProductApiRow[]>(`/api/mobile/inventory/products?section=${section}`);
+  const section = parseInventorySection(sp.section);
+  const qs = section ? `?section=${section}` : '';
+  const products = await backendFetch<ProductApiRow[]>(`/api/mobile/inventory/products${qs}`);
   const canWrite = session?.permissions.includes('inventory:write') ?? false;
-  const sectionMeta = INVENTORY_SECTION_META[section];
+  const pageTitle = section ? `${INVENTORY_SECTION_META[section].label} Products` : 'All Products';
+  const pageDescription = section
+    ? `${INVENTORY_SECTION_META[section].description} This product list is filtered to ${INVENTORY_SECTION_META[section].label.toLowerCase()} SKUs.`
+    : 'Complete catalog of products across all production stages and categories.';
 
   const rows: ProductRow[] = products.map((p) => ({
     id: p.id,
@@ -58,8 +62,8 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   return (
     <div>
       <PageHeader
-        title={`${sectionMeta.label} Products`}
-        description={`${sectionMeta.description} This product list is filtered to ${sectionMeta.label.toLowerCase()} SKUs.`}
+        title={pageTitle}
+        description={pageDescription}
       >
         {canWrite && (
           <Button asChild>
@@ -72,6 +76,9 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       </PageHeader>
 
       <div className="mb-4 flex flex-wrap gap-2">
+        <Button variant={!section ? 'default' : 'outline'} asChild>
+          <Link href="/inventory/products">All Products</Link>
+        </Button>
         {INVENTORY_SECTION_SLUGS.map((slug) => (
           <Button key={slug} variant={section === slug ? 'default' : 'outline'} asChild>
             <Link href={`/inventory/products?section=${slug}`}>{INVENTORY_SECTION_META[slug].label}</Link>

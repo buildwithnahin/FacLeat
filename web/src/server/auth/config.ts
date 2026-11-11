@@ -11,7 +11,7 @@ import Credentials from 'next-auth/providers/credentials';
 // app's Server Components/Actions can attach it as
 // `Authorization: Bearer <token>` on every backend/ API call (see
 // `@/lib/backend-client`).
-const BACKEND_URL = process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 interface BackendLoginUser {
   id: string;

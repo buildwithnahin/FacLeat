@@ -12,8 +12,8 @@ export const invoiceItemSchema = z.object({
 });
 
 export const invoiceCreateSchema = z.object({
-  branchId: z.string().cuid(),
-  supplierId: z.string().cuid(),
+  branchId: z.string().cuid('Select a branch'),
+  supplierId: z.string().cuid('Select a supplier'),
   purchaseOrderId: z.string().cuid().optional().or(z.literal('')),
   grnId: z.string().cuid().optional().or(z.literal('')),
   invoiceDate: z.coerce.date(),

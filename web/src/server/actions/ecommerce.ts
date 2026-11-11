@@ -13,7 +13,10 @@ import {
 export async function syncEcommerceOrderAction(input: unknown) {
   const parsed = syncOrderSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const order = await backendFetch<{ id: string; number: string }>('/api/mobile/ecommerce/orders', {
@@ -32,7 +35,10 @@ export async function syncEcommerceOrderAction(input: unknown) {
 export async function packEcommerceOrderAction(input: unknown) {
   const parsed = packOrderSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     await backendFetch(`/api/mobile/ecommerce/orders/${parsed.data.orderId}/pack`, { method: 'POST' });
@@ -48,7 +54,10 @@ export async function packEcommerceOrderAction(input: unknown) {
 export async function fulfillEcommerceOrderAction(input: unknown) {
   const parsed = fulfillOrderSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     await backendFetch(`/api/mobile/ecommerce/orders/${parsed.data.orderId}/fulfill`, {
@@ -71,7 +80,10 @@ export async function fulfillEcommerceOrderAction(input: unknown) {
 export async function returnEcommerceOrderAction(input: unknown) {
   const parsed = returnOrderSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const ret = await backendFetch<{ id: string }>(`/api/mobile/ecommerce/orders/${parsed.data.orderId}/return`, {
@@ -90,7 +102,10 @@ export async function returnEcommerceOrderAction(input: unknown) {
 export async function reconcileEcommercePaymentsAction(input: unknown) {
   const parsed = reconcilePaymentsSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const run = await backendFetch<{ id: string; matchedCount: number; unmatchedCount: number }>(

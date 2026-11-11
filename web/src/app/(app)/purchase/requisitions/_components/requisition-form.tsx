@@ -50,9 +50,11 @@ interface ProductOption {
 export function RequisitionForm({
   branches,
   products,
+  defaultBranchId,
 }: {
   branches: { id: string; name: string; code: string }[];
   products: ProductOption[];
+  defaultBranchId?: string;
 }) {
   const [state, formAction, pending] = useActionState<PurchaseFormState, FormData>(
     createRequisitionAction,
@@ -91,7 +93,11 @@ export function RequisitionForm({
               id="branchId"
               name="branchId"
               required
-              defaultValue={branches[0]?.id ?? ''}
+              defaultValue={
+                defaultBranchId && branches.some((b) => b.id === defaultBranchId)
+                  ? defaultBranchId
+                  : branches[0]?.id ?? ''
+              }
               className={selectClass}
             >
               {branches.map((b) => (

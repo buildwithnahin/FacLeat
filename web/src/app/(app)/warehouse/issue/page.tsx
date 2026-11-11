@@ -31,13 +31,13 @@ interface ProductOption {
 
 export default async function IssuePage() {
   const session = await getSession();
-  const branchId = session?.activeBranchId;
+  const branchId = session?.activeBranchId || session?.defaultBranchId || session?.allowedBranchIds?.[0];
   if (!branchId) {
     return (
       <div>
         <PageHeader title="Goods issue" />
         <Card className="p-6 text-sm text-muted-foreground">
-          Select an active branch from the topbar first.
+          No branch access configured for this account.
         </Card>
       </div>
     );
@@ -78,6 +78,7 @@ export default async function IssuePage() {
         action={postIssueAction}
         submitLabel="Post issue"
         showCost={false}
+        cancelHref="/warehouse/issued"
       />
     </div>
   );

@@ -24,7 +24,12 @@ export async function createInvoiceAction(
     notes: formData.get('notes') ?? '',
     items: parseItems(formData),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     const session = await getSession();
     await purchaseService.createInvoice(session, parsed.data);

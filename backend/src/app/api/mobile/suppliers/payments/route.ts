@@ -10,9 +10,19 @@ export async function GET(req: NextRequest) {
 
   const limitParam = req.nextUrl.searchParams.get('limit');
   const limit = limitParam ? Number(limitParam) : 20;
+  const branchId =
+    req.nextUrl.searchParams.get('branchId') ??
+    session.activeBranchId ??
+    session.defaultBranchId ??
+    session.allowedBranchIds?.[0] ??
+    undefined;
 
   try {
-    const data = await supplierService.listPayments(session, Number.isFinite(limit) && limit > 0 ? limit : 20);
+    const data = await supplierService.listPayments(
+      session,
+      Number.isFinite(limit) && limit > 0 ? limit : 20,
+      branchId,
+    );
     return Response.json(apiOk(data));
   } catch (err) {
     if (err instanceof ApiError) return Response.json(apiError(err), { status: err.status });

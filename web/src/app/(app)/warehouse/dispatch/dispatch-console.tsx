@@ -144,6 +144,17 @@ export function DispatchConsole({
       return;
     }
 
+    for (const item of items) {
+      const orderItem = selectedOrder.items.find((o) => o.id === item.orderItemId);
+      if (orderItem && item.quantity > orderItem.remainingQty) {
+        setMessage({
+          type: 'err',
+          text: `Quantity for ${orderItem.productName} cannot exceed remaining (${orderItem.remainingQty}).`,
+        });
+        return;
+      }
+    }
+
     startTransition(async () => {
       const res = await recordCorporateDeliveryAction({
         orderId: selectedOrder.id,

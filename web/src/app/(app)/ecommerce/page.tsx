@@ -5,6 +5,7 @@ import { KpiCard } from '@/components/shared/kpi-card';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { backendFetch } from '@/lib/backend-client';
+import { getSession } from '@/server/auth/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,14 @@ interface DashboardStats {
 }
 
 export default async function EcommerceOverviewPage() {
-  const stats = await backendFetch<DashboardStats>('/api/mobile/ecommerce/dashboard');
+  const session = await getSession();
+  const branchId =
+    session?.activeBranchId ??
+    session?.defaultBranchId ??
+    session?.allowedBranchIds?.[0] ??
+    undefined;
+  const query = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+  const stats = await backendFetch<DashboardStats>(`/api/mobile/ecommerce/dashboard${query}`);
 
   return (
     <div className="space-y-6">

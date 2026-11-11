@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import ExcelJS from 'exceljs';
 import { getSession } from '@/server/auth/session';
+import { getMobileSession } from '@/server/auth/mobile-session';
 import { productService } from '@/server/services/product.service';
 import {
   PRODUCT_EXPORT_COLS,
@@ -40,7 +41,7 @@ function getValue(p: ProductRow, col: ProductColKey): string | number {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = (await getSession()) ?? (await getMobileSession(req));
   const sp = req.nextUrl.searchParams;
   const colsParam = sp.get('cols');
 

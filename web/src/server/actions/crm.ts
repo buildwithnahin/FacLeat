@@ -40,7 +40,12 @@ export async function createCustomerAction(
   formData: FormData,
 ): Promise<CustomerFormState> {
   const parsed = customerCreateSchema.safeParse(parseCustomer(formData));
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch('/api/mobile/crm', {
       method: 'POST',
@@ -62,7 +67,12 @@ export async function updateCustomerAction(
     id: formData.get('id'),
     ...parseCustomer(formData),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch(`/api/mobile/crm/${parsed.data.id}`, {
       method: 'PATCH',
@@ -92,7 +102,12 @@ export async function addCustomerInteractionAction(
     body: formData.get('body') ?? '',
     followUpAt: followUpRaw ? followUpRaw : null,
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch(`/api/mobile/crm/${parsed.data.customerId}/interactions`, {
       method: 'POST',

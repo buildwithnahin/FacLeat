@@ -22,7 +22,12 @@ export async function GET(req: NextRequest) {
       where: { cashierId: session.userId, status: 'OPEN' },
       select: { branchId: true },
     });
-    const branchId = activeSession?.branchId ?? session.activeBranchId;
+    const branchId =
+      req.nextUrl.searchParams.get('branchId') ??
+      activeSession?.branchId ??
+      session.activeBranchId ??
+      session.defaultBranchId ??
+      session.allowedBranchIds?.[0];
     if (!branchId) return Response.json(apiOk([]));
 
     const products = await posService.searchProducts(session, branchId, q, 40);

@@ -82,6 +82,7 @@ interface Props {
   branches: BranchOption[];
   suppliers: SupplierOption[];
   products: ProductOption[];
+  defaultBranchId?: string;
   prefill?: {
     requisitionId: string;
     branchId: string;
@@ -89,7 +90,7 @@ interface Props {
   };
 }
 
-export function POForm({ branches, suppliers, products, prefill }: Props) {
+export function POForm({ branches, suppliers, products, prefill, defaultBranchId }: Props) {
   const [state, formAction, pending] = useActionState<PurchaseFormState, FormData>(
     createPurchaseOrderAction,
     undefined,
@@ -107,7 +108,12 @@ export function POForm({ branches, suppliers, products, prefill }: Props) {
         })
       : [newRow()],
   );
-  const [branchId, setBranchId] = useState<string>(prefill?.branchId ?? branches[0]?.id ?? '');
+  const [branchId, setBranchId] = useState<string>(
+    prefill?.branchId ??
+      (defaultBranchId && branches.some((b) => b.id === defaultBranchId)
+        ? defaultBranchId
+        : branches[0]?.id ?? ''),
+  );
   const [currency, setCurrency] = useState<CurrencyCode>('BDT');
 
   const totals = useMemo(() => {

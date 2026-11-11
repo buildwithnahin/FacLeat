@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { DataTable } from '@/components/shared/data-table';
 import { Pill } from '@/components/shared/pill';
 import { backendFetch } from '@/lib/backend-client';
+import { getSession } from '@/server/auth/session';
 import { d, formatCurrency } from '@/lib/money';
 import type { CurrencyCode } from '@/lib/money';
 
@@ -39,11 +40,21 @@ export default async function SuppliersPage({
 }: {
   searchParams: Promise<Search>;
 }) {
+  const session = await getSession();
   const sp = await searchParams;
+  const branchId =
+    session?.activeBranchId ??
+    session?.defaultBranchId ??
+    session?.allowedBranchIds?.[0] ??
+    undefined;
+
   const params = new URLSearchParams();
+  if (branchId) params.set('branchId', branchId);
   if (sp.status && sp.status !== 'ALL') params.set('status', sp.status);
   if (sp.search) params.set('search', sp.search);
+
   const suppliers = await backendFetch<SupplierRow[]>(`/api/mobile/suppliers?${params.toString()}`);
+  const hasFilter = Boolean(sp.search || (sp.status && sp.status !== 'ALL'));
 
   return (
     <div className="space-y-6">
@@ -57,11 +68,11 @@ export default async function SuppliersPage({
       </PageHeader>
 
       <Card className="p-4">
-        <form className="grid grid-cols-1 md:grid-cols-[1fr_220px_160px_auto] gap-3 items-end">
+        <form className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 items-end">
           <div>
             <Input
               name="search"
-              placeholder="Search by name, contact or email…"
+              placeholder="Search by name, contact, phone or email…"
               defaultValue={sp.search ?? ''}
             />
           </div>
@@ -77,10 +88,16 @@ export default async function SuppliersPage({
               <option value="BLOCKED">Blocked</option>
             </select>
           </div>
-          <Button type="submit" variant="outline">
-            Filter
-          </Button>
-          <div />
+          <div className="flex gap-2">
+            <Button type="submit" variant="outline">
+              Filter
+            </Button>
+            {hasFilter && (
+              <Button variant="ghost" asChild>
+                <Link href="/suppliers">Clear</Link>
+              </Button>
+            )}
+          </div>
         </form>
       </Card>
 

@@ -39,6 +39,7 @@ export interface PhysicalCountFormProps {
   products: PhysicalCountProductOption[];
   /** map from warehouseId → productId → current system balance */
   balanceByWarehouseProduct: Record<string, Record<string, string>>;
+  cancelHref?: string;
 }
 
 export function PhysicalCountForm({
@@ -46,6 +47,7 @@ export function PhysicalCountForm({
   warehouses,
   products,
   balanceByWarehouseProduct,
+  cancelHref = '/warehouse',
 }: PhysicalCountFormProps) {
   const [state, formAction, pending] = useActionState<StockFormState, FormData>(
     postPhysicalCountAction,
@@ -282,7 +284,7 @@ export function PhysicalCountForm({
           {pending ? 'Posting…' : hasMismatch ? 'Post adjustments' : 'Nothing to adjust'}
         </Button>
         <Button type="button" variant="outline" asChild>
-          <Link href="/inventory/stock">Cancel</Link>
+          <Link href={cancelHref}>Cancel</Link>
         </Button>
       </div>
     </form>

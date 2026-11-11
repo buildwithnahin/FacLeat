@@ -27,10 +27,22 @@ export const createTradeOrderSchema = z.object({
   goodsDescription: z.string().trim().max(1000).optional().or(z.literal('')),
   notes: z.string().trim().max(1000).optional().or(z.literal('')),
   items: z.array(tradeOrderItemSchema).min(1, 'At least one line item is required'),
-}).refine(
-  (d) => (d.type === 'EXPORT' ? !!d.customerId : !!d.supplierId),
-  { message: 'Export orders need a customer; import orders need a supplier' },
-);
+}).superRefine((d, ctx) => {
+  if (d.type === 'EXPORT' && !d.customerId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Customer is required for export orders',
+      path: ['customerId'],
+    });
+  }
+  if (d.type === 'IMPORT' && !d.supplierId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Supplier is required for import orders',
+      path: ['supplierId'],
+    });
+  }
+});
 export type CreateTradeOrderInput = z.infer<typeof createTradeOrderSchema>;
 
 export const updateTradeOrderStatusSchema = z.object({
@@ -148,7 +160,7 @@ export const createLCAmendmentSchema = z.object({
   reason: z.string().trim().min(5).max(1000),
 }).refine(
   (d) => d.newExpiryDate || d.newLcAmount || d.newLatestShipDate || d.newSpecialConditions,
-  { message: 'At least one field must be amended' },
+  { message: 'At least one field must be amended', path: ['reason'] },
 );
 export type CreateLCAmendmentInput = z.infer<typeof createLCAmendmentSchema>;
 

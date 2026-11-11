@@ -1,11 +1,12 @@
 import Link from 'next/link';
-import { Eye, Plus } from 'lucide-react';
+import { Eye, Plus, Search, X } from 'lucide-react';
 import { getSession } from '@/server/auth/session';
 import { backendFetch } from '@/lib/backend-client';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,12 +25,39 @@ interface DamageReportRow {
   supplier: { name: string } | null;
 }
 
-export default async function FaultyStockPage() {
+interface SearchParams {
+  q?: string;
+  status?: string;
+}
+
+export default async function FaultyStockPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
   const session = await getSession();
-  const branchId = session?.activeBranchId;
-  const rows = await backendFetch<DamageReportRow[]>(
+  const branchId = session?.activeBranchId || session?.defaultBranchId || session?.allowedBranchIds?.[0];
+  const params = (await searchParams) ?? {};
+  const query = (params.q ?? '').trim().toLowerCase();
+  const statusFilter = params.status && params.status !== 'ALL' ? params.status : undefined;
+
+  const rawRows = await backendFetch<DamageReportRow[]>(
     `/api/mobile/warehouse/damage-reports${branchId ? `?branchId=${branchId}` : ''}`,
   );
+
+  const rows = rawRows.filter((row) => {
+    if (query) {
+      const matchNumber = row.number.toLowerCase().includes(query);
+      const matchReason = row.reason.toLowerCase().includes(query);
+      const matchWarehouse = row.warehouse.name.toLowerCase().includes(query) || row.warehouse.code.toLowerCase().includes(query);
+      const matchSupplier = row.supplier ? row.supplier.name.toLowerCase().includes(query) : false;
+      if (!matchNumber && !matchReason && !matchWarehouse && !matchSupplier) return false;
+    }
+    if (statusFilter && row.status !== statusFilter) return false;
+    return true;
+  });
+
+  const hasFilter = Boolean(query || (params.status && params.status !== 'ALL'));
 
   return (
     <div className="space-y-6">
@@ -44,6 +72,46 @@ export default async function FaultyStockPage() {
           </Link>
         </Button>
       </PageHeader>
+
+      {/* Filter bar */}
+      <Card className="p-4">
+        <form method="GET" className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              name="q"
+              defaultValue={params.q ?? ''}
+              placeholder="Search report #, reason, warehouse, supplier…"
+              className="pl-9 h-9"
+            />
+          </div>
+
+          <select
+            name="status"
+            defaultValue={params.status ?? 'ALL'}
+            className="flex h-9 w-48 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+          >
+            <option value="ALL">All statuses</option>
+            <option value="PENDING_APPROVAL">Pending approval</option>
+            <option value="IN_QUARANTINE">In quarantine</option>
+            <option value="RESOLVED">Resolved</option>
+            <option value="REJECTED">Rejected</option>
+          </select>
+
+          <Button type="submit" variant="outline" size="sm">
+            Filter
+          </Button>
+
+          {hasFilter && (
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/warehouse/faulty" className="gap-1">
+                <X className="h-3.5 w-3.5" />
+                Clear
+              </Link>
+            </Button>
+          )}
+        </form>
+      </Card>
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
@@ -64,7 +132,7 @@ export default async function FaultyStockPage() {
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
-                    No faulty stock reports yet.
+                    {hasFilter ? 'No faulty stock reports match the selected filters.' : 'No faulty stock reports yet.'}
                   </td>
                 </tr>
               )}

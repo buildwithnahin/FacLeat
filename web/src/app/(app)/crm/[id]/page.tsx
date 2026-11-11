@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Edit, ArrowLeft, Phone, Mail, MapPin } from 'lucide-react';
+import { Edit, ArrowLeft, Phone, Mail, MapPin, BookOpen } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -81,6 +81,12 @@ export default async function CustomerDetailPage({
         title={customer.name}
         description={`${customer.code} · ${customer.branch.name} · ${customer.type.toLowerCase()}`}
       >
+        <Button variant="outline" asChild>
+          <Link href={`/crm/${customer.id}/ledger`}>
+            <BookOpen className="h-4 w-4" />
+            Ledger
+          </Link>
+        </Button>
         <Button variant="dark" asChild>
           <Link href={`/crm/${customer.id}/edit`}>
             <Edit className="h-4 w-4" />

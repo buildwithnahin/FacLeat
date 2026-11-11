@@ -28,6 +28,9 @@ export function TradeOrderStatusActions({ orderId, currentStatus }: { orderId: s
   if (actions.length === 0) return null;
 
   function act(status: string) {
+    if (status === 'CANCELLED' && typeof window !== 'undefined' && !window.confirm('Are you sure you want to cancel this trade order?')) {
+      return;
+    }
     startTransition(async () => {
       const res = await updateTradeOrderStatus({ orderId, status: status as never });
       if (res.success) { toast.success('Status updated'); router.refresh(); }

@@ -35,6 +35,13 @@ export function RefundForm({
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const allReturned = items.length > 0 && items.every((i) => i.quantity - i.returnedQty <= 0);
+
+  const refundTotal = items.reduce((acc, i) => {
+    const q = qty[i.id] || 0;
+    return acc + q * i.unitPrice;
+  }, 0);
+
   function submit() {
     const returnItems = Object.entries(qty)
       .filter(([, q]) => q > 0)
@@ -55,8 +62,9 @@ export function RefundForm({
         return;
       }
       if (res && 'success' in res && res.success) {
-        setMessage({ type: 'ok', text: `Return ${res.returnNumber} recorded` });
+        setMessage({ type: 'ok', text: `Return ${res.returnNumber} recorded successfully` });
         setQty({});
+        setReason('');
         router.refresh();
       }
     });
@@ -65,6 +73,11 @@ export function RefundForm({
   return (
     <Card className="p-4 space-y-3">
       <div className="text-sm font-medium">Refund</div>
+      {allReturned && (
+        <div className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+          All items in this sale have already been fully refunded.
+        </div>
+      )}
       <div className="space-y-2">
         {items.map((i) => {
           const remaining = i.quantity - i.returnedQty;
@@ -85,7 +98,11 @@ export function RefundForm({
                 className="w-20 text-right tabular"
                 disabled={disabled}
                 value={qty[i.id] ?? ''}
-                onChange={(e) => setQty((p) => ({ ...p, [i.id]: Number(e.target.value) }))}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  const clamped = isNaN(val) ? 0 : Math.max(0, Math.min(remaining, val));
+                  setQty((p) => ({ ...p, [i.id]: clamped }));
+                }}
               />
             </div>
           );
@@ -97,6 +114,7 @@ export function RefundForm({
           value={method}
           onChange={(e) => setMethod(e.target.value as (typeof POS_PAYMENT_METHODS)[number])}
           className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+          disabled={allReturned}
         >
           {POS_PAYMENT_METHODS.map((m) => (
             <option key={m} value={m}>
@@ -107,8 +125,19 @@ export function RefundForm({
       </div>
       <div>
         <Label>Reason</Label>
-        <Input value={reason} onChange={(e) => setReason(e.target.value)} />
+        <Input
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Optional reason for return"
+          disabled={allReturned}
+        />
       </div>
+      {refundTotal > 0 && (
+        <div className="flex justify-between text-sm font-medium pt-2 border-t">
+          <span>Refund amount</span>
+          <span className="tabular text-amber-700">{formatCurrency(refundTotal, currency)}</span>
+        </div>
+      )}
       {message && (
         <div
           className={`text-sm rounded-md px-3 py-2 ${
@@ -118,7 +147,12 @@ export function RefundForm({
           {message.text}
         </div>
       )}
-      <Button variant="dark" onClick={submit} disabled={pending} className="w-full">
+      <Button
+        variant="dark"
+        onClick={submit}
+        disabled={pending || allReturned || refundTotal <= 0}
+        className="w-full"
+      >
         {pending ? 'Processing…' : 'Process refund'}
       </Button>
     </Card>

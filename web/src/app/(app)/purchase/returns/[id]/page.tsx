@@ -103,7 +103,12 @@ export default async function DebitNoteDetailPage({
           <p className="text-xs text-muted-foreground">Linked GRN</p>
           <div className="mt-2">
             {debitNote.grn ? (
-              <span className="tabular">{debitNote.grn.number}</span>
+              <Link
+                href={`/purchase/grn/${debitNote.grn.id}`}
+                className="text-blue-600 hover:underline tabular"
+              >
+                {debitNote.grn.number}
+              </Link>
             ) : (
               <span className="text-muted-foreground">—</span>
             )}

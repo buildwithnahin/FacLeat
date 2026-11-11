@@ -39,6 +39,10 @@ export async function createProductionOrderAction(
   _prev: FactoryFormState,
   formData: FormData,
 ): Promise<FactoryFormState> {
+  const buyerName = formData.get('buyerName');
+  const batchName = formData.get('batchName');
+  const saleAmountRaw = formData.get('saleAmount');
+
   const parsed = productionOrderCreateSchema.safeParse({
     branchId: formData.get('branchId'),
     productId: formData.get('productId'),
@@ -48,10 +52,24 @@ export async function createProductionOrderAction(
     plannedStartDate: formData.get('plannedStartDate'),
     plannedEndDate: formData.get('plannedEndDate'),
     notes: formData.get('notes') ?? '',
+    buyerName: typeof buyerName === 'string' && buyerName ? buyerName : undefined,
+    batchName: typeof batchName === 'string' && batchName ? batchName : undefined,
+    saleAmount: saleAmountRaw ? Number(saleAmountRaw) : undefined,
     materials: parseJson(formData.get('materials'), []),
     stages: parseJson(formData.get('stages'), []),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  if (parsed.data.plannedEndDate < parsed.data.plannedStartDate) {
+    return {
+      error: 'Planned end date cannot be before planned start date',
+      fieldErrors: { plannedEndDate: ['Planned end date cannot be before planned start date'] },
+    };
+  }
 
   let orderId: string;
   try {
@@ -77,7 +95,12 @@ export async function consumeMaterialsAction(
     orderId,
     items: parseJson(formData.get('items'), []),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch(`/api/mobile/factory/${parsed.data.orderId}/consume`, {
       method: 'POST',
@@ -102,7 +125,12 @@ export async function recordOutputAction(
     toWarehouseId: formData.get('toWarehouseId'),
     note: formData.get('note') ?? '',
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch(`/api/mobile/factory/${parsed.data.orderId}/output`, {
       method: 'POST',
@@ -125,7 +153,12 @@ export async function updateStageAction(
     status: formData.get('status'),
     notes: formData.get('notes') ?? '',
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   const orderId = formData.get('orderId');
   try {
     await backendFetch(`/api/mobile/factory/${orderId}/stages/${parsed.data.stageId}`, {
@@ -148,7 +181,12 @@ export async function updateOrderStatusAction(
     orderId: formData.get('orderId'),
     status: formData.get('status'),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch(`/api/mobile/factory/${parsed.data.orderId}/status`, {
       method: 'POST',
@@ -176,7 +214,12 @@ export async function addCostEntryAction(
     amount: formData.get('amount') ?? undefined,
     note: formData.get('note') ?? '',
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch(`/api/mobile/factory/${parsed.data.orderId}/cost-entries`, {
       method: 'POST',
@@ -198,7 +241,12 @@ export async function deleteCostEntryAction(
     entryId: formData.get('entryId'),
     orderId: formData.get('orderId'),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch(`/api/mobile/factory/${parsed.data.orderId}/cost-entries/${parsed.data.entryId}`, {
       method: 'DELETE',
@@ -219,7 +267,12 @@ export async function updateOverheadRateAction(
     orderId: formData.get('orderId'),
     overheadRate: formData.get('overheadRate'),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch(`/api/mobile/factory/${parsed.data.orderId}/overhead-rate`, {
       method: 'POST',
@@ -244,7 +297,12 @@ export async function createProductionIssueAction(
     remarks: formData.get('remarks') ?? '',
     items: parseJson(formData.get('items'), []),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch('/api/mobile/factory/production-issue', {
       method: 'POST',
@@ -296,7 +354,12 @@ export async function saveProcessTrackingAction(
     endTime: formData.get('endTime') ?? '',
     status: formData.get('status'),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch('/api/mobile/factory/process-tracking', {
       method: 'POST',
@@ -314,11 +377,20 @@ export async function createProductionReceiveAction(
   _prev: FactoryFormState,
   formData: FormData,
 ): Promise<FactoryFormState> {
+  const fromStageId = formData.get('fromStageId');
+  const toStageId = formData.get('toStageId');
+  if (fromStageId && toStageId && fromStageId === toStageId) {
+    return {
+      error: 'From stage and To stage cannot be the same',
+      fieldErrors: { toStageId: ['From stage and To stage cannot be the same'] },
+    };
+  }
+
   const parsed = productionReceiveCreateSchema.safeParse({
     date: formData.get('date'),
     orderId: formData.get('orderId'),
-    fromStageId: formData.get('fromStageId'),
-    toStageId: formData.get('toStageId'),
+    fromStageId,
+    toStageId,
     productId: formData.get('productId'),
     receivedQty: formData.get('receivedQty'),
     rejectedQty: formData.get('rejectedQty') ?? 0,
@@ -326,7 +398,12 @@ export async function createProductionReceiveAction(
     operatorId: formData.get('operatorId') ?? '',
     remarks: formData.get('remarks') ?? '',
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch('/api/mobile/factory/production-receive', {
       method: 'POST',
@@ -352,7 +429,12 @@ export async function createFinishedGoodsReceiveAction(
     remarks: formData.get('remarks') ?? '',
     items: parseJson(formData.get('items'), []),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch('/api/mobile/factory/finished-goods-receive', {
       method: 'POST',
@@ -384,7 +466,18 @@ export async function createProductionPlanAction(
     machine: formData.get('machine') ?? '',
     shift: formData.get('shift') ?? '',
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  if (parsed.data.plannedEndDate < parsed.data.plannedStartDate) {
+    return {
+      error: 'Planned end date cannot be before planned start date',
+      fieldErrors: { plannedEndDate: ['Planned end date cannot be before planned start date'] },
+    };
+  }
 
   let planId: string;
   try {

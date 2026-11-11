@@ -35,6 +35,8 @@ export function ProcessTrackingForm({
     [orders, orderId],
   );
 
+  const hasStages = Boolean(selectedOrder?.stages && selectedOrder.stages.length > 0);
+
   return (
     <form action={formAction} className="space-y-6">
       <Card className="p-6 space-y-4">
@@ -60,7 +62,8 @@ export function ProcessTrackingForm({
             <select
               id="stageId"
               name="stageId"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+              disabled={!hasStages}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm disabled:opacity-50"
             >
               {selectedOrder?.stages.map((stage) => (
                 <option key={stage.id} value={stage.id}>
@@ -101,17 +104,23 @@ export function ProcessTrackingForm({
           </div>
         </div>
 
+        {!hasStages && selectedOrder && (
+          <p className="text-sm text-amber-600">
+            This production order has no stages defined. Add stages to the order to record tracking.
+          </p>
+        )}
+
         <input type="hidden" name="productId" value={selectedOrder?.productId ?? ''} />
         <input type="hidden" name="trackingId" value="" />
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <Label htmlFor="machine">Machine</Label>
-            <Input id="machine" name="machine" />
+            <Input id="machine" name="machine" placeholder="Machine identifier" />
           </div>
           <div>
             <Label htmlFor="batchNo">Batch No</Label>
-            <Input id="batchNo" name="batchNo" />
+            <Input id="batchNo" name="batchNo" placeholder="Batch identifier" />
           </div>
           <div>
             <Label htmlFor="startTime">Start Time</Label>
@@ -147,8 +156,18 @@ export function ProcessTrackingForm({
         </div>
       </Card>
 
-      {state?.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
-      <Button type="submit" disabled={pending}>
+      {state?.error ? (
+        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+          {state.error}
+        </div>
+      ) : null}
+      {state?.success ? (
+        <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-700">
+          Process tracking saved successfully.
+        </div>
+      ) : null}
+
+      <Button type="submit" disabled={pending || !hasStages || !orderId}>
         {pending ? 'Saving...' : 'Save Process Tracking'}
       </Button>
     </form>

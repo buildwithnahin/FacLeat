@@ -11,6 +11,7 @@ import { d } from '@/lib/money';
 import { PRODUCTION_ORDER_STATUS } from '@/server/validators/factory';
 import { ProductionControls } from './production-controls';
 import { DeleteCostEntryButton } from './delete-cost-entry-button';
+import { StageStatusControl } from './stage-status-control';
 
 export const dynamic = 'force-dynamic';
 
@@ -281,6 +282,19 @@ export default async function ProductionOrderPage({
                   key: 'completed',
                   header: 'Completed',
                   cell: (r) => (r.completedAt ? new Date(r.completedAt).toISOString().slice(0, 10) : '—'),
+                },
+                {
+                  key: 'actions',
+                  header: 'Update',
+                  align: 'right',
+                  cell: (r) => (
+                    <StageStatusControl
+                      stageId={r.id}
+                      orderId={order.id}
+                      currentStatus={r.status}
+                      disabled={order.status === 'COMPLETED' || order.status === 'CANCELLED'}
+                    />
+                  ),
                 },
               ]}
             />

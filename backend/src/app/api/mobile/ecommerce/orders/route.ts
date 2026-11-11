@@ -10,11 +10,17 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
   const sp = req.nextUrl.searchParams;
-  const branchId = sp.get('branchId') ?? session.activeBranchId ?? undefined;
+  const branchId =
+    sp.get('branchId') ??
+    session.activeBranchId ??
+    session.defaultBranchId ??
+    session.allowedBranchIds?.[0] ??
+    undefined;
   try {
     const orders = await ecommerceService.listOrders(session, {
       branchId: branchId ?? undefined,
       status: sp.get('status') ?? undefined,
+      search: sp.get('search') ?? undefined,
     });
     return Response.json(apiOk(orders));
   } catch (err) {

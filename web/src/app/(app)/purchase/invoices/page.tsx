@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import { Plus, Eye } from 'lucide-react';
+import { Plus, Eye, Search } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Pill } from '@/components/shared/pill';
 import { DataTable } from '@/components/shared/data-table';
 import { StepIndicator } from '@/components/shared/step-indicator';
@@ -38,8 +39,17 @@ interface InvoiceRow {
   grn: { id: string; number: string } | null;
 }
 
-export default async function InvoicesPage() {
-  const invoices = await backendFetch<InvoiceRow[]>('/api/mobile/purchase/invoices');
+export default async function InvoicesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ search?: string; status?: string }>;
+}) {
+  const sp = searchParams ? await searchParams : {};
+  const params = new URLSearchParams();
+  if (sp.status && sp.status !== 'ALL') params.set('status', sp.status);
+  if (sp.search?.trim()) params.set('search', sp.search.trim());
+  const invoices = await backendFetch<InvoiceRow[]>(`/api/mobile/purchase/invoices?${params.toString()}`);
+  const isFiltered = Boolean(sp.search?.trim() || (sp.status && sp.status !== 'ALL'));
 
   return (
     <div className="space-y-6">
@@ -69,6 +79,40 @@ export default async function InvoicesPage() {
           { key: 'payment', label: 'Payment', state: 'pending' },
         ]}
       />
+
+      <Card className="p-4">
+        <form className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              name="search"
+              placeholder="Search Invoice #, supplier, PO #…"
+              defaultValue={sp.search ?? ''}
+              className="pl-9"
+            />
+          </div>
+          <select
+            name="status"
+            defaultValue={sp.status ?? 'ALL'}
+            className="flex h-9 w-44 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+          >
+            <option value="ALL">All statuses</option>
+            <option value="DRAFT">Draft</option>
+            <option value="PENDING">Pending</option>
+            <option value="PARTIALLY_PAID">Partially paid</option>
+            <option value="PAID">Paid</option>
+            <option value="CANCELLED">Cancelled</option>
+          </select>
+          <Button type="submit" variant="outline">
+            Filter
+          </Button>
+          {isFiltered && (
+            <Button variant="ghost" asChild>
+              <Link href="/purchase/invoices">Clear</Link>
+            </Button>
+          )}
+        </form>
+      </Card>
 
       <Card className="p-0">
         <div className="px-4 py-3 border-b text-sm font-medium">All Invoices ({invoices.length})</div>

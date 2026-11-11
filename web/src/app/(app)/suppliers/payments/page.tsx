@@ -8,6 +8,7 @@ import { Pill } from '@/components/shared/pill';
 import { KpiCard } from '@/components/shared/kpi-card';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { backendFetch } from '@/lib/backend-client';
+import { getSession } from '@/server/auth/session';
 import { d, formatCurrency } from '@/lib/money';
 
 export const dynamic = 'force-dynamic';
@@ -40,9 +41,17 @@ interface SupplierPaymentRow {
 }
 
 export default async function SupplierPaymentsPage() {
+  const session = await getSession();
+  const branchId =
+    session?.activeBranchId ??
+    session?.defaultBranchId ??
+    session?.allowedBranchIds?.[0] ??
+    undefined;
+  const bParam = branchId ? `branchId=${encodeURIComponent(branchId)}` : '';
+
   const [suppliers, payments] = await Promise.all([
-    backendFetch<SupplierDueRow[]>('/api/mobile/suppliers'),
-    backendFetch<SupplierPaymentRow[]>('/api/mobile/suppliers/payments?limit=30'),
+    backendFetch<SupplierDueRow[]>(`/api/mobile/suppliers${bParam ? `?${bParam}` : ''}`),
+    backendFetch<SupplierPaymentRow[]>(`/api/mobile/suppliers/payments?limit=30${bParam ? `&${bParam}` : ''}`),
   ]);
 
   const totalOutstanding = suppliers.reduce(

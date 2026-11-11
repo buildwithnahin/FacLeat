@@ -85,8 +85,16 @@ export function LCAmendmentList({ lcId, amendments, lcStatus }: Props) {
   }
 
   function decide(id: string, decision: 'APPROVED' | 'REJECTED') {
+    let note: string | undefined;
+    if (decision === 'REJECTED') {
+      const promptRes = typeof window !== 'undefined'
+        ? window.prompt('Enter rejection reason (optional):', '')
+        : '';
+      if (promptRes === null) return;
+      note = promptRes.trim() || undefined;
+    }
     startTransition(async () => {
-      const res = await decideLCAmendment({ amendmentId: id, decision });
+      const res = await decideLCAmendment({ amendmentId: id, decision, note });
       if (res.success) { toast.success(`Amendment ${decision.toLowerCase()}`); router.refresh(); }
       else toast.error(res.error);
     });

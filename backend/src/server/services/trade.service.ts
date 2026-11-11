@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
+import { getScopedBranchIds } from '@/server/auth/scope';
 import type { AppSession } from '@/server/auth/session';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 import { nextDocumentNumber } from '@/lib/document-number';
@@ -43,9 +44,10 @@ export const tradeService = {
     } = {},
   ) {
     await authorize(session, 'trade:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.tradeOrder.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         type: filters.type as 'EXPORT' | 'IMPORT' | undefined,
         status: filters.status as Prisma.EnumTradeOrderStatusFilter['equals'] | undefined,
         createdAt: filters.from || filters.to ? { gte: filters.from, lte: filters.to } : undefined,
@@ -54,7 +56,9 @@ export const tradeService = {
               { number: { contains: filters.search } },
               { contractRef: { contains: filters.search } },
               { customer: { name: { contains: filters.search } } },
+              { customer: { code: { contains: filters.search } } },
               { supplier: { name: { contains: filters.search } } },
+              { supplier: { code: { contains: filters.search } } },
             ]
           : undefined,
       },
@@ -262,9 +266,10 @@ export const tradeService = {
     filters: { branchId?: string; status?: string; from?: Date; to?: Date; search?: string } = {},
   ) {
     await authorize(session, 'trade:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.letterOfCredit.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status as Prisma.EnumLCStatusFilter['equals'] | undefined,
         issueDate: filters.from || filters.to ? { gte: filters.from, lte: filters.to } : undefined,
         OR: filters.search
@@ -736,8 +741,9 @@ export const tradeService = {
 
   async listPayments(session: AppSession | null, branchId?: string) {
     await authorize(session, 'trade:read');
+    const branchIds = await getScopedBranchIds(session, branchId);
     return prisma.tradePayment.findMany({
-      where: { branchId },
+      where: { ...(branchIds ? { branchId: { in: branchIds } } : {}) },
       include: { tradeOrder: { select: { id: true, number: true, type: true } } },
       orderBy: { createdAt: 'desc' },
       take: 100,
@@ -746,8 +752,9 @@ export const tradeService = {
 
   async listShipments(session: AppSession | null, branchId?: string) {
     await authorize(session, 'trade:read');
+    const branchIds = await getScopedBranchIds(session, branchId);
     return prisma.tradeShipment.findMany({
-      where: { tradeOrder: { branchId } },
+      where: { tradeOrder: { ...(branchIds ? { branchId: { in: branchIds } } : {}) } },
       include: { tradeOrder: { select: { id: true, number: true, type: true } } },
       orderBy: { createdAt: 'desc' },
       take: 100,
@@ -778,12 +785,13 @@ export const tradeService = {
 
   async getLCFormOptions(session: AppSession | null, branchId?: string) {
     await authorize(session, 'trade:read');
+    const branchIds = await getScopedBranchIds(session, branchId);
     const [orders, branches] = await Promise.all([
       prisma.tradeOrder.findMany({
         where: {
           lc: null,
           status: { notIn: ['CANCELLED', 'COMPLETED'] },
-          branchId: branchId ?? undefined,
+          ...(branchIds ? { branchId: { in: branchIds } } : {}),
         },
         select: {
           id: true, number: true, type: true, currency: true, totalValue: true,
@@ -802,6 +810,8 @@ export const tradeService = {
 
   async getStats(session: AppSession | null, branchId?: string) {
     await authorize(session, 'trade:read');
+    const branchIds = await getScopedBranchIds(session, branchId);
+    const branchFilter = branchIds ? { branchId: { in: branchIds } } : {};
 
     const [
       totalOrders,
@@ -811,20 +821,25 @@ export const tradeService = {
       expiringLCs,
       pendingDrawdowns,
     ] = await Promise.all([
-      prisma.tradeOrder.count({ where: { branchId, status: { not: 'CANCELLED' } } }),
-      prisma.tradeOrder.count({ where: { branchId, type: 'EXPORT', status: { not: 'CANCELLED' } } }),
-      prisma.tradeOrder.count({ where: { branchId, type: 'IMPORT', status: { not: 'CANCELLED' } } }),
+      prisma.tradeOrder.count({ where: { ...branchFilter, status: { not: 'CANCELLED' } } }),
+      prisma.tradeOrder.count({ where: { ...branchFilter, type: 'EXPORT', status: { not: 'CANCELLED' } } }),
+      prisma.tradeOrder.count({ where: { ...branchFilter, type: 'IMPORT', status: { not: 'CANCELLED' } } }),
       prisma.letterOfCredit.count({
-        where: { branchId, status: { in: ['ACTIVE', 'PARTIALLY_UTILIZED', 'ISSUED', 'ADVISED', 'CONFIRMED'] } },
+        where: { ...branchFilter, status: { in: ['ACTIVE', 'PARTIALLY_UTILIZED', 'ISSUED', 'ADVISED', 'CONFIRMED'] } },
       }),
       prisma.letterOfCredit.count({
         where: {
-          branchId,
+          ...branchFilter,
           status: { in: ['ACTIVE', 'ISSUED', 'CONFIRMED'] },
           expiryDate: { lte: new Date(Date.now() + 30 * 86400000) },
         },
       }),
-      prisma.lCDrawdown.count({ where: { status: 'DOCUMENTS_SUBMITTED', lc: { branchId } } }),
+      prisma.lCDrawdown.count({
+        where: {
+          status: 'DOCUMENTS_SUBMITTED',
+          lc: branchIds ? { branchId: { in: branchIds } } : undefined,
+        },
+      }),
     ]);
 
     return { totalOrders, exportOrders, importOrders, activeLCs, expiringLCs, pendingDrawdowns };

@@ -23,7 +23,12 @@ export async function createDebitNoteAction(
     vatAdjustment: formData.get('vatAdjustment') ?? 0,
     items: parseItems(formData),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     const session = await getSession();
     await purchaseService.createDebitNote(session, parsed.data);

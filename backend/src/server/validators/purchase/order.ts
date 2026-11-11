@@ -14,7 +14,7 @@ export const poItemSchema = z.object({
 });
 
 export const poCreateSchema = z.object({
-  branchId: z.string().cuid(),
+  branchId: z.string().cuid('Select a branch'),
   supplierId: z.string().cuid('Select a supplier'),
   requisitionId: z.string().cuid().optional().or(z.literal('')),
   deliveryDate: z.coerce.date(),

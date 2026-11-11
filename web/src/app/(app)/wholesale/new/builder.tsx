@@ -120,7 +120,7 @@ export function InvoiceBuilder({
   }, [cart]);
 
   const paidTotal = payments.reduce((a, p) => a + (Number(p.amount) || 0), 0);
-  const balance = totals.total - paidTotal;
+  const balance = Math.round((totals.total - paidTotal) * 100) / 100;
 
   const fmt = (v: number) => formatCurrency(v, branch.currency);
 
@@ -129,7 +129,10 @@ export function InvoiceBuilder({
     const res = await fetch(
       `/api/wholesale/search?q=${encodeURIComponent(q)}&branchId=${encodeURIComponent(branch.id)}`,
     );
-    if (res.ok) setProducts(await res.json());
+    if (!res.ok) return [] as BuilderProduct[];
+    const data = (await res.json()) as BuilderProduct[];
+    if (Array.isArray(data)) setProducts(data);
+    return data;
   }
 
   function addToCart(p: BuilderProduct) {
@@ -176,17 +179,31 @@ export function InvoiceBuilder({
     );
   }
 
-  function onScanSubmit(e: React.FormEvent) {
+  async function onScanSubmit(e: React.FormEvent) {
     e.preventDefault();
     const q = scanQuery.trim();
     if (!q) return;
-    const exact = products.find((p) => p.barcode === q || p.sku.toLowerCase() === q.toLowerCase());
+    const qLower = q.toLowerCase();
+    const exact = products.find(
+      (p) => (p.barcode && p.barcode.toLowerCase() === qLower) || p.sku.toLowerCase() === qLower,
+    );
     if (exact) {
       addToCart(exact);
       setScanQuery('');
       scanRef.current?.focus();
     } else {
-      searchProducts(q);
+      const results = await searchProducts(q);
+      const resolved =
+        results.find(
+          (p) =>
+            (p.barcode && p.barcode.toLowerCase() === qLower) ||
+            p.sku.toLowerCase() === qLower,
+        ) ?? (results.length === 1 ? results[0] : undefined);
+      if (resolved) {
+        addToCart(resolved);
+        setScanQuery('');
+        scanRef.current?.focus();
+      }
     }
   }
 
@@ -200,7 +217,8 @@ export function InvoiceBuilder({
     setPayments((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
   }
   function addPayment() {
-    setPayments((prev) => [...prev, { method: 'CASH', amount: 0, reference: '' }]);
+    const remaining = Math.max(0, Math.round((totals.total - paidTotal) * 100) / 100);
+    setPayments((prev) => [...prev, { method: 'CASH', amount: remaining, reference: '' }]);
   }
   function removePayment(idx: number) {
     setPayments((prev) => prev.filter((_, i) => i !== idx));

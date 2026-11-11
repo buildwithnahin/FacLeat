@@ -58,12 +58,14 @@ export function ReturnForm({
       if (res && 'success' in res && res.success) {
         setMessage({ type: 'ok', text: 'Return recorded' });
         setQty({});
+        setReason('');
         router.refresh();
       }
     });
   }
 
   const hasReturnable = items.some((i) => i.fulfilledQty - i.returnedQty > 0);
+  const refundTotal = items.reduce((acc, i) => acc + (qty[i.id] || 0) * i.unitPrice, 0);
 
   return (
     <Card className="p-4 space-y-3">
@@ -91,12 +93,22 @@ export function ReturnForm({
                 className="w-20 text-right tabular"
                 disabled={disabled}
                 value={qty[i.id] ?? ''}
-                onChange={(e) => setQty((p) => ({ ...p, [i.id]: Number(e.target.value) }))}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  const clamped = isNaN(val) ? 0 : Math.max(0, Math.min(remaining, val));
+                  setQty((p) => ({ ...p, [i.id]: clamped }));
+                }}
               />
             </div>
           );
         })}
       </div>
+      {refundTotal > 0 && (
+        <div className="flex justify-between text-sm font-medium border-t pt-2">
+          <span>Estimated refund</span>
+          <span className="tabular">{formatCurrency(refundTotal, currency)}</span>
+        </div>
+      )}
       <div>
         <Label>Refund method</Label>
         <select
@@ -127,7 +139,7 @@ export function ReturnForm({
       <Button
         variant="outline"
         onClick={submit}
-        disabled={pending || !hasReturnable}
+        disabled={pending || !hasReturnable || refundTotal <= 0}
         className="w-full"
       >
         {pending ? 'Processing…' : 'Process return'}

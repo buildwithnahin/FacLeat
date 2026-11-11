@@ -100,7 +100,8 @@ export function OrderActions({
 
   function runCancel() {
     if (cancelReason.trim().length < 3)
-      return setMessage({ type: 'err', text: 'Reason is required' });
+      return setMessage({ type: 'err', text: 'Reason is required (min 3 characters)' });
+    if (!confirm('Are you sure you want to cancel this order? This action cannot be undone.')) return;
     startTransition(async () => {
       const res = await cancelCorporateOrderAction({ orderId, reason: cancelReason });
       if (res && 'error' in res && res.error) return setMessage({ type: 'err', text: res.error });
@@ -138,9 +139,11 @@ export function OrderActions({
                     step="any"
                     className="w-20 text-right tabular"
                     value={delivQty[i.id] ?? ''}
-                    onChange={(e) =>
-                      setDelivQty((p) => ({ ...p, [i.id]: Number(e.target.value) }))
-                    }
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      const clamped = isNaN(val) ? 0 : Math.max(0, Math.min(remaining, val));
+                      setDelivQty((p) => ({ ...p, [i.id]: clamped }));
+                    }}
                   />
                 </div>
               );
@@ -187,9 +190,11 @@ export function OrderActions({
                     step="any"
                     className="w-20 text-right tabular"
                     value={invoiceQty[i.id] ?? ''}
-                    onChange={(e) =>
-                      setInvoiceQty((p) => ({ ...p, [i.id]: Number(e.target.value) }))
-                    }
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      const clamped = isNaN(val) ? 0 : Math.max(0, Math.min(billable, val));
+                      setInvoiceQty((p) => ({ ...p, [i.id]: clamped }));
+                    }}
                   />
                 </div>
               );

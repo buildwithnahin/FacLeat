@@ -8,7 +8,12 @@ export async function GET(req: NextRequest) {
   const session = await getMobileSession(req);
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
-  const branchId = req.nextUrl.searchParams.get('branchId') ?? session.activeBranchId ?? undefined;
+  const branchId =
+    req.nextUrl.searchParams.get('branchId') ??
+    session.activeBranchId ??
+    session.defaultBranchId ??
+    session.allowedBranchIds?.[0] ??
+    undefined;
   try {
     const stats = await ecommerceService.dashboard(session, branchId ?? undefined);
     return Response.json(apiOk(stats));

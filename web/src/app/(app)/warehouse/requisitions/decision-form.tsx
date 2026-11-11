@@ -39,7 +39,6 @@ export function StockRequisitionDecisionForm({
   return (
     <form action={formAction} className="space-y-4">
       <input type="hidden" name="requisitionId" value={requisitionId} />
-      <input type="hidden" name="decision" value={decision} />
       <input type="hidden" name="itemsJson" value={JSON.stringify(rows)} />
 
       <div className="space-y-2">
@@ -99,6 +98,8 @@ export function StockRequisitionDecisionForm({
       <div className="flex flex-wrap justify-end gap-2">
         <Button
           type="submit"
+          name="decision"
+          value="REJECT"
           variant="outline"
           disabled={pending}
           onClick={() => setDecision('REJECT')}
@@ -107,6 +108,8 @@ export function StockRequisitionDecisionForm({
         </Button>
         <Button
           type="submit"
+          name="decision"
+          value="APPROVE"
           variant="dark"
           disabled={pending}
           onClick={() => setDecision('APPROVE')}

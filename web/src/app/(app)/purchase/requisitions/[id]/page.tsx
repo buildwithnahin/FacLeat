@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Pill } from '@/components/shared/pill';
 import { DataTable } from '@/components/shared/data-table';
-import { decideRequisitionAction } from '@/server/actions/purchase';
+import { DecideRequisitionButtons } from './decide-buttons';
 import { getSession } from '@/server/auth/session';
 import { backendFetch, BackendApiError } from '@/lib/backend-client';
 import { getEntityApprovalRequest } from '@/lib/approval-status';
@@ -89,26 +89,7 @@ export default async function RequisitionDetailPage({
         title={pr.number}
         description={`${pr.department} · requested by ${pr.requestedBy}`}
       >
-        {canApprove && (
-          <>
-            <form action={decideRequisitionAction}>
-              <input type="hidden" name="id" value={pr.id} />
-              <input type="hidden" name="decision" value="REJECT" />
-              <Button type="submit" variant="outline">
-                <X className="h-4 w-4" />
-                Reject
-              </Button>
-            </form>
-            <form action={decideRequisitionAction}>
-              <input type="hidden" name="id" value={pr.id} />
-              <input type="hidden" name="decision" value="APPROVE" />
-              <Button type="submit" variant="dark">
-                <Check className="h-4 w-4" />
-                Approve
-              </Button>
-            </form>
-          </>
-        )}
+        {canApprove && <DecideRequisitionButtons id={pr.id} />}
         {canConvert && (
           <Button variant="dark" asChild>
             <Link href={`/purchase/orders/new?requisitionId=${pr.id}`}>

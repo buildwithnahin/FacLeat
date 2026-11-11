@@ -127,8 +127,10 @@ export function DamageReportForm({
             </select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="reason">Reason</Label>
-            <Input id="reason" name="reason" placeholder="e.g. torn upper, water damage, mould" />
+            <Label htmlFor="reason">
+              Reason <span className="text-destructive">*</span>
+            </Label>
+            <Input id="reason" name="reason" required placeholder="e.g. torn upper, water damage, mould" />
           </div>
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor="note">Report note</Label>
@@ -237,7 +239,7 @@ export function DamageReportForm({
       {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
 
       <div className="flex items-center gap-2">
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || rows.length === 0}>
           {pending ? 'Saving…' : 'Create damage report'}
         </Button>
       </div>

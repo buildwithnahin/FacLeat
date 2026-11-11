@@ -253,7 +253,7 @@ export const factoryService = {
   // ─── Production Plan ───────────────────────────────────────────────────────
   async listPlans(
     session: AppSession | null,
-    filters: { branchId?: string; status?: string } = {},
+    filters: { branchId?: string; status?: string; search?: string } = {},
   ) {
     await authorize(session, 'factory:read');
     const branchIds = await getScopedBranchIds(session, filters.branchId);
@@ -261,6 +261,13 @@ export const factoryService = {
       where: {
         ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status as Prisma.ProductionPlanWhereInput['status'],
+        OR: filters.search
+          ? [
+              { planNo: { contains: filters.search } },
+              { product: { name: { contains: filters.search } } },
+              { product: { sku: { contains: filters.search } } },
+            ]
+          : undefined,
       },
       orderBy: { createdAt: 'desc' },
       include: {

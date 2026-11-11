@@ -53,7 +53,12 @@ export async function createCustomerReturnAction(
     intakeNote: formData.get('intakeNote') ?? '',
     items: parseItemsJson(formData),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
 
   try {
     const session = await getSession();
@@ -77,7 +82,12 @@ export async function inspectCustomerReturnAction(
     inspectionNote: formData.get('inspectionNote') ?? '',
     items: parseDecisionItemsJson(formData),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
 
   try {
     const session = await getSession();
@@ -101,7 +111,12 @@ export async function createDamageReportAction(
     note: formData.get('note') ?? '',
     items: parseItemsJson(formData),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
 
   try {
     const session = await getSession();
@@ -128,7 +143,12 @@ export async function resolveDamageReportAction(
     claimReference: formData.get('claimReference') ?? '',
     resolutionNote: formData.get('resolutionNote') ?? '',
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
 
   try {
     const session = await getSession();
@@ -149,7 +169,12 @@ export async function rejectDamageReportAction(
     id: formData.get('id'),
     resolutionNote: formData.get('resolutionNote') ?? '',
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
 
   try {
     const session = await getSession();

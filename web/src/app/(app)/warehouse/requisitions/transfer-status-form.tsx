@@ -25,7 +25,6 @@ export function StockTransferStatusForm({
   return (
     <form action={formAction} className="space-y-3">
       <input type="hidden" name="transferId" value={transferId} />
-      <input type="hidden" name="status" value={status} />
       <div className="space-y-2">
         <Label htmlFor={`dispatch-note-${transferId}`}>Workflow note</Label>
         <Textarea id={`dispatch-note-${transferId}`} name="dispatchNote" rows={2} />
@@ -36,6 +35,8 @@ export function StockTransferStatusForm({
           <Button
             key={action.status}
             type="submit"
+            name="status"
+            value={action.status}
             variant={action.dark ? 'dark' : 'outline'}
             disabled={pending}
             onClick={() => setStatus(action.status)}

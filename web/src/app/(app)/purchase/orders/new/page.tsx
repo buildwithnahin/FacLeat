@@ -1,6 +1,7 @@
 import { PageHeader } from '@/components/shared/page-header';
 import { POForm } from '../_components/po-form';
 import { backendFetch, BackendApiError } from '@/lib/backend-client';
+import { getSession } from '@/server/auth/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,8 +41,13 @@ export default async function NewPurchaseOrderPage({
   searchParams: Promise<{ requisitionId?: string }>;
 }) {
   const sp = await searchParams;
+  const session = await getSession();
+  const defaultBranchId =
+    session?.activeBranchId ?? session?.defaultBranchId ?? session?.allowedBranchIds?.[0];
   const [{ branches, products }, suppliers, requisition] = await Promise.all([
-    backendFetch<PurchaseLookups>('/api/mobile/purchase/lookups'),
+    backendFetch<PurchaseLookups>(
+      `/api/mobile/purchase/lookups${defaultBranchId ? `?branchId=${defaultBranchId}` : ''}`,
+    ),
     backendFetch<SupplierOption[]>('/api/mobile/suppliers?status=ACTIVE'),
     sp.requisitionId
       ? backendFetch<RequisitionDetail>(`/api/mobile/purchase/requisitions/${sp.requisitionId}`).catch(
@@ -87,6 +93,7 @@ export default async function NewPurchaseOrderPage({
           costPrice: p.costPrice,
         }))}
         prefill={prefill}
+        defaultBranchId={defaultBranchId}
       />
     </div>
   );

@@ -23,7 +23,11 @@ interface DashboardStats {
 export default async function CorporateOverviewPage() {
   const session = await getSession();
   if (!session) redirect('/login');
-  const branchId = session.activeBranchId ?? undefined;
+  const branchId =
+    session.activeBranchId ??
+    session.defaultBranchId ??
+    session.allowedBranchIds?.[0] ??
+    undefined;
   const qs = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
   const { orderAgg, invoiceAgg, openQuotes, overdueInvoices } = await backendFetch<DashboardStats>(
     `/api/mobile/corporate-sales/dashboard${qs}`,

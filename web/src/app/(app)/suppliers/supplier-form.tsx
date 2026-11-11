@@ -41,7 +41,7 @@ const selectClass =
 export interface SupplierFormProps {
   mode: 'create' | 'edit';
   branches: { id: string; name: string; code: string }[];
-  initial?: {
+  initial?: Partial<{
     id: string;
     branchId: string;
     name: string;
@@ -57,7 +57,7 @@ export interface SupplierFormProps {
     openingBalance: string;
     status: string;
     notes: string | null;
-  };
+  }>;
 }
 
 export function SupplierForm({ mode, branches, initial }: SupplierFormProps) {

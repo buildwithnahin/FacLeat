@@ -10,9 +10,15 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
   const sp = req.nextUrl.searchParams;
+  const branchId =
+    sp.get('branchId') ??
+    session.activeBranchId ??
+    session.defaultBranchId ??
+    session.allowedBranchIds?.[0] ??
+    undefined;
   try {
     const data = await tradeService.listOrders(session, {
-      branchId: sp.get('branchId') ?? undefined,
+      branchId,
       type: sp.get('type') ?? undefined,
       status: sp.get('status') ?? undefined,
       search: sp.get('search') ?? undefined,
@@ -32,7 +38,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const parsed = createTradeOrderSchema.safeParse(body);
   if (!parsed.success) {
-    return Response.json(apiError('Validation failed', parsed.error.flatten()), { status: 422 });
+    return Response.json(
+      apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten()),
+      { status: 422 },
+    );
   }
 
   try {

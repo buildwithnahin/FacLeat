@@ -13,7 +13,12 @@ export async function GET(req: NextRequest) {
     const invoices = await corporateService.listInvoices(session, {
       status: sp.get('status') ?? undefined,
       search: sp.get('search') ?? undefined,
-      branchId: sp.get('branchId') ?? undefined,
+      branchId:
+        sp.get('branchId') ??
+        session.activeBranchId ??
+        session.defaultBranchId ??
+        session.allowedBranchIds?.[0] ??
+        undefined,
     });
     return Response.json(apiOk(invoices));
   } catch (err) {

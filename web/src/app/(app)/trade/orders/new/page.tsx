@@ -15,7 +15,11 @@ interface FormOptions {
 
 export default async function NewTradeOrderPage() {
   const session = await getSession();
-  const branchId = session?.activeBranchId ?? null;
+  const branchId =
+    session?.activeBranchId ??
+    session?.defaultBranchId ??
+    session?.allowedBranchIds?.[0] ??
+    null;
 
   const { branches, customers, suppliers } = await backendFetch<FormOptions>(
     '/api/mobile/trade/orders/form-options',

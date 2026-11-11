@@ -45,7 +45,12 @@ export async function createStockRequisitionAction(
     remarks: formData.get('remarks') ?? '',
     items: parseJsonArray(formData, 'itemsJson'),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
 
   try {
     const session = await getSession();
@@ -69,7 +74,12 @@ export async function decideStockRequisitionAction(
     rejectionReason: formData.get('rejectionReason') ?? '',
     items: parseJsonArray(formData, 'itemsJson'),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
 
   try {
     const session = await getSession();
@@ -90,7 +100,12 @@ export async function assignStockRequisitionWarehouseAction(
     requisitionId: formData.get('requisitionId'),
     sourceWarehouseId: formData.get('sourceWarehouseId'),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
 
   try {
     const session = await getSession();
@@ -119,7 +134,12 @@ export async function createStockDispatchAction(
     remarks: formData.get('remarks') ?? '',
     items: parseJsonArray(formData, 'itemsJson'),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
 
   try {
     const session = await getSession();
@@ -141,7 +161,12 @@ export async function updateStockTransferStatusAction(
     status: formData.get('status'),
     dispatchNote: formData.get('dispatchNote') ?? '',
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
 
   try {
     const session = await getSession();
@@ -164,7 +189,12 @@ export async function receiveStockTransferAction(
     receiveRemarks: formData.get('receiveRemarks') ?? '',
     items: parseJsonArray(formData, 'itemsJson'),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
 
   try {
     const session = await getSession();

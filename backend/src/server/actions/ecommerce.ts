@@ -15,7 +15,10 @@ import { ApiError } from '@/lib/errors';
 export async function syncEcommerceOrderAction(input: unknown) {
   const parsed = syncOrderSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const session = await getSession();
@@ -35,7 +38,10 @@ export async function syncEcommerceOrderAction(input: unknown) {
 export async function packEcommerceOrderAction(input: unknown) {
   const parsed = packOrderSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const session = await getSession();
@@ -52,7 +58,10 @@ export async function packEcommerceOrderAction(input: unknown) {
 export async function fulfillEcommerceOrderAction(input: unknown) {
   const parsed = fulfillOrderSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const session = await getSession();
@@ -73,7 +82,10 @@ export async function fulfillEcommerceOrderAction(input: unknown) {
 export async function returnEcommerceOrderAction(input: unknown) {
   const parsed = returnOrderSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const session = await getSession();
@@ -90,7 +102,10 @@ export async function returnEcommerceOrderAction(input: unknown) {
 export async function reconcileEcommercePaymentsAction(input: unknown) {
   const parsed = reconcilePaymentsSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const session = await getSession();

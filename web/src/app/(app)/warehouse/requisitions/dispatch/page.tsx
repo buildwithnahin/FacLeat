@@ -30,7 +30,7 @@ interface RequisitionRow {
 
 export default async function StockDispatchQueuePage() {
   const session = await getSession();
-  const branchId = session?.activeBranchId ?? undefined;
+  const branchId = session?.activeBranchId || session?.defaultBranchId || session?.allowedBranchIds?.[0];
   const qs = new URLSearchParams();
   if (branchId) qs.set('sourceBranchId', branchId);
   const rows = await backendFetch<RequisitionRow[]>(`/api/mobile/warehouse/requisitions?${qs.toString()}`);

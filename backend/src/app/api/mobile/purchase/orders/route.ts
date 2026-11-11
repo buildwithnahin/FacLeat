@@ -12,13 +12,24 @@ export async function GET(req: NextRequest) {
   const status = req.nextUrl.searchParams.get('status') ?? undefined;
   const statusIn = req.nextUrl.searchParams.get('statusIn');
   const supplierId = req.nextUrl.searchParams.get('supplierId') ?? undefined;
-  const branchId = req.nextUrl.searchParams.get('branchId') ?? undefined;
+  const search = req.nextUrl.searchParams.get('search') ?? req.nextUrl.searchParams.get('q') ?? undefined;
+  const branchId =
+    req.nextUrl.searchParams.get('branchId') ??
+    session.activeBranchId ??
+    session.defaultBranchId ??
+    session.allowedBranchIds?.[0] ??
+    undefined;
 
   try {
     // `statusIn` (comma-separated) is an API-layer convenience for pickers
     // that need "any open PO" — filtered here rather than in the service so
     // `listPurchaseOrders`'s single-status filter signature stays untouched.
-    const data = await purchaseService.listPurchaseOrders(session, { status, supplierId, branchId });
+    const data = await purchaseService.listPurchaseOrders(session, {
+      status,
+      supplierId,
+      branchId,
+      search,
+    });
     const filtered = statusIn
       ? data.filter((po) => statusIn.split(',').includes(po.status))
       : data;
@@ -37,7 +48,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const parsed = poCreateSchema.safeParse(body ?? {});
   if (!parsed.success) {
-    return Response.json(apiError('Validation failed', parsed.error.flatten()), { status: 422 });
+    return Response.json(
+      apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten()),
+      { status: 422 },
+    );
   }
 
   try {

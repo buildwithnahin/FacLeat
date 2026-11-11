@@ -104,7 +104,11 @@ export function ProductionPlanForm({ branches, products }: { branches: Branch[];
         </div>
       </Card>
 
-      {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
+      {state?.error && (
+        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+          {state.error}
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
         <Button type="submit" variant="dark" disabled={pending}>

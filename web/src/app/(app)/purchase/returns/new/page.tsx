@@ -1,6 +1,7 @@
 import { PageHeader } from '@/components/shared/page-header';
 import { DebitNoteForm } from '../_components/debit-note-form';
 import { backendFetch } from '@/lib/backend-client';
+import { getSession } from '@/server/auth/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,8 +27,13 @@ export default async function NewDebitNotePage({
   searchParams: Promise<{ supplierId?: string; invoiceId?: string; grnId?: string }>;
 }) {
   const sp = await searchParams;
+  const session = await getSession();
+  const defaultBranchId =
+    session?.activeBranchId ?? session?.defaultBranchId ?? session?.allowedBranchIds?.[0];
   const [{ branches, warehouses, products }, suppliers] = await Promise.all([
-    backendFetch<PurchaseLookups>('/api/mobile/purchase/lookups'),
+    backendFetch<PurchaseLookups>(
+      `/api/mobile/purchase/lookups${defaultBranchId ? `?branchId=${defaultBranchId}` : ''}`,
+    ),
     backendFetch<SupplierOption[]>('/api/mobile/suppliers?status=ACTIVE'),
   ]);
 

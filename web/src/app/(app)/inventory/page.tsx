@@ -39,7 +39,7 @@ interface ProductSummary {
 
 export default async function InventoryOverviewPage() {
   const session = await getSession();
-  const branchId = session?.activeBranchId ?? undefined;
+  const branchId = session?.activeBranchId || session?.defaultBranchId || undefined;
   const qs = branchId ? `?branchId=${branchId}` : '';
 
   const [valuation, movements, products] = await Promise.all([

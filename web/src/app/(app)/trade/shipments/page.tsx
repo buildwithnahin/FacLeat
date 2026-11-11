@@ -47,7 +47,11 @@ const columns: DataTableColumn<Row>[] = [
 
 export default async function ShipmentsPage() {
   const session = await getSession();
-  const branchId = session?.activeBranchId ?? undefined;
+  const branchId =
+    session?.activeBranchId ??
+    session?.defaultBranchId ??
+    session?.allowedBranchIds?.[0] ??
+    undefined;
   const qs = new URLSearchParams(branchId ? { branchId } : {});
   const rows = await backendFetch<Row[]>(`/api/mobile/trade/shipments?${qs.toString()}`);
 

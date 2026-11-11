@@ -9,8 +9,8 @@ import { DataTable } from '@/components/shared/data-table';
 import { StepIndicator, type StepState } from '@/components/shared/step-indicator';
 import {
   approvePurchaseOrderAction,
-  cancelPurchaseOrderAction,
 } from '@/server/actions/purchase';
+import { CancelPurchaseOrderButton } from './cancel-button';
 import { getSession } from '@/server/auth/session';
 import { backendFetch, BackendApiError } from '@/lib/backend-client';
 import { d, formatCurrency } from '@/lib/money';
@@ -139,15 +139,7 @@ export default async function PurchaseOrderDetailPage({
             </Link>
           </Button>
         )}
-        {canCancel && (
-          <form action={cancelPurchaseOrderAction}>
-            <input type="hidden" name="id" value={po.id} />
-            <Button type="submit" variant="outline">
-              <X className="h-4 w-4" />
-              Cancel
-            </Button>
-          </form>
-        )}
+        {canCancel && <CancelPurchaseOrderButton id={po.id} />}
       </PageHeader>
 
       <DecisionNoticeBanner notice={notice} />

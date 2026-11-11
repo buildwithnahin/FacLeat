@@ -4,6 +4,7 @@ import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import { approvalService } from '@/server/services/approval.service';
+import { getScopedBranchIds } from '@/server/auth/scope';
 import type { AppSession } from '@/server/auth/session';
 import type { PurchaseOrderCreateInput } from '@/server/validators/purchase';
 import { NotFoundError, ValidationError } from '@/lib/errors';
@@ -13,12 +14,14 @@ import { computeLineTotal, isShoesCategory, normalizeSize } from './shared';
 export const orderMethods = {
   async listPurchaseOrders(
     session: AppSession | null,
-    filters: { branchId?: string; status?: string; supplierId?: string } = {},
+    filters: { branchId?: string; status?: string; supplierId?: string; search?: string } = {},
   ) {
     await authorize(session, 'purchase:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
+    const search = filters.search?.trim();
     return prisma.purchaseOrder.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status as
           | 'DRAFT'
           | 'PENDING'
@@ -28,6 +31,15 @@ export const orderMethods = {
           | 'CANCELLED'
           | undefined,
         supplierId: filters.supplierId,
+        ...(search
+          ? {
+              OR: [
+                { number: { contains: search } },
+                { supplier: { name: { contains: search } } },
+                { supplier: { code: { contains: search } } },
+              ],
+            }
+          : {}),
       },
       orderBy: { createdAt: 'desc' },
       include: {

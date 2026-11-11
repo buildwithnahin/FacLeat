@@ -30,7 +30,7 @@ interface BalanceRow {
 
 export default async function CountPage() {
   const session = await getSession();
-  const branchId = session?.activeBranchId;
+  const branchId = session?.activeBranchId || session?.defaultBranchId || session?.allowedBranchIds?.[0];
   if (!branchId) {
     return (
       <div>

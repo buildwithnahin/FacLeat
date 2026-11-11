@@ -45,7 +45,11 @@ export default async function WholesaleOverviewPage() {
   const session = await getSession();
   if (!session) redirect('/login');
 
-  const branchId = session.activeBranchId ?? undefined;
+  const branchId =
+    session.activeBranchId ??
+    session.defaultBranchId ??
+    session.allowedBranchIds?.[0] ??
+    undefined;
   const qs = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
   const { totals, overdue, recent } = await backendFetch<DashboardStats>(
     `/api/mobile/wholesale/dashboard${qs}`,

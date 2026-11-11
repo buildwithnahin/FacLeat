@@ -15,6 +15,7 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Issued Products' };
 
 interface SearchParams {
+  q?: string;
   warehouseId?: string;
   refType?: string;
   from?: string;
@@ -56,7 +57,7 @@ export default async function IssuedProductsPage({
 }) {
   const params = await searchParams;
   const session = await getSession();
-  const branchId = session?.activeBranchId ?? undefined;
+  const branchId = session?.activeBranchId || session?.defaultBranchId || session?.allowedBranchIds?.[0];
 
   const qs = new URLSearchParams({ direction: 'OUT', limit: '500' });
   if (branchId) qs.set('branchId', branchId);
@@ -67,12 +68,23 @@ export default async function IssuedProductsPage({
   if (from) qs.set('from', from.toISOString());
   if (to) qs.set('to', to.toISOString());
 
-  const [warehouses, rows] = await Promise.all([
+  const [warehouses, rawRows] = await Promise.all([
     branchId
       ? backendFetch<WarehouseOption[]>(`/api/mobile/warehouse/warehouses?branchId=${branchId}&activeOnly=true`)
       : Promise.resolve([]),
     backendFetch<MovementRow[]>(`/api/mobile/inventory/movements?${qs.toString()}`),
   ]);
+
+  const q = (params.q ?? '').trim().toLowerCase();
+  const rows = q
+    ? rawRows.filter(
+        (r) =>
+          r.product.sku.toLowerCase().includes(q) ||
+          r.product.name.toLowerCase().includes(q) ||
+          (r.refId && r.refId.toLowerCase().includes(q)) ||
+          (r.note && r.note.toLowerCase().includes(q)),
+      )
+    : rawRows;
 
   const totalQty = sumDecimal(rows.map((r) => r.quantity));
   const totalValue = sumDecimal(rows.map((r) => d(r.quantity).mul(r.costPerUnit)));

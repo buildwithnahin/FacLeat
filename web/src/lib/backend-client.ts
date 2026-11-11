@@ -1,7 +1,8 @@
 import 'server-only';
+import { redirect } from 'next/navigation';
 import { auth } from '@/server/auth/config';
 
-const BACKEND_URL = process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export class BackendApiError extends Error {
   constructor(
@@ -47,6 +48,9 @@ export async function backendFetch<T>(path: string, init?: RequestInit): Promise
 
   const json = await res.json().catch(() => null);
   if (!res.ok || !json?.success) {
+    if (res.status === 401) {
+      redirect('/login');
+    }
     throw new BackendApiError(
       json?.error ?? `Backend request failed (${res.status})`,
       res.status,
@@ -79,6 +83,9 @@ export async function backendUpload<T>(path: string, formData: FormData): Promis
 
   const json = await res.json().catch(() => null);
   if (!res.ok || !json?.success) {
+    if (res.status === 401) {
+      redirect('/login');
+    }
     throw new BackendApiError(
       json?.error ?? `Backend request failed (${res.status})`,
       res.status,

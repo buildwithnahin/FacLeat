@@ -33,9 +33,14 @@ interface ReconciliationRun {
 
 export default async function EcommerceReconcilePage() {
   const session = await getSession();
-  const branchId = session?.activeBranchId ?? undefined;
+  const branchId =
+    session?.activeBranchId ??
+    session?.defaultBranchId ??
+    session?.allowedBranchIds?.[0] ??
+    undefined;
+  const query = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
   const { channels, runs } = await backendFetch<{ channels: Channel[]; runs: ReconciliationRun[] }>(
-    '/api/mobile/ecommerce/reconcile',
+    `/api/mobile/ecommerce/reconcile${query}`,
   );
 
   return (

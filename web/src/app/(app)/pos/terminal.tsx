@@ -117,15 +117,18 @@ export function PosTerminal({
   }, [cart, vatMode]);
 
   const paidTotal = payments.reduce((a, p) => a + (Number(p.amount) || 0), 0);
-  const cashPaid = payments.filter((p) => p.method === 'CASH').reduce((a, p) => a + p.amount, 0);
-  const changeDue = cashPaid > 0 ? Math.max(0, paidTotal - totals.total) : 0;
-  const balance = totals.total - paidTotal;
+  const cashPaid = payments.filter((p) => p.method === 'CASH').reduce((a, p) => a + (Number(p.amount) || 0), 0);
+  const changeDue = cashPaid > 0 ? Math.max(0, Math.round((paidTotal - totals.total) * 100) / 100) : 0;
+  const balance = Math.round((totals.total - paidTotal) * 100) / 100;
 
   const fmt = (v: number) => formatCurrency(v, session.currency);
 
   async function searchProducts(q: string) {
     setScanQuery(q);
-    const res = await fetch(`/api/pos/search?q=${encodeURIComponent(q)}`);
+    const qs = new URLSearchParams();
+    if (q) qs.set('q', q);
+    if (session.branchId) qs.set('branchId', session.branchId);
+    const res = await fetch(`/api/pos/search?${qs.toString()}`);
     if (!res.ok) return [] as TerminalProduct[];
     const data = (await res.json()) as TerminalProduct[];
     setProducts(data);
@@ -178,17 +181,22 @@ export function PosTerminal({
     e.preventDefault();
     const q = scanQuery.trim();
     if (!q) return;
-    // If exact barcode/sku match in loaded products, add immediately
-    const exact = products.find((p) => p.barcode === q || p.sku.toLowerCase() === q.toLowerCase());
+    const qLower = q.toLowerCase();
+    const exact = products.find(
+      (p) => (p.barcode && p.barcode.toLowerCase() === qLower) || p.sku.toLowerCase() === qLower,
+    );
     if (exact) {
       addToCart(exact);
       setScanQuery('');
       scanRef.current?.focus();
     } else {
       const results = await searchProducts(q);
-      const resolved = results.find(
-        (p) => p.barcode === q || p.sku.toLowerCase() === q.toLowerCase(),
-      );
+      const resolved =
+        results.find(
+          (p) =>
+            (p.barcode && p.barcode.toLowerCase() === qLower) ||
+            p.sku.toLowerCase() === qLower,
+        ) ?? (results.length === 1 ? results[0] : undefined);
       if (resolved) {
         addToCart(resolved);
         setScanQuery('');
@@ -209,8 +217,25 @@ export function PosTerminal({
     setPayments((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
   }
 
+  function setExactPayment() {
+    if (totals.total <= 0) return;
+    setPayments((prev) => {
+      if (prev.length === 0) return [{ method: 'CASH', amount: totals.total, reference: '' }];
+      return prev.map((p, i) => (i === 0 ? { ...p, amount: totals.total } : p));
+    });
+  }
+
+  function addTenderAmount(add: number) {
+    setPayments((prev) => {
+      if (prev.length === 0) return [{ method: 'CASH', amount: add, reference: '' }];
+      const current = Number(prev[0]?.amount) || 0;
+      return prev.map((p, i) => (i === 0 ? { ...p, amount: current + add } : p));
+    });
+  }
+
   function addPayment() {
-    setPayments((prev) => [...prev, { method: 'CARD', amount: 0, reference: '' }]);
+    const remaining = Math.max(0, Math.round((totals.total - paidTotal) * 100) / 100);
+    setPayments((prev) => [...prev, { method: 'CARD', amount: remaining, reference: '' }]);
   }
   function removePayment(idx: number) {
     setPayments((prev) => prev.filter((_, i) => i !== idx));
@@ -221,8 +246,9 @@ export function PosTerminal({
       setMessage({ type: 'err', text: 'Cart is empty' });
       return;
     }
-    if (paidTotal < totals.total) {
-      setMessage({ type: 'err', text: `Underpaid by ${fmt(balance)}` });
+    const remainingDue = Math.round((totals.total - paidTotal) * 100) / 100;
+    if (remainingDue > 0) {
+      setMessage({ type: 'err', text: `Underpaid by ${fmt(remainingDue)}` });
       return;
     }
     startTransition(async () => {
@@ -402,7 +428,10 @@ export function PosTerminal({
                         value={l.quantity}
                         min={0}
                         step="any"
-                        onChange={(e) => setQty(l.productId, Number(e.target.value))}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          if (!isNaN(val) && val > 0) setQty(l.productId, val);
+                        }}
                       />
                       <button
                         type="button"
@@ -423,7 +452,10 @@ export function PosTerminal({
                       max={100}
                       step="any"
                       value={l.discountRate}
-                      onChange={(e) => setDiscount(l.productId, Number(e.target.value))}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setDiscount(l.productId, isNaN(val) ? 0 : val);
+                      }}
                       className={`w-16 rounded border px-1.5 py-0.5 text-right tabular ${
                         flag ? 'border-amber-500 text-amber-700' : ''
                       }`}
@@ -486,7 +518,48 @@ export function PosTerminal({
             {VAT_MODE_LABELS[vatMode].formula}
           </div>
 
-          <div className="text-sm font-medium">Payment</div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">Payment</span>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={setExactPayment}
+                disabled={totals.total <= 0}
+              >
+                Exact Cash
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-1.5 text-xs"
+                onClick={() => addTenderAmount(100)}
+              >
+                +100
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-1.5 text-xs"
+                onClick={() => addTenderAmount(500)}
+              >
+                +500
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-1.5 text-xs"
+                onClick={() => addTenderAmount(1000)}
+              >
+                +1000
+              </Button>
+            </div>
+          </div>
           {payments.map((p, i) => (
             <div key={i} className="flex gap-2">
               <select
@@ -506,7 +579,10 @@ export function PosTerminal({
                 step="any"
                 placeholder="0.00"
                 value={p.amount || ''}
-                onChange={(e) => setPayment(i, { amount: Number(e.target.value) })}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setPayment(i, { amount: isNaN(val) ? 0 : val });
+                }}
                 className="text-right tabular"
               />
               {payments.length > 1 && (

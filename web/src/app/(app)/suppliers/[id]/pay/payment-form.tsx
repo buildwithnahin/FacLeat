@@ -91,11 +91,14 @@ export function PaymentForm({ supplierId, supplierName, openInvoices }: PaymentF
             <Label htmlFor="invoiceId">Apply to invoice (optional)</Label>
             <select id="invoiceId" name="invoiceId" defaultValue="" className={selectClass}>
               <option value="">— none / general payment —</option>
-              {openInvoices.map((inv) => (
-                <option key={inv.id} value={inv.id}>
-                  {inv.number} — due {new Date(inv.dueDate).toLocaleDateString()} (total {inv.grandTotal}, paid {inv.paidAmount})
-                </option>
-              ))}
+              {openInvoices.map((inv) => {
+                const due = Math.max(0, Number(inv.grandTotal) - Number(inv.paidAmount));
+                return (
+                  <option key={inv.id} value={inv.id}>
+                    {inv.number} — remaining due {due.toFixed(2)} (total {inv.grandTotal}) · due {new Date(inv.dueDate).toLocaleDateString()}
+                  </option>
+                );
+              })}
             </select>
           </div>
 

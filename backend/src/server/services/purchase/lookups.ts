@@ -2,6 +2,7 @@ import 'server-only';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { branchService } from '@/server/services/branch.service';
+import { getScopedBranchIds } from '@/server/auth/scope';
 import type { AppSession } from '@/server/auth/session';
 
 export const lookupMethods = {
@@ -14,6 +15,7 @@ export const lookupMethods = {
    */
   async purchaseLookups(session: AppSession | null, filters: { branchId?: string } = {}) {
     await authorize(session, 'purchase:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
 
     const [branches, products, warehouses] = await Promise.all([
       branchService.listAccessible(session),
@@ -31,7 +33,14 @@ export const lookupMethods = {
         },
       }),
       prisma.warehouse.findMany({
-        where: { isActive: true, branchId: filters.branchId || undefined },
+        where: {
+          isActive: true,
+          ...(filters.branchId
+            ? { branchId: filters.branchId }
+            : branchIds
+              ? { branchId: { in: branchIds } }
+              : {}),
+        },
         orderBy: [{ branchId: 'asc' }, { name: 'asc' }],
         select: { id: true, code: true, name: true, branchId: true },
       }),

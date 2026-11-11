@@ -11,9 +11,18 @@ export async function GET(req: NextRequest) {
 
   const sp = req.nextUrl.searchParams;
   try {
+    const branchId =
+      sp.get('branchId') ??
+      session.activeBranchId ??
+      session.defaultBranchId ??
+      session.allowedBranchIds?.[0] ??
+      undefined;
     const sales = await posService.listSales(session, {
+      branchId,
       status: sp.get('status') ?? undefined,
       search: sp.get('search') ?? undefined,
+      sessionId: sp.get('sessionId') ?? undefined,
+      customerId: sp.get('customerId') ?? undefined,
     });
     return Response.json(apiOk(sales));
   } catch (err) {

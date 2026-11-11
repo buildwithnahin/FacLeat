@@ -21,7 +21,7 @@ import {
 export async function createTradeOrder(input: unknown) {
   const session = await getSession();
   const parsed = createTradeOrderSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   try {
     const data = await tradeService.createOrder(session, parsed.data);
     return apiOk(data, 'Trade order created');
@@ -33,7 +33,7 @@ export async function createTradeOrder(input: unknown) {
 export async function updateTradeOrderStatus(input: unknown) {
   const session = await getSession();
   const parsed = updateTradeOrderStatusSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   try {
     const data = await tradeService.updateOrderStatus(session, parsed.data);
     return apiOk(data, 'Status updated');
@@ -45,7 +45,7 @@ export async function updateTradeOrderStatus(input: unknown) {
 export async function createTradeShipment(input: unknown) {
   const session = await getSession();
   const parsed = createShipmentSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   try {
     const data = await tradeService.createShipment(session, parsed.data);
     return apiOk(data, 'Shipment recorded');
@@ -57,7 +57,7 @@ export async function createTradeShipment(input: unknown) {
 export async function updateTradeShipmentStatus(input: unknown) {
   const session = await getSession();
   const parsed = updateShipmentStatusSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   try {
     const data = await tradeService.updateShipmentStatus(session, parsed.data);
     return apiOk(data, 'Shipment status updated');
@@ -69,7 +69,7 @@ export async function updateTradeShipmentStatus(input: unknown) {
 export async function createLetterOfCredit(input: unknown) {
   const session = await getSession();
   const parsed = createLCSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   try {
     const data = await tradeService.createLC(session, parsed.data);
     return apiOk(data, 'Letter of Credit issued');
@@ -81,7 +81,7 @@ export async function createLetterOfCredit(input: unknown) {
 export async function updateLCStatus(input: unknown) {
   const session = await getSession();
   const parsed = updateLCStatusSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   try {
     const data = await tradeService.updateLCStatus(session, parsed.data);
     return apiOk(data, 'LC status updated');
@@ -93,7 +93,7 @@ export async function updateLCStatus(input: unknown) {
 export async function createLCAmendment(input: unknown) {
   const session = await getSession();
   const parsed = createLCAmendmentSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   try {
     const data = await tradeService.createAmendment(session, parsed.data);
     return apiOk(data, 'Amendment request submitted');
@@ -105,7 +105,7 @@ export async function createLCAmendment(input: unknown) {
 export async function decideLCAmendment(input: unknown) {
   const session = await getSession();
   const parsed = amendmentDecisionSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   try {
     const data = await tradeService.decideAmendment(session, parsed.data);
     return apiOk(data, `Amendment ${parsed.data.decision.toLowerCase()}`);
@@ -117,7 +117,7 @@ export async function decideLCAmendment(input: unknown) {
 export async function createLCDrawdown(input: unknown) {
   const session = await getSession();
   const parsed = createLCDrawdownSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   try {
     const data = await tradeService.createDrawdown(session, parsed.data);
     return apiOk(data, 'Drawdown presentation recorded');
@@ -129,7 +129,7 @@ export async function createLCDrawdown(input: unknown) {
 export async function decideLCDrawdown(input: unknown) {
   const session = await getSession();
   const parsed = drawdownDecisionSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   try {
     const data = await tradeService.decideDrawdown(session, parsed.data);
     return apiOk(data, `Drawdown ${parsed.data.decision.toLowerCase().replace('_', ' ')}`);
@@ -141,7 +141,7 @@ export async function decideLCDrawdown(input: unknown) {
 export async function recordLCDrawdownPayment(input: unknown) {
   const session = await getSession();
   const parsed = recordDrawdownPaymentSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   try {
     const data = await tradeService.recordDrawdownPayment(session, parsed.data);
     return apiOk(data, 'Payment recorded');
@@ -153,7 +153,7 @@ export async function recordLCDrawdownPayment(input: unknown) {
 export async function createTradePaymentAction(input: unknown) {
   const session = await getSession();
   const parsed = createTradePaymentSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   try {
     const data = await tradeService.createPayment(session, parsed.data);
     return apiOk(data, 'Payment recorded');

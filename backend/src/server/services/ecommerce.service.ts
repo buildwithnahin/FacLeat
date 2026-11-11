@@ -5,6 +5,7 @@ import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { publishToPermission } from '@/server/notifications/publisher';
+import { assertBranchInScope, getScopedBranchIds } from '@/server/auth/data-scope';
 import type { AppSession } from '@/server/auth/session';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 import { nextDocumentNumber } from '@/lib/document-number';
@@ -146,12 +147,24 @@ export const ecommerceService = {
     });
   },
 
-  async listOrders(session: AppSession | null, filters: { branchId?: string; status?: string } = {}) {
+  async listOrders(
+    session: AppSession | null,
+    filters: { branchId?: string; status?: string; search?: string } = {},
+  ) {
     await authorize(session, 'ecommerce:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.ecommerceOrder.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status as Prisma.EcommerceOrderWhereInput['status'],
+        OR: filters.search
+          ? [
+              { number: { contains: filters.search } },
+              { customerName: { contains: filters.search } },
+              { customerPhone: { contains: filters.search } },
+              { externalId: { contains: filters.search } },
+            ]
+          : undefined,
       },
       orderBy: { orderDate: 'desc' },
       take: 100,

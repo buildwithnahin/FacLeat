@@ -1,11 +1,13 @@
 import Link from 'next/link';
-import { Plus } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { DataTable } from '@/components/shared/data-table';
 import { Pill } from '@/components/shared/pill';
 import { backendFetch } from '@/lib/backend-client';
+import { getSession } from '@/server/auth/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +24,8 @@ const STATUS_TONE: Record<string, PillTone> = {
   CANCELLED: 'red',
 };
 
+const PLAN_STATUSES = ['DRAFT', 'APPROVED', 'SCHEDULED', 'RUNNING', 'COMPLETED', 'CANCELLED'] as const;
+
 interface Plan {
   id: string;
   planNo: string;
@@ -35,8 +39,32 @@ interface Plan {
   orders: { id: string; number: string; status: string }[];
 }
 
-export default async function ProductionPlanningPage() {
-  const plans = await backendFetch<Plan[]>('/api/mobile/factory/planning');
+interface SearchParams {
+  status?: string;
+  search?: string;
+}
+
+export default async function ProductionPlanningPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
+  const [session, sp] = await Promise.all([
+    getSession(),
+    searchParams ? await searchParams : ({} as SearchParams),
+  ]);
+
+  const activeBranchId =
+    session?.activeBranchId ?? session?.defaultBranchId ?? session?.allowedBranchIds?.[0];
+
+  const listParams = new URLSearchParams();
+  if (sp.status && sp.status !== 'ALL') listParams.set('status', sp.status);
+  if (sp.search) listParams.set('search', sp.search);
+  if (activeBranchId) listParams.set('branchId', activeBranchId);
+
+  const plans = await backendFetch<Plan[]>(`/api/mobile/factory/planning?${listParams.toString()}`);
+
+  const hasFilter = Boolean(sp.search || (sp.status && sp.status !== 'ALL'));
 
   return (
     <div className="space-y-6">
@@ -49,6 +77,40 @@ export default async function ProductionPlanningPage() {
         </Button>
       </PageHeader>
 
+      <Card className="p-4">
+        <form className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 items-end">
+          <Input
+            name="search"
+            placeholder="Search by plan # or product…"
+            defaultValue={sp.search ?? ''}
+          />
+          <select
+            name="status"
+            defaultValue={sp.status ?? 'ALL'}
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+          >
+            <option value="ALL">All statuses</option>
+            {PLAN_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s.toLowerCase()}
+              </option>
+            ))}
+          </select>
+          <div className="flex gap-2">
+            <Button type="submit" variant="outline">
+              Filter
+            </Button>
+            {hasFilter && (
+              <Button type="button" variant="ghost" asChild>
+                <Link href="/factory/planning">
+                  <X className="h-4 w-4" /> Clear
+                </Link>
+              </Button>
+            )}
+          </div>
+        </form>
+      </Card>
+
       <Card className="p-0">
         <div className="px-4 py-3 border-b text-sm font-medium">
           {plans.length} Plan{plans.length === 1 ? '' : 's'}
@@ -56,7 +118,7 @@ export default async function ProductionPlanningPage() {
         <DataTable
           rows={plans}
           rowKey={(r) => r.id}
-          empty="No production plans yet."
+          empty="No production plans found."
           columns={[
             {
               key: 'planNo',

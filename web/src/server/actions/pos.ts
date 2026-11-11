@@ -11,7 +11,7 @@ import {
 } from '@/server/validators/pos';
 
 export type ActionState =
-  | { error?: string; fieldErrors?: Record<string, string[]>; success?: boolean; saleId?: string }
+  | { error?: string; fieldErrors?: Record<string, string[]>; success?: boolean; saleId?: string; saleNumber?: string; returnId?: string; returnNumber?: string }
   | undefined;
 
 export async function openPosSessionAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -21,7 +21,12 @@ export async function openPosSessionAction(_prev: ActionState, formData: FormDat
     openingFloat: formData.get('openingFloat') ?? 0,
     notes: formData.get('notes') ?? '',
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch('/api/mobile/pos/open', {
       method: 'POST',
@@ -35,13 +40,18 @@ export async function openPosSessionAction(_prev: ActionState, formData: FormDat
   redirect('/pos');
 }
 
-export async function closePosSessionAction(formData: FormData): Promise<ActionState> {
+export async function closePosSessionAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const parsed = closeSessionSchema.safeParse({
     sessionId: formData.get('sessionId'),
     countedCash: formData.get('countedCash') ?? 0,
     notes: formData.get('notes') ?? '',
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     await backendFetch('/api/mobile/pos/close', {
       method: 'POST',
@@ -59,7 +69,10 @@ export async function closePosSessionAction(formData: FormData): Promise<ActionS
 export async function createSaleAction(input: unknown) {
   const parsed = createSaleSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const sale = await backendFetch<{ id: string; number: string }>('/api/mobile/pos/sales', {
@@ -78,7 +91,10 @@ export async function createSaleAction(input: unknown) {
 export async function refundSaleAction(input: unknown) {
   const parsed = refundSaleSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const ret = await backendFetch<{ id: string; number: string }>(

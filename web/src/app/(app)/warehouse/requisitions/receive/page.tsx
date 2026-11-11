@@ -26,7 +26,7 @@ interface ReceiptTransferRow {
 
 export default async function StockReceiptQueuePage() {
   const session = await getSession();
-  const branchId = session?.activeBranchId ?? session?.defaultBranchId;
+  const branchId = session?.activeBranchId || session?.defaultBranchId || session?.allowedBranchIds?.[0];
 
   if (!branchId) {
     return (

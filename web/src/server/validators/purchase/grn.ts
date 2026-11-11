@@ -11,8 +11,8 @@ export const grnItemSchema = z.object({
 });
 
 export const grnCreateSchema = z.object({
-  purchaseOrderId: z.string().cuid(),
-  warehouseId: z.string().cuid(),
+  purchaseOrderId: z.string().cuid('Select a purchase order'),
+  warehouseId: z.string().cuid('Select a warehouse'),
   receivedDate: z.coerce.date(),
   notes: z.string().trim().max(1000).optional().or(z.literal('')),
   items: z

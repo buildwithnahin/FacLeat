@@ -62,7 +62,7 @@ export function NewTradeOrderForm({ defaultBranchId, branches, customers, suppli
     });
   }
 
-  const totalValue = form.watch('items').reduce((sum, it) => sum + (it.quantity || 0) * (it.unitPrice || 0), 0);
+  const totalValue = (form.watch('items') ?? []).reduce((sum, it) => sum + (it.quantity || 0) * (it.unitPrice || 0), 0);
 
   return (
     <Form {...form}>
@@ -86,7 +86,17 @@ export function NewTradeOrderForm({ defaultBranchId, branches, customers, suppli
             <FormField control={form.control} name="type" render={({ field }) => (
               <FormItem>
                 <FormLabel>Order Type</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select
+                  onValueChange={(val) => {
+                    field.onChange(val);
+                    if (val === 'EXPORT') {
+                      form.setValue('supplierId', '');
+                    } else {
+                      form.setValue('customerId', '');
+                    }
+                  }}
+                  value={field.value}
+                >
                   <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                   <SelectContent>
                     <SelectItem value="EXPORT">Export</SelectItem>

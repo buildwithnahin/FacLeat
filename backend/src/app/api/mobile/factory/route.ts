@@ -16,11 +16,12 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const status = sp.get('status') ?? undefined;
   const search = sp.get('search') ?? undefined;
+  const branchId = sp.get('branchId') ?? session.activeBranchId ?? undefined;
 
   try {
     const [orders, summary] = await Promise.all([
-      factoryService.list(session, { status, search }),
-      factoryService.summary(session),
+      factoryService.list(session, { branchId, status, search }),
+      factoryService.summary(session, branchId),
     ]);
     return Response.json(apiOk({ orders, summary }));
   } catch (err) {

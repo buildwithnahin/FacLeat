@@ -79,20 +79,40 @@ export function PaymentForm({
           </select>
         </div>
         <div>
-          <Label>Amount</Label>
+          <div className="flex items-center justify-between">
+            <Label>Amount</Label>
+            {balanceDue > 0 && (
+              <button
+                type="button"
+                onClick={() => setAmount(balanceDue)}
+                className="text-xs text-blue-600 hover:underline"
+              >
+                Pay full
+              </button>
+            )}
+          </div>
           <Input
             type="number"
             min={0}
             step="any"
-            value={amount}
-            onChange={(e) => setAmount(Number(e.target.value))}
+            value={amount || ''}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              setAmount(isNaN(val) ? 0 : val);
+            }}
             className="text-right tabular"
+            disabled={balanceDue <= 0}
           />
         </div>
       </div>
       <div>
         <Label>Reference</Label>
-        <Input value={reference} onChange={(e) => setReference(e.target.value)} />
+        <Input
+          value={reference}
+          onChange={(e) => setReference(e.target.value)}
+          placeholder="Check / TXN / Reference #"
+          disabled={balanceDue <= 0}
+        />
       </div>
       {message && (
         <div
@@ -103,8 +123,13 @@ export function PaymentForm({
           {message.text}
         </div>
       )}
-      <Button variant="dark" onClick={submit} disabled={pending || balanceDue <= 0} className="w-full">
-        {pending ? 'Saving…' : 'Record payment'}
+      <Button
+        variant="dark"
+        onClick={submit}
+        disabled={pending || balanceDue <= 0 || amount <= 0}
+        className="w-full"
+      >
+        {pending ? 'Saving…' : balanceDue <= 0 ? 'Invoice fully paid' : 'Record payment'}
       </Button>
     </Card>
   );

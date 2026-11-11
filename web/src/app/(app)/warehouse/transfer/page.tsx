@@ -30,7 +30,7 @@ interface ProductOption {
 
 export default async function TransferPage() {
   const session = await getSession();
-  const branchId = session?.activeBranchId;
+  const branchId = session?.activeBranchId || session?.defaultBranchId || session?.allowedBranchIds?.[0];
 
   const [warehouses, products] = await Promise.all([
     backendFetch<ShowroomWarehouse[]>('/api/mobile/warehouse/warehouses?showrooms=true'),
@@ -58,7 +58,7 @@ export default async function TransferPage() {
       />
       <StockMovementForm
         mode="transfer"
-        branchId={branchId ?? session?.defaultBranchId ?? warehouses[0]!.branchId}
+        branchId={branchId ?? warehouses[0]!.branchId}
         warehouses={warehouses.map((w) => ({
           id: w.id,
           name: w.name,
@@ -79,6 +79,7 @@ export default async function TransferPage() {
         action={postTransferAction}
         submitLabel="Post transfer"
         showCost={false}
+        cancelHref="/warehouse"
       />
     </div>
   );

@@ -40,6 +40,8 @@ interface InvoiceDetail {
   notes: string | null;
   supplierId: string;
   supplier: { id: string; name: string };
+  purchaseOrder?: { id: string; number: string } | null;
+  grn?: { id: string; number: string } | null;
   items: {
     id: string;
     product: { id: string; sku: string; name: string };
@@ -154,6 +156,37 @@ export default async function InvoiceDetailPage({
           </p>
         </Card>
       </div>
+
+      {(invoice.purchaseOrder || invoice.grn) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {invoice.purchaseOrder && (
+            <Card className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Linked Purchase Order</p>
+                <Link
+                  href={`/purchase/orders/${invoice.purchaseOrder.id}`}
+                  className="text-sm font-semibold text-blue-600 hover:underline tabular"
+                >
+                  {invoice.purchaseOrder.number}
+                </Link>
+              </div>
+            </Card>
+          )}
+          {invoice.grn && (
+            <Card className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Linked Goods Receive Note</p>
+                <Link
+                  href={`/purchase/grn/${invoice.grn.id}`}
+                  className="text-sm font-semibold text-blue-600 hover:underline tabular"
+                >
+                  {invoice.grn.number}
+                </Link>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
 
       <Card className="p-0">
         <div className="px-4 py-3 border-b text-sm font-medium">Line items</div>

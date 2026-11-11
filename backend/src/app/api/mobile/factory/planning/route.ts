@@ -9,8 +9,13 @@ export async function GET(req: NextRequest) {
   const session = await getMobileSession(req);
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
+  const sp = req.nextUrl.searchParams;
+  const status = sp.get('status') ?? undefined;
+  const search = sp.get('search') ?? undefined;
+  const branchId = sp.get('branchId') ?? session.activeBranchId ?? undefined;
+
   try {
-    const plans = await factoryService.listPlans(session);
+    const plans = await factoryService.listPlans(session, { branchId, status, search });
     return Response.json(apiOk(plans));
   } catch (err) {
     if (err instanceof ApiError) return Response.json(apiError(err), { status: err.status });

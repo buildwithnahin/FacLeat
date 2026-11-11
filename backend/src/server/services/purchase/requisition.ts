@@ -5,6 +5,7 @@ import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { approvalService } from '@/server/services/approval.service';
+import { getScopedBranchIds } from '@/server/auth/scope';
 import type { AppSession } from '@/server/auth/session';
 import type {
   RequisitionCreateInput,
@@ -16,12 +17,14 @@ import { nextDocumentNumber } from '@/lib/document-number';
 export const requisitionMethods = {
   async listRequisitions(
     session: AppSession | null,
-    filters: { branchId?: string; status?: string } = {},
+    filters: { branchId?: string; status?: string; search?: string } = {},
   ) {
     await authorize(session, 'purchase:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
+    const search = filters.search?.trim();
     return prisma.purchaseRequisition.findMany({
       where: {
-        branchId: filters.branchId,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status as
           | 'DRAFT'
           | 'PENDING'
@@ -30,6 +33,15 @@ export const requisitionMethods = {
           | 'CANCELLED'
           | 'CLOSED'
           | undefined,
+        ...(search
+          ? {
+              OR: [
+                { number: { contains: search } },
+                { department: { contains: search } },
+                { requestedBy: { contains: search } },
+              ],
+            }
+          : {}),
       },
       orderBy: { createdAt: 'desc' },
       include: {

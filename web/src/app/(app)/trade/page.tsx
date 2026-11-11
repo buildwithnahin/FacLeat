@@ -21,7 +21,11 @@ interface TradeStats {
 
 export default async function TradeOverviewPage() {
   const session = await getSession();
-  const branchId = session?.activeBranchId ?? undefined;
+  const branchId =
+    session?.activeBranchId ??
+    session?.defaultBranchId ??
+    session?.allowedBranchIds?.[0] ??
+    undefined;
   const qs = new URLSearchParams(branchId ? { branchId } : {});
   const stats = await backendFetch<TradeStats>(`/api/mobile/trade/stats?${qs.toString()}`);
 

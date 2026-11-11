@@ -9,7 +9,7 @@ export const debitNoteItemSchema = z.object({
 });
 
 export const debitNoteCreateSchema = z.object({
-  branchId: z.string().cuid(),
+  branchId: z.string().cuid('Select a branch'),
   supplierId: z.string().cuid('Select a supplier'),
   warehouseId: z.string().cuid('Select a warehouse'),
   invoiceId: z.string().cuid().optional().or(z.literal('')),

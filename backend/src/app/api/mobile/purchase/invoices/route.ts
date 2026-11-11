@@ -10,12 +10,25 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
   const supplierId = req.nextUrl.searchParams.get('supplierId') ?? undefined;
+  const status = req.nextUrl.searchParams.get('status') ?? undefined;
   const statusIn = req.nextUrl.searchParams.get('statusIn');
+  const search = req.nextUrl.searchParams.get('search') ?? req.nextUrl.searchParams.get('q') ?? undefined;
+  const branchId =
+    req.nextUrl.searchParams.get('branchId') ??
+    session.activeBranchId ??
+    session.defaultBranchId ??
+    session.allowedBranchIds?.[0] ??
+    undefined;
 
   try {
     // `statusIn` (comma-separated) filters post-fetch — see orders/route.ts
     // for why this stays out of the service's filter signature.
-    const data = await purchaseService.listInvoices(session, { supplierId });
+    const data = await purchaseService.listInvoices(session, {
+      supplierId,
+      status,
+      branchId,
+      search,
+    });
     const filtered = statusIn
       ? data.filter((inv) => statusIn.split(',').includes(inv.status))
       : data;
@@ -34,7 +47,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const parsed = invoiceCreateSchema.safeParse(body ?? {});
   if (!parsed.success) {
-    return Response.json(apiError('Validation failed', parsed.error.flatten()), { status: 422 });
+    return Response.json(
+      apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten()),
+      { status: 422 },
+    );
   }
 
   try {

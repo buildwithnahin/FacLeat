@@ -73,7 +73,10 @@ export function LineItemsEditor({
   async function search(q: string) {
     setQuery(q);
     const res = await fetch(`${searchUrl}?q=${encodeURIComponent(q)}`);
-    if (res.ok) setProducts(await res.json());
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) setProducts(data);
+    }
   }
 
   function addProduct(p: EditorProduct) {
@@ -183,7 +186,10 @@ export function LineItemsEditor({
                       min={0}
                       step="any"
                       value={l.quantity}
-                      onChange={(e) => patch(i, { quantity: Number(e.target.value) })}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        patch(i, { quantity: isNaN(val) ? 0 : val });
+                      }}
                       className="w-full rounded border px-1.5 py-1 text-right tabular"
                     />
                   </label>
@@ -194,7 +200,10 @@ export function LineItemsEditor({
                       min={0}
                       step="any"
                       value={l.unitPrice}
-                      onChange={(e) => patch(i, { unitPrice: Number(e.target.value) })}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        patch(i, { unitPrice: isNaN(val) ? 0 : val });
+                      }}
                       className="w-full rounded border px-1.5 py-1 text-right tabular"
                     />
                   </label>
@@ -206,7 +215,10 @@ export function LineItemsEditor({
                       max={100}
                       step="any"
                       value={l.discountRate}
-                      onChange={(e) => patch(i, { discountRate: Number(e.target.value) })}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        patch(i, { discountRate: isNaN(val) ? 0 : Math.max(0, Math.min(100, val)) });
+                      }}
                       className={`w-full rounded border px-1.5 py-1 text-right tabular ${
                         flag ? 'border-amber-500 text-amber-700' : ''
                       }`}

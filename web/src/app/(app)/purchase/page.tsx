@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Receipt,
   Wallet,
+  RotateCcw,
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
@@ -30,8 +31,14 @@ interface PurchaseDashboardSummary {
   totalPayable: string;
 }
 
-export default async function PurchaseDashboardPage() {
-  const summary = await backendFetch<PurchaseDashboardSummary>('/api/mobile/purchase/dashboard');
+export default async function PurchaseDashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ branchId?: string }>;
+}) {
+  const sp = searchParams ? await searchParams : {};
+  const query = sp.branchId ? `?branchId=${encodeURIComponent(sp.branchId)}` : '';
+  const summary = await backendFetch<PurchaseDashboardSummary>(`/api/mobile/purchase/dashboard${query}`);
 
   return (
     <div className="space-y-6">
@@ -167,6 +174,19 @@ export default async function PurchaseDashboardPage() {
                 <p className="text-xs text-muted-foreground mt-1">Supplier bills (3-way match)</p>
               </div>
               <Receipt className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </Card>
+        </Link>
+        <Link href="/purchase/returns">
+          <Card className="p-5 hover:border-primary transition-colors">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Purchase Returns</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Debit notes for returned goods
+                </p>
+              </div>
+              <RotateCcw className="h-4 w-4 text-muted-foreground" />
             </div>
           </Card>
         </Link>

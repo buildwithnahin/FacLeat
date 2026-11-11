@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,6 +56,12 @@ export function ProductionControls({
   const [consumption, setConsumption] = useState<
     Record<string, { quantity: string; costPerUnit: string }>
   >({});
+
+  useEffect(() => {
+    if (consumeState?.success) {
+      setConsumption({});
+    }
+  }, [consumeState?.success]);
 
   const closed = order.status === 'COMPLETED' || order.status === 'CANCELLED';
 

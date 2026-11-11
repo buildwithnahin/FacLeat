@@ -145,10 +145,11 @@ export function ProductsBrowser({
           size="sm"
           asChild
           disabled={noColsSelected}
+          className={noColsSelected ? 'pointer-events-none opacity-50' : ''}
           title={noColsSelected ? 'Select at least one column' : 'Download PDF'}
         >
           <a
-            href={buildExportUrl('pdf', selectedCols)}
+            href={noColsSelected ? '#' : buildExportUrl('pdf', selectedCols)}
             target="_blank"
             rel="noreferrer"
           >
@@ -163,10 +164,11 @@ export function ProductsBrowser({
           size="sm"
           asChild
           disabled={noColsSelected}
+          className={noColsSelected ? 'pointer-events-none opacity-50' : ''}
           title={noColsSelected ? 'Select at least one column' : 'Download Excel'}
         >
           <a
-            href={buildExportUrl('xlsx', selectedCols)}
+            href={noColsSelected ? '#' : buildExportUrl('xlsx', selectedCols)}
             target="_blank"
             rel="noreferrer"
           >

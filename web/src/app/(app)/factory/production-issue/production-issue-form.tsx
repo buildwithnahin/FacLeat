@@ -55,7 +55,7 @@ export function ProductionIssueForm({
   );
 
   const syncFromOrder = () => {
-    if (!selectedOrder) return;
+    if (!selectedOrder || selectedOrder.materials.length === 0) return;
     setItems(
       selectedOrder.materials.map((material) => ({
         productId: material.productId,
@@ -70,7 +70,17 @@ export function ProductionIssueForm({
 
   return (
     <form action={formAction} className="space-y-6">
-      <input type="hidden" name="items" value={JSON.stringify(items)} />
+      <input
+        type="hidden"
+        name="items"
+        value={JSON.stringify(
+          items.map((it) => ({
+            ...it,
+            requiredQty: Number(it.requiredQty) || 0,
+            issuedQty: Number(it.issuedQty) || 0,
+          })),
+        )}
+      />
 
       <Card className="p-6 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -80,7 +90,10 @@ export function ProductionIssueForm({
               id="orderId"
               name="orderId"
               value={orderId}
-              onChange={(e) => setOrderId(e.target.value)}
+              onChange={(e) => {
+                setOrderId(e.target.value);
+                setItems([]);
+              }}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
             >
               {orders.map((order) => (
@@ -120,7 +133,7 @@ export function ProductionIssueForm({
 
         <div>
           <Label htmlFor="remarks">Remarks</Label>
-          <Textarea id="remarks" name="remarks" rows={3} />
+          <Textarea id="remarks" name="remarks" rows={3} placeholder="Notes or instructions…" />
         </div>
       </Card>
 
@@ -131,12 +144,18 @@ export function ProductionIssueForm({
             <p className="text-sm text-muted-foreground">Issue raw materials from RM warehouse into WIP</p>
           </div>
           <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={syncFromOrder}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={syncFromOrder}
+              disabled={!selectedOrder || selectedOrder.materials.length === 0}
+            >
               Sync from BOM
             </Button>
             <Button
               type="button"
               variant="outline"
+              disabled={!selectedOrder || selectedOrder.materials.length === 0}
               onClick={() =>
                 setItems((prev) => [
                   ...prev,
@@ -144,8 +163,8 @@ export function ProductionIssueForm({
                     productId: selectedOrder?.materials[0]?.productId ?? '',
                     batchNo: '',
                     lotNo: '',
-                    requiredQty: '0',
-                    issuedQty: '0',
+                    requiredQty: '1',
+                    issuedQty: '1',
                     uom: selectedOrder?.materials[0]?.unit ?? 'PCS',
                   },
                 ])
@@ -156,8 +175,14 @@ export function ProductionIssueForm({
           </div>
         </div>
 
+        {selectedOrder && selectedOrder.materials.length === 0 && (
+          <p className="text-sm text-amber-600">
+            This production order has no BOM materials configured.
+          </p>
+        )}
+
         {items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No issue items yet. Use "Sync from BOM" to load material lines.</p>
+          <p className="text-sm text-muted-foreground">No issue items yet. Use &ldquo;Sync from BOM&rdquo; to load material lines.</p>
         ) : (
           <div className="space-y-3">
             {items.map((item, index) => (
@@ -165,68 +190,89 @@ export function ProductionIssueForm({
                 key={index}
                 className="grid grid-cols-1 md:grid-cols-[2fr_120px_120px_120px_120px_110px_auto] gap-2 items-end"
               >
-                <select
-                  value={item.productId}
-                  onChange={(e) =>
-                    setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, productId: e.target.value } : row))
-                  }
-                  className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                >
-                  {selectedOrder?.materials.map((material) => (
-                    <option key={material.productId} value={material.productId}>
-                      {material.label}
-                    </option>
-                  ))}
-                </select>
-                <Input
-                  placeholder="Batch"
-                  value={item.batchNo}
-                  onChange={(e) =>
-                    setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, batchNo: e.target.value } : row))
-                  }
-                />
-                <Input
-                  placeholder="Lot"
-                  value={item.lotNo}
-                  onChange={(e) =>
-                    setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, lotNo: e.target.value } : row))
-                  }
-                />
-                <Input
-                  type="number"
-                  step="0.0001"
-                  placeholder="Required"
-                  value={item.requiredQty}
-                  onChange={(e) =>
-                    setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, requiredQty: e.target.value } : row))
-                  }
-                />
-                <Input
-                  type="number"
-                  step="0.0001"
-                  placeholder="Issued"
-                  value={item.issuedQty}
-                  onChange={(e) =>
-                    setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, issuedQty: e.target.value } : row))
-                  }
-                />
-                <select
-                  value={item.uom}
-                  onChange={(e) =>
-                    setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, uom: e.target.value as (typeof UNITS)[number] } : row))
-                  }
-                  className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                >
-                  {UNITS.map((unit) => (
-                    <option key={unit} value={unit}>
-                      {unit}
-                    </option>
-                  ))}
-                </select>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Product</Label>
+                  <select
+                    value={item.productId}
+                    onChange={(e) =>
+                      setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, productId: e.target.value } : row))
+                    }
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  >
+                    {selectedOrder?.materials.map((material) => (
+                      <option key={material.productId} value={material.productId}>
+                        {material.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Batch</Label>
+                  <Input
+                    placeholder="Batch"
+                    value={item.batchNo}
+                    onChange={(e) =>
+                      setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, batchNo: e.target.value } : row))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Lot</Label>
+                  <Input
+                    placeholder="Lot"
+                    value={item.lotNo}
+                    onChange={(e) =>
+                      setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, lotNo: e.target.value } : row))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Required</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    placeholder="Required"
+                    value={item.requiredQty}
+                    onChange={(e) =>
+                      setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, requiredQty: e.target.value } : row))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Issued *</Label>
+                  <Input
+                    type="number"
+                    min="0.0001"
+                    step="0.0001"
+                    placeholder="Issued"
+                    value={item.issuedQty}
+                    onChange={(e) =>
+                      setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, issuedQty: e.target.value } : row))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">UoM</Label>
+                  <select
+                    value={item.uom}
+                    onChange={(e) =>
+                      setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, uom: e.target.value as (typeof UNITS)[number] } : row))
+                    }
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  >
+                    {UNITS.map((unit) => (
+                      <option key={unit} value={unit}>
+                        {unit}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <Button
                   type="button"
                   variant="ghost"
                   onClick={() => setItems((prev) => prev.filter((_, rowIndex) => rowIndex !== index))}
+                  className="mb-0.5"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -236,8 +282,18 @@ export function ProductionIssueForm({
         )}
       </Card>
 
-      {state?.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
-      <Button type="submit" disabled={pending}>
+      {state?.error ? (
+        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+          {state.error}
+        </div>
+      ) : null}
+      {state?.success ? (
+        <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-700">
+          Issue voucher created successfully.
+        </div>
+      ) : null}
+
+      <Button type="submit" disabled={pending || items.length === 0 || !orderId}>
         {pending ? 'Saving...' : 'Create Issue Voucher'}
       </Button>
     </form>

@@ -11,7 +11,12 @@ export async function GET(req: NextRequest) {
 
   const status = req.nextUrl.searchParams.get('status') ?? undefined;
   const search = req.nextUrl.searchParams.get('search') ?? undefined;
-  const branchId = req.nextUrl.searchParams.get('branchId') ?? undefined;
+  const branchId =
+    req.nextUrl.searchParams.get('branchId') ??
+    session.activeBranchId ??
+    session.defaultBranchId ??
+    session.allowedBranchIds?.[0] ??
+    undefined;
 
   try {
     const data = await supplierService.list(session, { status, search, branchId });
@@ -30,7 +35,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const parsed = supplierCreateSchema.safeParse(body ?? {});
   if (!parsed.success) {
-    return Response.json(apiError('Validation failed', parsed.error.flatten()), { status: 422 });
+    return Response.json(
+      apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten()),
+      { status: 422 },
+    );
   }
 
   try {

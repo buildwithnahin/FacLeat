@@ -42,6 +42,7 @@ export function IssueLogFilters({ warehouses }: { warehouses: Warehouse[] }) {
   };
 
   const hasFilters =
+    searchParams.has('q') ||
     searchParams.has('warehouseId') ||
     searchParams.has('from') ||
     searchParams.has('to') ||
@@ -49,8 +50,16 @@ export function IssueLogFilters({ warehouses }: { warehouses: Warehouse[] }) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <Input
+        type="search"
+        className="w-48"
+        value={searchParams.get('q') ?? ''}
+        onChange={(e) => push('q', e.target.value)}
+        placeholder="Search SKU or name…"
+      />
+
       <Select
-        value={searchParams.get('warehouseId') ?? ''}
+        value={searchParams.get('warehouseId') || 'all'}
         onValueChange={(v) => push('warehouseId', v === 'all' ? '' : v)}
       >
         <SelectTrigger className="w-48">
@@ -67,7 +76,7 @@ export function IssueLogFilters({ warehouses }: { warehouses: Warehouse[] }) {
       </Select>
 
       <Select
-        value={searchParams.get('refType') ?? ''}
+        value={searchParams.get('refType') || 'all'}
         onValueChange={(v) => push('refType', v === 'all' ? '' : v)}
       >
         <SelectTrigger className="w-44">

@@ -162,6 +162,7 @@ export function IssueLCForm({ orders, branches, defaultBranchId, preselectedOrde
                     {branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                <FormMessage />
               </FormItem>
             )} />
           </CardContent>

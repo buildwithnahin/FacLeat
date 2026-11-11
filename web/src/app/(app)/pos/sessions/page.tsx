@@ -3,12 +3,11 @@ import { redirect } from 'next/navigation';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { DataTable } from '@/components/shared/data-table';
 import { Pill } from '@/components/shared/pill';
 import { getSession } from '@/server/auth/session';
 import { backendFetch } from '@/lib/backend-client';
-import { closePosSessionAction } from '@/server/actions/pos';
+import { CloseSessionForm } from './close-session-form';
 import { formatCurrency } from '@/lib/money';
 
 export const dynamic = 'force-dynamic';
@@ -50,25 +49,7 @@ export default async function SessionsPage() {
                 Opened {new Date(open.openedAt).toLocaleString()} · Opening balance {formatCurrency(open.openingFloat, 'BDT')}
               </div>
             </div>
-            <form action={async (fd) => { 'use server'; await closePosSessionAction(fd); }} className="flex items-end gap-2">
-              <input type="hidden" name="sessionId" value={open.id} />
-              <div>
-                <label className="text-xs text-muted-foreground block">Counted cash</label>
-                <Input
-                  name="countedCash"
-                  type="number"
-                  min={0}
-                  step="any"
-                  className="w-40"
-                  required
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground block">Notes</label>
-                <Input name="notes" className="w-60" />
-              </div>
-              <Button type="submit" variant="dark">Close session</Button>
-            </form>
+            <CloseSessionForm sessionId={open.id} />
           </div>
         </Card>
       )}
@@ -95,22 +76,33 @@ export default async function SessionsPage() {
               key: 'expected',
               header: 'Expected',
               align: 'right',
-              cell: (r) => <span className="tabular">{formatCurrency(r.expectedCash, 'BDT')}</span>,
+              cell: (r) => (
+                <span className="tabular">
+                  {r.status === 'OPEN' || r.expectedCash == null ? '—' : formatCurrency(r.expectedCash, 'BDT')}
+                </span>
+              ),
             },
             {
               key: 'counted',
               header: 'Counted',
               align: 'right',
-              cell: (r) => <span className="tabular">{formatCurrency(r.countedCash, 'BDT')}</span>,
+              cell: (r) => (
+                <span className="tabular">
+                  {r.status === 'OPEN' || r.countedCash == null ? '—' : formatCurrency(r.countedCash, 'BDT')}
+                </span>
+              ),
             },
             {
               key: 'variance',
               header: 'Variance',
               align: 'right',
               cell: (r) => {
+                if (r.status === 'OPEN' || r.cashVariance == null) {
+                  return <span className="text-muted-foreground">—</span>;
+                }
                 const v = Number(r.cashVariance);
                 return (
-                  <span className={`tabular ${v < 0 ? 'text-red-600' : v > 0 ? 'text-amber-700' : ''}`}>
+                  <span className={`tabular font-medium ${v < 0 ? 'text-red-600' : v > 0 ? 'text-amber-700' : 'text-muted-foreground'}`}>
                     {formatCurrency(r.cashVariance, 'BDT')}
                   </span>
                 );

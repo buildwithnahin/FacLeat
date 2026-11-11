@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState, useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
@@ -8,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { createProductionOrderAction, type FactoryFormState } from '@/server/actions/factory';
-import { UNITS } from '@/server/validators/factory';
+import { PRODUCTION_MATERIAL_TYPES, UNITS } from '@/server/validators/factory';
 
 type Branch = { id: string; name: string; code: string };
 type Product = { id: string; sku: string; name: string; unit: string; type: string };
@@ -18,6 +19,8 @@ interface MaterialRow {
   productId: string;
   unit: (typeof UNITS)[number];
   plannedQty: string;
+  unitCost: string;
+  materialType: (typeof PRODUCTION_MATERIAL_TYPES)[number];
   fromWarehouseId: string;
   note: string;
 }
@@ -78,10 +81,26 @@ export function ProductionOrderForm({
 
   const fieldErrors: Record<string, string[] | undefined> = state?.fieldErrors ?? {};
 
+  const serializedMaterials = useMemo(
+    () =>
+      JSON.stringify(
+        materials.map((m) => ({
+          productId: m.productId,
+          unit: m.unit,
+          plannedQty: Number(m.plannedQty) || 0,
+          unitCost: m.unitCost ? Number(m.unitCost) : undefined,
+          materialType: m.materialType,
+          fromWarehouseId: m.fromWarehouseId || undefined,
+          note: m.note || undefined,
+        })),
+      ),
+    [materials],
+  );
+
   return (
     <form action={action} className="space-y-6">
       {prefill && <input type="hidden" name="planId" value={prefill.planId} />}
-      <input type="hidden" name="materials" value={JSON.stringify(materials)} />
+      <input type="hidden" name="materials" value={serializedMaterials} />
       <input type="hidden" name="stages" value={JSON.stringify(stages)} />
 
       <Card className="p-6 space-y-4">
@@ -165,10 +184,39 @@ export function ProductionOrderForm({
               required
             />
           </div>
+          <div>
+            <Label htmlFor="buyerName">Buyer name</Label>
+            <Input
+              id="buyerName"
+              name="buyerName"
+              placeholder="e.g. Apex Exports, Bata"
+              maxLength={200}
+            />
+          </div>
+          <div>
+            <Label htmlFor="batchName">Model / Batch name</Label>
+            <Input
+              id="batchName"
+              name="batchName"
+              placeholder="e.g. Oxford-2026-A"
+              maxLength={200}
+            />
+          </div>
+          <div>
+            <Label htmlFor="saleAmount">Estimated sale amount</Label>
+            <Input
+              id="saleAmount"
+              name="saleAmount"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Total contract value in local currency"
+            />
+          </div>
         </div>
         <div>
           <Label htmlFor="notes">Notes</Label>
-          <Textarea id="notes" name="notes" rows={3} />
+          <Textarea id="notes" name="notes" rows={3} placeholder="Production notes or instructions…" />
         </div>
       </Card>
 
@@ -176,7 +224,7 @@ export function ProductionOrderForm({
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Materials (BOM)</h2>
-            <p className="text-sm text-muted-foreground">Raw materials consumed per run</p>
+            <p className="text-sm text-muted-foreground">Raw materials and accessories consumed per run</p>
           </div>
           <Button
             type="button"
@@ -188,6 +236,8 @@ export function ProductionOrderForm({
                   productId: materialProducts[0]?.id ?? '',
                   unit: 'PCS',
                   plannedQty: '1',
+                  unitCost: '',
+                  materialType: 'LEATHER',
                   fromWarehouseId: branchWarehouses[0]?.id ?? '',
                   note: '',
                 },
@@ -205,75 +255,125 @@ export function ProductionOrderForm({
             {materials.map((m, i) => (
               <div
                 key={i}
-                className="grid grid-cols-1 md:grid-cols-[2fr_100px_120px_2fr_auto] gap-2 items-end"
+                className="grid grid-cols-1 md:grid-cols-[2fr_130px_90px_100px_110px_2fr_auto] gap-2 items-end"
               >
-                <select
-                  value={m.productId}
-                  onChange={(e) =>
-                    setMaterials((prev) =>
-                      prev.map((r, idx) => (idx === i ? { ...r, productId: e.target.value } : r)),
-                    )
-                  }
-                  className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                >
-                  {materialProducts.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} — {p.sku}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={m.unit}
-                  onChange={(e) =>
-                    setMaterials((prev) =>
-                      prev.map((r, idx) =>
-                        idx === i ? { ...r, unit: e.target.value as (typeof UNITS)[number] } : r,
-                      ),
-                    )
-                  }
-                  className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                >
-                  {UNITS.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
-                  ))}
-                </select>
-                <Input
-                  type="number"
-                  min="0.0001"
-                  step="0.0001"
-                  value={m.plannedQty}
-                  onChange={(e) =>
-                    setMaterials((prev) =>
-                      prev.map((r, idx) => (idx === i ? { ...r, plannedQty: e.target.value } : r)),
-                    )
-                  }
-                />
-                <select
-                  value={m.fromWarehouseId}
-                  onChange={(e) =>
-                    setMaterials((prev) =>
-                      prev.map((r, idx) =>
-                        idx === i ? { ...r, fromWarehouseId: e.target.value } : r,
-                      ),
-                    )
-                  }
-                  className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                >
-                  <option value="">— source warehouse —</option>
-                  {branchWarehouses.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name} ({w.code})
-                    </option>
-                  ))}
-                </select>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Material</Label>
+                  <select
+                    value={m.productId}
+                    onChange={(e) =>
+                      setMaterials((prev) =>
+                        prev.map((r, idx) => (idx === i ? { ...r, productId: e.target.value } : r)),
+                      )
+                    }
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  >
+                    {materialProducts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} — {p.sku}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Type</Label>
+                  <select
+                    value={m.materialType}
+                    onChange={(e) =>
+                      setMaterials((prev) =>
+                        prev.map((r, idx) =>
+                          idx === i
+                            ? { ...r, materialType: e.target.value as (typeof PRODUCTION_MATERIAL_TYPES)[number] }
+                            : r,
+                        ),
+                      )
+                    }
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  >
+                    {PRODUCTION_MATERIAL_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Unit</Label>
+                  <select
+                    value={m.unit}
+                    onChange={(e) =>
+                      setMaterials((prev) =>
+                        prev.map((r, idx) =>
+                          idx === i ? { ...r, unit: e.target.value as (typeof UNITS)[number] } : r,
+                        ),
+                      )
+                    }
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  >
+                    {UNITS.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Qty</Label>
+                  <Input
+                    type="number"
+                    min="0.0001"
+                    step="0.0001"
+                    value={m.plannedQty}
+                    onChange={(e) =>
+                      setMaterials((prev) =>
+                        prev.map((r, idx) => (idx === i ? { ...r, plannedQty: e.target.value } : r)),
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Unit Cost</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Rate"
+                    value={m.unitCost}
+                    onChange={(e) =>
+                      setMaterials((prev) =>
+                        prev.map((r, idx) => (idx === i ? { ...r, unitCost: e.target.value } : r)),
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Source Warehouse</Label>
+                  <select
+                    value={m.fromWarehouseId}
+                    onChange={(e) =>
+                      setMaterials((prev) =>
+                        prev.map((r, idx) =>
+                          idx === i ? { ...r, fromWarehouseId: e.target.value } : r,
+                        ),
+                      )
+                    }
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  >
+                    <option value="">— source warehouse —</option>
+                    {branchWarehouses.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name} ({w.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <Button
                   type="button"
                   variant="ghost"
                   onClick={() =>
                     setMaterials((prev) => prev.filter((_, idx) => idx !== i))
                   }
+                  className="mb-0.5"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -322,8 +422,9 @@ export function ProductionOrderForm({
                 }
               />
               <Input
-                placeholder="Stage name"
+                placeholder="Stage name *"
                 value={s.name}
+                required
                 onChange={(e) =>
                   setStages((prev) =>
                     prev.map((r, idx) => (idx === i ? { ...r, name: e.target.value } : r)),
@@ -363,6 +464,9 @@ export function ProductionOrderForm({
       ))}
 
       <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" asChild>
+          <Link href="/factory">Cancel</Link>
+        </Button>
         <Button type="submit" variant="dark" disabled={pending}>
           {pending ? 'Creating…' : 'Create production order'}
         </Button>

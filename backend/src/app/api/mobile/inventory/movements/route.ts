@@ -22,11 +22,11 @@ export async function GET(req: NextRequest) {
 
   try {
     const rows = await stockService.listMovements(session, {
-      branchId: sp.get('branchId') ?? undefined,
-      warehouseId: sp.get('warehouseId') ?? undefined,
-      productId: sp.get('productId') ?? undefined,
+      branchId: sp.get('branchId') || undefined,
+      warehouseId: sp.get('warehouseId') || undefined,
+      productId: sp.get('productId') || undefined,
       direction: direction === 'IN' || direction === 'OUT' ? direction : undefined,
-      refType: sp.get('refType') ?? undefined,
+      refType: sp.get('refType') || undefined,
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
       limit: sp.get('limit') ? Number(sp.get('limit')) : undefined,

@@ -14,7 +14,10 @@ import { ApiError } from '@/lib/errors';
 export async function createWholesaleInvoiceAction(input: unknown) {
   const parsed = createInvoiceSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const session = await getSession();
@@ -31,7 +34,10 @@ export async function createWholesaleInvoiceAction(input: unknown) {
 export async function recordWholesalePaymentAction(input: unknown) {
   const parsed = recordPaymentSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const session = await getSession();
@@ -48,7 +54,10 @@ export async function recordWholesalePaymentAction(input: unknown) {
 export async function returnWholesaleInvoiceAction(input: unknown) {
   const parsed = returnInvoiceSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const session = await getSession();
@@ -65,7 +74,10 @@ export async function returnWholesaleInvoiceAction(input: unknown) {
 export async function voidWholesaleInvoiceAction(input: unknown) {
   const parsed = voidInvoiceSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const session = await getSession();

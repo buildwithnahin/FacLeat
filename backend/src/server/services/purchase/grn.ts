@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
+import { getScopedBranchIds } from '@/server/auth/scope';
 import type { AppSession } from '@/server/auth/session';
 import type { GrnCreateInput } from '@/server/validators/purchase';
 import { NotFoundError, ValidationError } from '@/lib/errors';
@@ -10,9 +11,28 @@ import { nextDocumentNumber } from '@/lib/document-number';
 import { normalizeSize } from './shared';
 
 export const grnMethods = {
-  async listGrns(session: AppSession | null) {
+  async listGrns(
+    session: AppSession | null,
+    filters: { branchId?: string; status?: string; supplierId?: string; search?: string } = {},
+  ) {
     await authorize(session, 'purchase:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
+    const search = filters.search?.trim();
     return prisma.goodsReceiving.findMany({
+      where: {
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
+        status: filters.status,
+        supplierId: filters.supplierId,
+        ...(search
+          ? {
+              OR: [
+                { number: { contains: search } },
+                { purchaseOrder: { number: { contains: search } } },
+                { supplier: { name: { contains: search } } },
+              ],
+            }
+          : {}),
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         supplier: { select: { id: true, code: true, name: true } },

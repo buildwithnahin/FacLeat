@@ -41,17 +41,21 @@ export function ReconcileForm({
   }
 
   function submit() {
+    if (!branchId) return setMessage({ type: 'err', text: 'Branch context is required to run reconciliation' });
     if (!channelId) return setMessage({ type: 'err', text: 'Select a channel' });
     if (!periodStart || !periodEnd) return setMessage({ type: 'err', text: 'Select a period' });
+    if (new Date(periodEnd) < new Date(periodStart)) {
+      return setMessage({ type: 'err', text: 'Period end cannot be earlier than period start' });
+    }
     const settlements = rows
-      .filter((r) => r.externalOrderId.trim() && Number(r.amount) > 0)
+      .filter((r) => r.externalOrderId.trim() && parseFloat(r.amount) > 0)
       .map((r) => ({
         externalOrderId: r.externalOrderId.trim(),
-        amount: Number(r.amount),
-        fee: r.fee ? Number(r.fee) : 0,
-        provider: r.provider || undefined,
+        amount: parseFloat(r.amount),
+        fee: r.fee ? Math.max(0, parseFloat(r.fee) || 0) : 0,
+        provider: r.provider.trim() || undefined,
       }));
-    if (settlements.length === 0) return setMessage({ type: 'err', text: 'Enter at least one settlement' });
+    if (settlements.length === 0) return setMessage({ type: 'err', text: 'Enter at least one valid settlement amount' });
 
     startTransition(async () => {
       const res = await reconcileEcommercePaymentsAction({

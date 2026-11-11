@@ -66,6 +66,7 @@ export interface StockMovementFormProps {
   submitLabel: string;
   showCost: boolean;
   continuousScanDefault?: boolean;
+  cancelHref?: string;
 }
 
 export function StockMovementForm({
@@ -77,12 +78,15 @@ export function StockMovementForm({
   submitLabel,
   showCost,
   continuousScanDefault = true,
+  cancelHref = '/inventory/stock',
 }: StockMovementFormProps) {
   const [state, formAction, pending] = useActionState<StockFormState, FormData>(action, undefined);
   const [rows, setRows] = useState<Row[]>([]);
   const [continuous, setContinuous] = useState(continuousScanDefault);
   const scanRef = useRef<HTMLInputElement>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [fromWarehouseId, setFromWarehouseId] = useState(warehouses[0]?.id ?? '');
+  const [toWarehouseId, setToWarehouseId] = useState(warehouses[1]?.id ?? warehouses[0]?.id ?? '');
 
   useEffect(() => {
     scanRef.current?.focus();
@@ -188,6 +192,8 @@ export function StockMovementForm({
                   id="fromWarehouseId"
                   name="fromWarehouseId"
                   required
+                  value={fromWarehouseId}
+                  onChange={(e) => setFromWarehouseId(e.target.value)}
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                 >
                   {warehouses.map((w) => (
@@ -203,6 +209,8 @@ export function StockMovementForm({
                   id="toWarehouseId"
                   name="toWarehouseId"
                   required
+                  value={toWarehouseId}
+                  onChange={(e) => setToWarehouseId(e.target.value)}
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                 >
                   {warehouses.map((w) => (
@@ -211,6 +219,11 @@ export function StockMovementForm({
                     </option>
                   ))}
                 </select>
+                {fromWarehouseId && toWarehouseId && fromWarehouseId === toWarehouseId && (
+                  <p className="text-xs text-destructive">
+                    Source and destination warehouses must be different.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="note">Note</Label>
@@ -388,11 +401,19 @@ export function StockMovementForm({
       {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
 
       <div className="flex items-center gap-2">
-        <Button type="submit" disabled={pending || rows.length === 0}>
+        <Button
+          type="submit"
+          disabled={
+            pending ||
+            rows.length === 0 ||
+            rows.some((r) => !r.quantity || Number(r.quantity) <= 0) ||
+            (mode === 'transfer' && (!fromWarehouseId || !toWarehouseId || fromWarehouseId === toWarehouseId))
+          }
+        >
           {pending ? 'Posting…' : submitLabel}
         </Button>
         <Button type="button" variant="outline" asChild>
-          <Link href="/inventory/stock">Cancel</Link>
+          <Link href={cancelHref}>Cancel</Link>
         </Button>
       </div>
     </form>

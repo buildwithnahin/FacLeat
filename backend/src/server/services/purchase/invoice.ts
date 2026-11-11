@@ -6,6 +6,7 @@ import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { approvalService } from '@/server/services/approval.service';
 import { accountsService } from '@/server/services/accounts.service';
+import { getScopedBranchIds } from '@/server/auth/scope';
 import type { AppSession } from '@/server/auth/session';
 import type { JournalLineInput } from '@/server/validators/accounts';
 import type { InvoiceCreateInput } from '@/server/validators/purchase';
@@ -13,10 +14,29 @@ import { NotFoundError, ValidationError } from '@/lib/errors';
 import { ZERO, isShoesCategory, normalizeSize, INVENTORY_KEY_BY_PRODUCT_TYPE } from './shared';
 
 export const invoiceMethods = {
-  async listInvoices(session: AppSession | null, filters: { supplierId?: string } = {}) {
+  async listInvoices(
+    session: AppSession | null,
+    filters: { branchId?: string; status?: string; supplierId?: string; search?: string } = {},
+  ) {
     await authorize(session, 'purchase:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
+    const search = filters.search?.trim();
     return prisma.purchaseInvoice.findMany({
-      where: { supplierId: filters.supplierId },
+      where: {
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
+        status: filters.status,
+        supplierId: filters.supplierId,
+        ...(search
+          ? {
+              OR: [
+                { number: { contains: search } },
+                { supplier: { name: { contains: search } } },
+                { supplier: { code: { contains: search } } },
+                { purchaseOrder: { number: { contains: search } } },
+              ],
+            }
+          : {}),
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         supplier: { select: { id: true, code: true, name: true } },

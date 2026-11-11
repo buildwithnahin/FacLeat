@@ -29,7 +29,11 @@ interface FormOptions {
 export default async function IssueLCPage({ searchParams }: { searchParams: Promise<{ orderId?: string }> }) {
   const { orderId } = await searchParams;
   const session = await getSession();
-  const branchId = session?.activeBranchId ?? undefined;
+  const branchId =
+    session?.activeBranchId ??
+    session?.defaultBranchId ??
+    session?.allowedBranchIds?.[0] ??
+    undefined;
   const qs = new URLSearchParams(branchId ? { branchId } : {});
 
   const { orders, branches } = await backendFetch<FormOptions>(`/api/mobile/trade/lc/form-options?${qs.toString()}`);

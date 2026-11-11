@@ -17,7 +17,14 @@ export function DeleteCostEntryButton({
     undefined,
   );
   return (
-    <form action={formAction}>
+    <form
+      action={formAction}
+      onSubmit={(e) => {
+        if (!confirm('Are you sure you want to delete this cost entry?')) {
+          e.preventDefault();
+        }
+      }}
+    >
       <input type="hidden" name="entryId" value={entryId} />
       <input type="hidden" name="orderId" value={orderId} />
       <Button

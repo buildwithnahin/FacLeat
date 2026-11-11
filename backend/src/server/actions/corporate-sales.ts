@@ -24,7 +24,10 @@ function fail(e: unknown) {
 export async function createCorporateQuoteAction(input: unknown) {
   const parsed = createQuoteSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     const session = await getSession();
     const q = await corporateService.createQuote(session, parsed.data);
@@ -39,7 +42,10 @@ export async function createCorporateQuoteAction(input: unknown) {
 export async function updateCorporateQuoteStatusAction(input: unknown) {
   const parsed = updateQuoteStatusSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     const session = await getSession();
     await corporateService.updateQuoteStatus(session, parsed.data);
@@ -54,7 +60,10 @@ export async function updateCorporateQuoteStatusAction(input: unknown) {
 export async function convertCorporateQuoteAction(input: unknown) {
   const parsed = convertQuoteSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     const session = await getSession();
     const o = await corporateService.convertQuoteToOrder(session, parsed.data);
@@ -69,7 +78,10 @@ export async function convertCorporateQuoteAction(input: unknown) {
 export async function createCorporateOrderAction(input: unknown) {
   const parsed = createOrderSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     const session = await getSession();
     const o = await corporateService.createOrder(session, parsed.data);
@@ -84,7 +96,10 @@ export async function createCorporateOrderAction(input: unknown) {
 export async function cancelCorporateOrderAction(input: unknown) {
   const parsed = cancelOrderSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     const session = await getSession();
     await corporateService.cancelOrder(session, parsed.data);
@@ -98,7 +113,10 @@ export async function cancelCorporateOrderAction(input: unknown) {
 export async function recordCorporateDeliveryAction(input: unknown) {
   const parsed = recordDeliverySchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     const session = await getSession();
     const d = await corporateService.recordDelivery(session, parsed.data);
@@ -113,7 +131,10 @@ export async function recordCorporateDeliveryAction(input: unknown) {
 export async function updateCorporateDeliveryWorkflowAction(input: unknown) {
   const parsed = updateDeliveryWorkflowSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     const session = await getSession();
     await corporateService.updateDeliveryWorkflow(session, parsed.data);
@@ -127,7 +148,10 @@ export async function updateCorporateDeliveryWorkflowAction(input: unknown) {
 export async function createCorporateInvoiceAction(input: unknown) {
   const parsed = createInvoiceSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     const session = await getSession();
     const inv = await corporateService.createInvoice(session, parsed.data);
@@ -142,12 +166,20 @@ export async function createCorporateInvoiceAction(input: unknown) {
 export async function recordCorporateInvoicePaymentAction(input: unknown) {
   const parsed = recordInvoicePaymentSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     const session = await getSession();
     await corporateService.recordInvoicePayment(session, parsed.data);
     revalidatePath(`/corporate-sales/invoices/${parsed.data.invoiceId}`);
     revalidatePath('/corporate-sales/invoices');
+    return { success: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
     return { success: true };
   } catch (e) {
     return fail(e);

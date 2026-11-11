@@ -43,7 +43,12 @@ export async function createCustomerAction(
   formData: FormData,
 ): Promise<CustomerFormState> {
   const parsed = customerCreateSchema.safeParse(parseCustomer(formData));
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     const session = await getSession();
     await customerService.create(session, parsed.data);
@@ -63,7 +68,12 @@ export async function updateCustomerAction(
     id: formData.get('id'),
     ...parseCustomer(formData),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     const session = await getSession();
     await customerService.update(session, parsed.data);
@@ -89,7 +99,12 @@ export async function createCustomerCategoryAction(
     discountPct: formData.get('discountPct') ?? 0,
     isActive: formData.get('isActive') === 'false' ? false : true,
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     const session = await getSession();
     await customerService.createCategory(session, parsed.data);
@@ -117,7 +132,12 @@ export async function addCustomerInteractionAction(
     body: formData.get('body') ?? '',
     followUpAt: followUpRaw ? followUpRaw : null,
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     const session = await getSession();
     await customerService.addInteraction(session, parsed.data);

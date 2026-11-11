@@ -35,6 +35,9 @@ export function LCActionButtons({ lc }: Props) {
   if (actions.length === 0) return null;
 
   function changeStatus(status: string) {
+    if (status === 'CANCELLED' && typeof window !== 'undefined' && !window.confirm('Are you sure you want to cancel this Letter of Credit?')) {
+      return;
+    }
     startTransition(async () => {
       const res = await updateLCStatus({ lcId: lc.id, status });
       if (res.success) {

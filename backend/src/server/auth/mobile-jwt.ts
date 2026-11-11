@@ -16,7 +16,7 @@ import { randomBytes, createHash } from 'crypto';
  * the raw value exists only in transit to the client.
  */
 
-const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+const ACCESS_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days (prevents premature session drop in web ERP)
 export const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // Dedicated, single-purpose token for the SSE notification stream. A plain

@@ -4,6 +4,7 @@ import { DataTable } from '@/components/shared/data-table';
 import { Pill, type PillTone } from '@/components/shared/pill';
 import { Badge } from '@/components/ui/badge';
 import { backendFetch } from '@/lib/backend-client';
+import { getSession } from '@/server/auth/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,14 @@ interface Channel {
 }
 
 export default async function EcommerceChannelsPage() {
-  const channels = await backendFetch<Channel[]>('/api/mobile/ecommerce/channels');
+  const session = await getSession();
+  const branchId =
+    session?.activeBranchId ??
+    session?.defaultBranchId ??
+    session?.allowedBranchIds?.[0] ??
+    undefined;
+  const query = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+  const channels = await backendFetch<Channel[]>(`/api/mobile/ecommerce/channels${query}`);
 
   return (
     <div className="space-y-6">

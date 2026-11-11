@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { DataTable } from '@/components/shared/data-table';
 import { Pill } from '@/components/shared/pill';
 import { backendFetch } from '@/lib/backend-client';
+import { getSession } from '@/server/auth/session';
 import { formatCurrency, d } from '@/lib/money';
 import type { CurrencyCode } from '@/lib/money';
 
@@ -40,13 +41,22 @@ export default async function CRMPage({
 }: {
   searchParams: Promise<Search>;
 }) {
+  const session = await getSession();
   const sp = await searchParams;
+  const branchId =
+    session?.activeBranchId ??
+    session?.defaultBranchId ??
+    session?.allowedBranchIds?.[0] ??
+    undefined;
+
   const qs = new URLSearchParams();
+  if (branchId) qs.set('branchId', branchId);
   if (sp.status && sp.status !== 'ALL') qs.set('status', sp.status);
   if (sp.type && sp.type !== 'ALL') qs.set('type', sp.type);
   if (sp.search) qs.set('search', sp.search);
 
   const customers = await backendFetch<CustomerRow[]>(`/api/mobile/crm?${qs.toString()}`);
+  const hasFilter = Boolean(sp.search || (sp.status && sp.status !== 'ALL') || (sp.type && sp.type !== 'ALL'));
 
   return (
     <div className="space-y-6">
@@ -60,7 +70,7 @@ export default async function CRMPage({
       </PageHeader>
 
       <Card className="p-4">
-        <form className="grid grid-cols-1 md:grid-cols-[1fr_180px_180px_160px_auto] gap-3 items-end">
+        <form className="grid grid-cols-1 md:grid-cols-[1fr_180px_180px_auto] gap-3 items-end">
           <div>
             <Input
               name="search"
@@ -94,10 +104,16 @@ export default async function CRMPage({
               <option value="BLOCKED">Blocked</option>
             </select>
           </div>
-          <Button type="submit" variant="outline">
-            Filter
-          </Button>
-          <div />
+          <div className="flex gap-2">
+            <Button type="submit" variant="outline">
+              Filter
+            </Button>
+            {hasFilter && (
+              <Button variant="ghost" asChild>
+                <Link href="/crm">Clear</Link>
+              </Button>
+            )}
+          </div>
         </form>
       </Card>
 

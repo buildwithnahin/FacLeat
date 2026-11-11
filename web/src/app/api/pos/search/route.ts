@@ -11,8 +11,12 @@ import { backendFetch, BackendApiError } from '@/lib/backend-client';
  */
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get('q') ?? '';
+  const branchId = req.nextUrl.searchParams.get('branchId') ?? '';
   try {
-    const products = await backendFetch(`/api/mobile/pos/search?q=${encodeURIComponent(q)}`);
+    const qs = new URLSearchParams();
+    if (q) qs.set('q', q);
+    if (branchId) qs.set('branchId', branchId);
+    const products = await backendFetch(`/api/mobile/pos/search?${qs.toString()}`);
     return Response.json(products);
   } catch (e) {
     if (e instanceof BackendApiError) {

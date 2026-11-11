@@ -35,25 +35,25 @@ async function post<T>(path: string, data: unknown, successMessage: string): Pro
 
 export async function createTradeOrder(input: unknown) {
   const parsed = createTradeOrderSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   return post<{ id: string }>('/api/mobile/trade/orders', parsed.data, 'Trade order created');
 }
 
 export async function updateTradeOrderStatus(input: unknown) {
   const parsed = updateTradeOrderStatusSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   return post<{ id: string; status: string }>('/api/mobile/trade/orders/status', parsed.data, 'Status updated');
 }
 
 export async function createTradeShipment(input: unknown) {
   const parsed = createShipmentSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   return post<{ id: string }>('/api/mobile/trade/shipments', parsed.data, 'Shipment recorded');
 }
 
 export async function updateTradeShipmentStatus(input: unknown) {
   const parsed = updateShipmentStatusSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   return post<{ id: string; status: string }>(
     '/api/mobile/trade/shipments/status',
     parsed.data,
@@ -63,25 +63,25 @@ export async function updateTradeShipmentStatus(input: unknown) {
 
 export async function createLetterOfCredit(input: unknown) {
   const parsed = createLCSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   return post<{ id: string }>('/api/mobile/trade/lc', parsed.data, 'Letter of Credit issued');
 }
 
 export async function updateLCStatus(input: unknown) {
   const parsed = updateLCStatusSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   return post<{ id: string; status: string }>('/api/mobile/trade/lc/status', parsed.data, 'LC status updated');
 }
 
 export async function createLCAmendment(input: unknown) {
   const parsed = createLCAmendmentSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   return post<{ id: string }>('/api/mobile/trade/lc/amendments', parsed.data, 'Amendment request submitted');
 }
 
 export async function decideLCAmendment(input: unknown) {
   const parsed = amendmentDecisionSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   return post<{ id: string }>(
     '/api/mobile/trade/lc/amendments/decision',
     parsed.data,
@@ -91,13 +91,13 @@ export async function decideLCAmendment(input: unknown) {
 
 export async function createLCDrawdown(input: unknown) {
   const parsed = createLCDrawdownSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   return post<{ id: string }>('/api/mobile/trade/lc/drawdowns', parsed.data, 'Drawdown presentation recorded');
 }
 
 export async function decideLCDrawdown(input: unknown) {
   const parsed = drawdownDecisionSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   return post<{ id: string }>(
     '/api/mobile/trade/lc/drawdowns/decision',
     parsed.data,
@@ -107,12 +107,12 @@ export async function decideLCDrawdown(input: unknown) {
 
 export async function recordLCDrawdownPayment(input: unknown) {
   const parsed = recordDrawdownPaymentSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   return post<{ id: string }>('/api/mobile/trade/lc/drawdowns/payment', parsed.data, 'Payment recorded');
 }
 
 export async function createTradePaymentAction(input: unknown) {
   const parsed = createTradePaymentSchema.safeParse(input);
-  if (!parsed.success) return apiError('Validation failed', parsed.error.flatten());
+  if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten());
   return post<{ id: string }>('/api/mobile/trade/payments', parsed.data, 'Payment recorded');
 }

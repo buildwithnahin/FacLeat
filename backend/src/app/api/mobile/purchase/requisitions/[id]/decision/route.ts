@@ -15,7 +15,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const body = await req.json().catch(() => ({}));
   const parsed = requisitionDecisionSchema.safeParse({ ...(body ?? {}), id });
   if (!parsed.success) {
-    return Response.json(apiError('Validation failed', parsed.error.flatten()), { status: 422 });
+    return Response.json(
+      apiError(parsed.error.issues[0]?.message ?? 'Validation failed', parsed.error.flatten()),
+      { status: 422 },
+    );
   }
 
   try {

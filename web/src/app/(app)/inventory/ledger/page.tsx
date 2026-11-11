@@ -1,15 +1,16 @@
+import Link from 'next/link';
+import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight } from 'lucide-react';
 import { getSession } from '@/server/auth/session';
 import { backendFetch } from '@/lib/backend-client';
 import { PageHeader } from '@/components/shared/page-header';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import Link from 'next/link';
 import {
   INVENTORY_SECTION_META,
   INVENTORY_SECTION_SLUGS,
   parseInventorySection,
+  type InventorySectionSlug,
 } from '@/lib/inventory-sections';
+import { LedgerTable, type MovementRow } from './ledger-table';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,96 +20,71 @@ type LedgerPageProps = {
   searchParams: Promise<{ section?: string }>;
 };
 
-interface MovementRow {
-  id: string;
-  createdAt: string;
-  direction: 'IN' | 'OUT';
-  quantity: string;
-  costPerUnit: string;
-  refType: string;
-  refId: string | null;
-  note: string | null;
-  product: { sku: string; name: string };
-  warehouse: { name: string; code: string; type: string };
-}
-
 export default async function LedgerPage({ searchParams }: LedgerPageProps) {
   const session = await getSession();
   const sp = await searchParams;
-  const section = parseInventorySection(sp.section) ?? 'raw-material';
-  const branchId = session?.activeBranchId ?? undefined;
+  const section = parseInventorySection(sp.section);
+  const branchId = session?.activeBranchId || session?.defaultBranchId || undefined;
 
-  const qs = new URLSearchParams({ section, limit: '300' });
+  const qs = new URLSearchParams({ limit: '500' });
+  if (section) qs.set('section', section);
   if (branchId) qs.set('branchId', branchId);
   const rows = await backendFetch<MovementRow[]>(`/api/mobile/inventory/movements?${qs.toString()}`);
 
+  const pageTitle = section
+    ? `${INVENTORY_SECTION_META[section].label} Ledger`
+    : 'All Stock Movements Ledger';
+  const pageDescription = section
+    ? `Every ${INVENTORY_SECTION_META[section].label.toLowerCase()} stock movement in the inventory ledger.`
+    : 'Comprehensive real-time audit trail of all stock in, stock out, transfers, and adjustments.';
+
   return (
     <div>
-      <PageHeader
-        title={`${INVENTORY_SECTION_META[section].label} Ledger`}
-        description={`Every ${INVENTORY_SECTION_META[section].label.toLowerCase()} stock movement in the single inventory ledger.`}
-      />
-      <div className="mb-4 flex flex-wrap gap-2">
-        {INVENTORY_SECTION_SLUGS.map((slug) => (
-          <Button key={slug} variant={section === slug ? 'default' : 'outline'} asChild>
-            <Link href={`/inventory/ledger?section=${slug}`}>{INVENTORY_SECTION_META[slug].label}</Link>
-          </Button>
-        ))}
+      <PageHeader title={pageTitle} description={pageDescription}>
+        <Button variant="outline" asChild>
+          <Link href="/warehouse/receive">
+            <ArrowDownToLine className="h-4 w-4" />
+            Stock In
+          </Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href="/warehouse/issue">
+            <ArrowUpFromLine className="h-4 w-4" />
+            Stock Out
+          </Link>
+        </Button>
+        <Button asChild>
+          <Link href="/warehouse/transfer">
+            <ArrowLeftRight className="h-4 w-4" />
+            Transfer
+          </Link>
+        </Button>
+      </PageHeader>
+
+      <div className="space-y-6">
+        <SectionLinks activeSection={section} />
+        <LedgerTable
+          rows={rows}
+          emptyLabel={`No ${section ? INVENTORY_SECTION_META[section].label.toLowerCase() : 'inventory'} movements found.`}
+        />
       </div>
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="text-left font-semibold px-4 py-3">When</th>
-                <th className="text-left font-semibold px-4 py-3">SKU</th>
-                <th className="text-left font-semibold px-4 py-3">Product</th>
-                <th className="text-left font-semibold px-4 py-3">Warehouse</th>
-                <th className="text-left font-semibold px-4 py-3">Dir</th>
-                <th className="text-right font-semibold px-4 py-3">Qty</th>
-                <th className="text-right font-semibold px-4 py-3">Cost / unit</th>
-                <th className="text-left font-semibold px-4 py-3">Ref</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
-                    No movements yet.
-                  </td>
-                </tr>
-              )}
-              {rows.map((r) => (
-                <tr key={r.id} className="hover:bg-muted/30">
-                  <td className="px-4 py-3 text-muted-foreground tabular text-xs">
-                    {r.createdAt.replace('T', ' ').slice(0, 19)}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs">{r.product.sku}</td>
-                  <td className="px-4 py-3">{r.product.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {r.warehouse.name} <span className="text-xs">({r.warehouse.code})</span>
-                    <div className="text-xs text-muted-foreground/80">{r.warehouse.type.toLowerCase()}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant={r.direction === 'IN' ? 'success' : 'destructive'}>
-                      {r.direction}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular font-medium">{r.quantity}</td>
-                  <td className="px-4 py-3 text-right tabular text-muted-foreground">
-                    {r.costPerUnit}
-                  </td>
-                  <td className="px-4 py-3 text-xs">
-                    <span className="font-mono text-muted-foreground">{r.refType}</span>
-                    {r.refId && <span className="ml-1 text-muted-foreground">· {r.refId}</span>}
-                    {r.note && <div className="text-muted-foreground mt-0.5">{r.note}</div>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+    </div>
+  );
+}
+
+function SectionLinks({ activeSection }: { activeSection: InventorySectionSlug | null }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button variant={!activeSection ? 'default' : 'outline'} asChild>
+        <Link href="/inventory/ledger">All Categories</Link>
+      </Button>
+      {INVENTORY_SECTION_SLUGS.map((slug) => (
+        <Button key={slug} variant={activeSection === slug ? 'default' : 'outline'} asChild>
+          <Link href={`/inventory/ledger?section=${slug}`}>
+            {INVENTORY_SECTION_META[slug].label}
+          </Link>
+        </Button>
+      ))}
     </div>
   );
 }

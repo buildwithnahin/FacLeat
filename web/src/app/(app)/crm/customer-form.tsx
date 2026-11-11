@@ -41,7 +41,7 @@ export interface CustomerFormProps {
   mode: 'create' | 'edit';
   branches: { id: string; name: string; code: string }[];
   categories: { id: string; name: string }[];
-  initial?: {
+  initial?: Partial<{
     id: string;
     branchId: string;
     name: string;
@@ -60,7 +60,7 @@ export interface CustomerFormProps {
     openingBalance: string;
     status: string;
     notes: string | null;
-  };
+  }>;
 }
 
 export function CustomerForm({ mode, branches, categories, initial }: CustomerFormProps) {

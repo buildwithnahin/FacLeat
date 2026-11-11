@@ -95,7 +95,13 @@ export function LCDrawdownList({ lcId, drawdowns, lcStatus, currency, availableA
       if (res.success) {
         toast.success('Drawdown presentation recorded');
         setOpen(false);
-        form.reset();
+        form.reset({
+          lcId,
+          presentationDate: new Date(),
+          amount: 0,
+          certificateOfOrigin: false,
+          inspectionCert: false,
+        });
         router.refresh();
       } else {
         toast.error(res.error);
@@ -112,8 +118,16 @@ export function LCDrawdownList({ lcId, drawdowns, lcStatus, currency, availableA
   }
 
   function rejectDrawdown(id: string) {
+    const note = typeof window !== 'undefined'
+      ? window.prompt('Enter discrepancy / rejection note for this drawdown:', 'Discrepancy in documents')
+      : 'Discrepancy in documents';
+    if (note === null) return;
     startTransition(async () => {
-      const res = await decideLCDrawdown({ drawdownId: id, decision: 'REJECTED', discrepancyNote: 'Rejected by bank' });
+      const res = await decideLCDrawdown({
+        drawdownId: id,
+        decision: 'REJECTED',
+        discrepancyNote: note.trim() || 'Rejected by bank',
+      });
       if (res.success) { toast.success('Drawdown rejected'); router.refresh(); }
       else toast.error(res.error);
     });

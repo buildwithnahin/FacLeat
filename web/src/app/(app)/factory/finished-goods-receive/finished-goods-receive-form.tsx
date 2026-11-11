@@ -56,14 +56,25 @@ export function FinishedGoodsReceiveForm({
         batchNo: '',
         quantity: '1',
         uom: selectedOrder.unit,
-        qualityStatus: 'PENDING',
+        qualityStatus: 'PASSED',
       },
     ]);
   };
 
+  const serializedItems = useMemo(
+    () =>
+      JSON.stringify(
+        items.map((it) => ({
+          ...it,
+          quantity: Number(it.quantity) || 0,
+        })),
+      ),
+    [items],
+  );
+
   return (
     <form action={formAction} className="space-y-6">
-      <input type="hidden" name="items" value={JSON.stringify(items)} />
+      <input type="hidden" name="items" value={serializedItems} />
 
       <Card className="p-6 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -73,7 +84,10 @@ export function FinishedGoodsReceiveForm({
               id="orderId"
               name="orderId"
               value={orderId}
-              onChange={(e) => setOrderId(e.target.value)}
+              onChange={(e) => {
+                setOrderId(e.target.value);
+                setItems([]);
+              }}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
             >
               {orders.map((order) => (
@@ -118,9 +132,15 @@ export function FinishedGoodsReceiveForm({
           </div>
         </div>
 
+        {orders.length === 0 && (
+          <p className="text-sm text-amber-600">
+            No active production orders available to receive finished goods from.
+          </p>
+        )}
+
         <div>
           <Label htmlFor="remarks">Remarks</Label>
-          <Textarea id="remarks" name="remarks" rows={3} />
+          <Textarea id="remarks" name="remarks" rows={3} placeholder="Notes or inspection summary…" />
         </div>
       </Card>
 
@@ -130,13 +150,18 @@ export function FinishedGoodsReceiveForm({
             <h2 className="text-lg font-semibold">Finished Goods Items</h2>
             <p className="text-sm text-muted-foreground">Receive packed finished goods into FG warehouse.</p>
           </div>
-          <Button type="button" variant="outline" onClick={addFinishedItem}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={addFinishedItem}
+            disabled={!selectedOrder}
+          >
             <Plus className="h-4 w-4" /> Add Item
           </Button>
         </div>
 
         {items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No FG items yet.</p>
+          <p className="text-sm text-muted-foreground">No FG items added yet. Click &ldquo;Add Item&rdquo; to begin.</p>
         ) : (
           <div className="space-y-3">
             {items.map((item, index) => (
@@ -144,53 +169,69 @@ export function FinishedGoodsReceiveForm({
                 key={index}
                 className="grid grid-cols-1 md:grid-cols-[2fr_150px_140px_120px_150px_auto] gap-2 items-end"
               >
-                <Input value={selectedOrder?.label ?? ''} readOnly />
-                <Input
-                  placeholder="Batch"
-                  value={item.batchNo}
-                  onChange={(e) =>
-                    setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, batchNo: e.target.value } : row))
-                  }
-                />
-                <Input
-                  type="number"
-                  step="0.0001"
-                  min="0"
-                  value={item.quantity}
-                  onChange={(e) =>
-                    setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: e.target.value } : row))
-                  }
-                />
-                <select
-                  value={item.uom}
-                  onChange={(e) =>
-                    setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, uom: e.target.value as (typeof UNITS)[number] } : row))
-                  }
-                  className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                >
-                  {UNITS.map((unit) => (
-                    <option key={unit} value={unit}>
-                      {unit}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={item.qualityStatus}
-                  onChange={(e) =>
-                    setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, qualityStatus: e.target.value as (typeof QUALITY_CHECK_STATUS)[number] } : row))
-                  }
-                  className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                >
-                  {QUALITY_CHECK_STATUS.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Product</Label>
+                  <Input value={selectedOrder?.label ?? ''} readOnly className="bg-muted/30" />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Batch</Label>
+                  <Input
+                    placeholder="Batch"
+                    value={item.batchNo}
+                    onChange={(e) =>
+                      setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, batchNo: e.target.value } : row))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Quantity *</Label>
+                  <Input
+                    type="number"
+                    step="0.0001"
+                    min="0.0001"
+                    value={item.quantity}
+                    onChange={(e) =>
+                      setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: e.target.value } : row))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">UoM</Label>
+                  <select
+                    value={item.uom}
+                    onChange={(e) =>
+                      setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, uom: e.target.value as (typeof UNITS)[number] } : row))
+                    }
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  >
+                    {UNITS.map((unit) => (
+                      <option key={unit} value={unit}>
+                        {unit}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Quality Status</Label>
+                  <select
+                    value={item.qualityStatus}
+                    onChange={(e) =>
+                      setItems((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, qualityStatus: e.target.value as (typeof QUALITY_CHECK_STATUS)[number] } : row))
+                    }
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  >
+                    {QUALITY_CHECK_STATUS.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <Button
                   type="button"
                   variant="ghost"
                   onClick={() => setItems((prev) => prev.filter((_, rowIndex) => rowIndex !== index))}
+                  className="mb-0.5"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -200,8 +241,18 @@ export function FinishedGoodsReceiveForm({
         )}
       </Card>
 
-      {state?.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
-      <Button type="submit" disabled={pending}>
+      {state?.error ? (
+        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+          {state.error}
+        </div>
+      ) : null}
+      {state?.success ? (
+        <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-700">
+          Finished goods receive created successfully.
+        </div>
+      ) : null}
+
+      <Button type="submit" disabled={pending || items.length === 0 || !orderId}>
         {pending ? 'Saving...' : 'Create FG Receive'}
       </Button>
     </form>

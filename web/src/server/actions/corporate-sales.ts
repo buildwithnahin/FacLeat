@@ -22,7 +22,10 @@ function fail(e: unknown) {
 export async function createCorporateQuoteAction(input: unknown) {
   const parsed = createQuoteSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     const quote = await backendFetch<{ id: string; number: string }>(
       '/api/mobile/corporate-sales/quotes',
@@ -39,7 +42,10 @@ export async function createCorporateQuoteAction(input: unknown) {
 export async function updateCorporateQuoteStatusAction(input: unknown) {
   const parsed = updateQuoteStatusSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     await backendFetch(`/api/mobile/corporate-sales/quotes/${parsed.data.quoteId}/status`, {
       method: 'POST',
@@ -56,7 +62,10 @@ export async function updateCorporateQuoteStatusAction(input: unknown) {
 export async function convertCorporateQuoteAction(input: unknown) {
   const parsed = convertQuoteSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     const order = await backendFetch<{ id: string; number: string }>(
       `/api/mobile/corporate-sales/quotes/${parsed.data.quoteId}/convert`,
@@ -73,7 +82,10 @@ export async function convertCorporateQuoteAction(input: unknown) {
 export async function createCorporateOrderAction(input: unknown) {
   const parsed = createOrderSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     const order = await backendFetch<{ id: string; number: string }>(
       '/api/mobile/corporate-sales/orders',
@@ -90,7 +102,10 @@ export async function createCorporateOrderAction(input: unknown) {
 export async function cancelCorporateOrderAction(input: unknown) {
   const parsed = cancelOrderSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     await backendFetch(`/api/mobile/corporate-sales/orders/${parsed.data.orderId}/cancel`, {
       method: 'POST',
@@ -106,13 +121,17 @@ export async function cancelCorporateOrderAction(input: unknown) {
 export async function recordCorporateDeliveryAction(input: unknown) {
   const parsed = recordDeliverySchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     const delivery = await backendFetch<{ id: string; number: string }>(
       `/api/mobile/corporate-sales/orders/${parsed.data.orderId}/deliveries`,
       { method: 'POST', body: JSON.stringify(parsed.data) },
     );
     revalidatePath(`/corporate-sales/orders/${parsed.data.orderId}`);
+    revalidatePath('/warehouse/dispatch');
     return { success: true, deliveryId: delivery.id, deliveryNumber: delivery.number };
   } catch (e) {
     return fail(e);
@@ -122,7 +141,10 @@ export async function recordCorporateDeliveryAction(input: unknown) {
 export async function updateCorporateDeliveryWorkflowAction(input: unknown) {
   const parsed = updateDeliveryWorkflowSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     await backendFetch(`/api/mobile/corporate-sales/deliveries/${parsed.data.deliveryId}/workflow`, {
       method: 'POST',
@@ -138,7 +160,10 @@ export async function updateCorporateDeliveryWorkflowAction(input: unknown) {
 export async function createCorporateInvoiceAction(input: unknown) {
   const parsed = createInvoiceSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     const invoice = await backendFetch<{ id: string; number: string }>(
       `/api/mobile/corporate-sales/orders/${parsed.data.orderId}/invoices`,
@@ -155,7 +180,10 @@ export async function createCorporateInvoiceAction(input: unknown) {
 export async function recordCorporateInvoicePaymentAction(input: unknown) {
   const parsed = recordInvoicePaymentSchema.safeParse(input);
   if (!parsed.success)
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   try {
     await backendFetch(`/api/mobile/corporate-sales/invoices/${parsed.data.invoiceId}/payments`, {
       method: 'POST',

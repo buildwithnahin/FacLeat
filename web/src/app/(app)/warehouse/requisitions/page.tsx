@@ -1,10 +1,11 @@
 import Link from 'next/link';
-import { Eye, Plus } from 'lucide-react';
+import { Eye, Plus, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { DataTable } from '@/components/shared/data-table';
 import { PageHeader } from '@/components/shared/page-header';
 import { Pill } from '@/components/shared/pill';
+import { Input } from '@/components/ui/input';
 import { getSession } from '@/server/auth/session';
 import { backendFetch } from '@/lib/backend-client';
 
@@ -40,18 +41,31 @@ interface RequisitionRow {
 export default async function StockRequisitionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; q?: string }>;
 }) {
   const session = await getSession();
-  const branchId = session?.activeBranchId ?? undefined;
+  const branchId = session?.activeBranchId || session?.defaultBranchId || session?.allowedBranchIds?.[0];
   const params = await searchParams;
   const status = params.status && params.status !== 'ALL' ? params.status : undefined;
+  const query = (params.q ?? '').trim().toLowerCase();
 
   const qs = new URLSearchParams();
   if (branchId) qs.set('destinationBranchId', branchId);
   if (status) qs.set('status', status);
 
-  const rows = await backendFetch<RequisitionRow[]>(`/api/mobile/warehouse/requisitions?${qs.toString()}`);
+  const rawRows = await backendFetch<RequisitionRow[]>(`/api/mobile/warehouse/requisitions?${qs.toString()}`);
+
+  const rows = query
+    ? rawRows.filter(
+        (row) =>
+          row.number.toLowerCase().includes(query) ||
+          row.showroomWarehouse.name.toLowerCase().includes(query) ||
+          row.showroomWarehouse.code.toLowerCase().includes(query) ||
+          (row.sourceWarehouse && row.sourceWarehouse.name.toLowerCase().includes(query)),
+      )
+    : rawRows;
+
+  const hasFilter = Boolean(query || (params.status && params.status !== 'ALL'));
 
   return (
     <div className="space-y-6">
@@ -68,7 +82,16 @@ export default async function StockRequisitionPage({
       </PageHeader>
 
       <Card className="p-4">
-        <form className="flex items-end gap-3">
+        <form method="GET" className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              name="q"
+              defaultValue={params.q ?? ''}
+              placeholder="Search by requisition # or showroom…"
+              className="pl-9 h-9"
+            />
+          </div>
           <select
             name="status"
             defaultValue={params.status ?? 'ALL'}
@@ -84,6 +107,14 @@ export default async function StockRequisitionPage({
           <Button type="submit" variant="outline">
             Filter
           </Button>
+          {hasFilter && (
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/warehouse/requisitions" className="gap-1">
+                <X className="h-3.5 w-3.5" />
+                Clear
+              </Link>
+            </Button>
+          )}
         </form>
       </Card>
 

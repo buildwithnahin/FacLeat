@@ -39,7 +39,12 @@ export async function createSupplierAction(
   formData: FormData,
 ): Promise<SupplierFormState> {
   const parsed = supplierCreateSchema.safeParse(parseSupplier(formData));
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     const session = await getSession();
     await supplierService.create(session, parsed.data);
@@ -59,7 +64,12 @@ export async function updateSupplierAction(
     id: formData.get('id'),
     ...parseSupplier(formData),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     const session = await getSession();
     await supplierService.update(session, parsed.data);
@@ -88,7 +98,12 @@ export async function recordSupplierPaymentAction(
     reference: formData.get('reference') ?? '',
     notes: formData.get('notes') ?? '',
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     const session = await getSession();
     await supplierService.recordPayment(session, parsed.data);

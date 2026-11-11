@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { DataTable } from '@/components/shared/data-table';
 import { Pill, type PillTone } from '@/components/shared/pill';
 import { backendFetch } from '@/lib/backend-client';
+import { getSession } from '@/server/auth/session';
 import { formatCurrency, d, type CurrencyCode } from '@/lib/money';
 
 export const dynamic = 'force-dynamic';
@@ -53,11 +54,16 @@ export default async function WholesaleInvoicesPage({
 }: {
   searchParams: Promise<{ status?: string; search?: string }>;
 }) {
+  const session = await getSession();
   const sp = await searchParams;
   const qs = new URLSearchParams();
   if (sp.status && sp.status !== 'ALL') qs.set('status', sp.status);
   if (sp.search) qs.set('search', sp.search);
+  const branchId = session?.activeBranchId ?? session?.defaultBranchId;
+  if (branchId) qs.set('branchId', branchId);
+
   const invoices = await backendFetch<InvoiceRow[]>(`/api/mobile/wholesale/invoices?${qs.toString()}`);
+  const hasFilter = Boolean(sp.search || (sp.status && sp.status !== 'ALL'));
 
   return (
     <div className="space-y-6">
@@ -85,9 +91,16 @@ export default async function WholesaleInvoicesPage({
               </option>
             ))}
           </select>
-          <Button variant="outline" type="submit">
-            Filter
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" type="submit">
+              Filter
+            </Button>
+            {hasFilter && (
+              <Button variant="ghost" asChild>
+                <Link href="/wholesale/invoices">Clear</Link>
+              </Button>
+            )}
+          </div>
         </form>
       </Card>
 

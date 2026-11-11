@@ -36,6 +36,11 @@ export function ReturnForm({
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const refundTotal = items.reduce((acc, i) => {
+    const q = qty[i.id] || 0;
+    return acc + q * i.unitPrice;
+  }, 0);
+
   function submit() {
     const returnItems = Object.entries(qty)
       .filter(([, q]) => q > 0)
@@ -57,8 +62,9 @@ export function ReturnForm({
         return;
       }
       if (res && 'success' in res && res.success) {
-        setMessage({ type: 'ok', text: `Return ${res.returnNumber} recorded` });
+        setMessage({ type: 'ok', text: `Return ${res.returnNumber} recorded successfully` });
         setQty({});
+        setReason('');
         router.refresh();
       }
     });
@@ -92,7 +98,11 @@ export function ReturnForm({
                 className="w-20 text-right tabular"
                 disabled={disabled}
                 value={qty[i.id] ?? ''}
-                onChange={(e) => setQty((p) => ({ ...p, [i.id]: Number(e.target.value) }))}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  const clamped = isNaN(val) ? 0 : Math.max(0, Math.min(remaining, val));
+                  setQty((p) => ({ ...p, [i.id]: clamped }));
+                }}
               />
             </div>
           );
@@ -104,6 +114,7 @@ export function ReturnForm({
           type="checkbox"
           checked={refundToBalance}
           onChange={(e) => setRefundToBalance(e.target.checked)}
+          disabled={!hasReturnable}
         />
         <label htmlFor="refundToBalance">Reduce customer balance (no cash refund)</label>
       </div>
@@ -114,6 +125,7 @@ export function ReturnForm({
             value={method}
             onChange={(e) => setMethod(e.target.value as (typeof WHOLESALE_PAYMENT_METHODS)[number])}
             className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+            disabled={!hasReturnable}
           >
             {WHOLESALE_PAYMENT_METHODS.map((m) => (
               <option key={m} value={m}>
@@ -125,8 +137,19 @@ export function ReturnForm({
       )}
       <div>
         <Label>Reason</Label>
-        <Input value={reason} onChange={(e) => setReason(e.target.value)} />
+        <Input
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Optional reason for return"
+          disabled={!hasReturnable}
+        />
       </div>
+      {refundTotal > 0 && (
+        <div className="flex justify-between text-sm font-medium pt-2 border-t">
+          <span>Return value:</span>
+          <span className="tabular text-amber-700">{formatCurrency(refundTotal, currency)}</span>
+        </div>
+      )}
       {message && (
         <div
           className={`text-sm rounded-md px-3 py-2 ${
@@ -139,7 +162,7 @@ export function ReturnForm({
       <Button
         variant="outline"
         onClick={submit}
-        disabled={pending || !hasReturnable}
+        disabled={pending || !hasReturnable || refundTotal <= 0}
         className="w-full"
       >
         {pending ? 'Processing…' : 'Process return'}

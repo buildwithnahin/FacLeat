@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Plus, Factory, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Plus, Factory, Clock, CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { DataTable } from '@/components/shared/data-table';
 import { Pill } from '@/components/shared/pill';
 import { KpiCard } from '@/components/shared/kpi-card';
 import { backendFetch } from '@/lib/backend-client';
+import { getSession } from '@/server/auth/session';
 import { PRODUCTION_ORDER_STATUS } from '@/server/validators/factory';
 
 export const dynamic = 'force-dynamic';
@@ -54,15 +55,20 @@ export default async function FactoryPage({
 }: {
   searchParams: Promise<Search>;
 }) {
-  const sp = await searchParams;
+  const [session, sp] = await Promise.all([getSession(), searchParams]);
+  const activeBranchId =
+    session?.activeBranchId ?? session?.defaultBranchId ?? session?.allowedBranchIds?.[0];
 
   const listParams = new URLSearchParams();
   if (sp.status && sp.status !== 'ALL') listParams.set('status', sp.status);
   if (sp.search) listParams.set('search', sp.search);
+  if (activeBranchId) listParams.set('branchId', activeBranchId);
 
   const { orders, summary } = await backendFetch<{ orders: OrderRow[]; summary: Summary }>(
     `/api/mobile/factory?${listParams.toString()}`,
   );
+
+  const hasFilter = Boolean(sp.search || (sp.status && sp.status !== 'ALL'));
 
   return (
     <div className="space-y-6">
@@ -86,7 +92,7 @@ export default async function FactoryPage({
       </div>
 
       <Card className="p-4">
-        <form className="grid grid-cols-1 md:grid-cols-[1fr_220px_160px_auto] gap-3 items-end">
+        <form className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 items-end">
           <Input
             name="search"
             placeholder="Search by order number or product…"
@@ -104,10 +110,18 @@ export default async function FactoryPage({
               </option>
             ))}
           </select>
-          <Button type="submit" variant="outline">
-            Filter
-          </Button>
-          <div />
+          <div className="flex gap-2">
+            <Button type="submit" variant="outline">
+              Filter
+            </Button>
+            {hasFilter && (
+              <Button type="button" variant="ghost" asChild>
+                <Link href="/factory">
+                  <X className="h-4 w-4" /> Clear
+                </Link>
+              </Button>
+            )}
+          </div>
         </form>
       </Card>
 

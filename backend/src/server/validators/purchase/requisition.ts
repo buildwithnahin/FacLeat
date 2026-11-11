@@ -11,7 +11,7 @@ export const requisitionItemSchema = z.object({
 });
 
 export const requisitionCreateSchema = z.object({
-  branchId: z.string().cuid(),
+  branchId: z.string().cuid('Select a branch'),
   department: z.string().trim().min(1, 'Department required').max(80),
   requestedBy: z.string().trim().min(1, 'Requested by required').max(120),
   priority: z.enum(PRIORITY).default('MEDIUM'),

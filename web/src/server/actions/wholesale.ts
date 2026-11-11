@@ -17,7 +17,10 @@ function fail(e: unknown) {
 export async function createWholesaleInvoiceAction(input: unknown) {
   const parsed = createInvoiceSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const invoice = await backendFetch<{ id: string; number: string }>(
@@ -35,7 +38,10 @@ export async function createWholesaleInvoiceAction(input: unknown) {
 export async function recordWholesalePaymentAction(input: unknown) {
   const parsed = recordPaymentSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const payment = await backendFetch<{ id: string }>(
@@ -53,7 +59,10 @@ export async function recordWholesalePaymentAction(input: unknown) {
 export async function returnWholesaleInvoiceAction(input: unknown) {
   const parsed = returnInvoiceSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     const ret = await backendFetch<{ id: string; number: string }>(
@@ -71,7 +80,10 @@ export async function returnWholesaleInvoiceAction(input: unknown) {
 export async function voidWholesaleInvoiceAction(input: unknown) {
   const parsed = voidInvoiceSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
   try {
     await backendFetch(`/api/mobile/wholesale/invoices/${parsed.data.invoiceId}/void`, {

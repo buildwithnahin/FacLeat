@@ -39,7 +39,11 @@ export function OpenSessionForm({
   carriedFromPrevious,
 }: Props) {
   const [state, action, pending] = useActionState(openPosSessionAction, undefined);
-  const [selectedBranch, setSelectedBranch] = useState(defaultBranch);
+  const [selectedBranch, setSelectedBranch] = useState(
+    defaultBranch && branches.some((b) => b.id === defaultBranch)
+      ? defaultBranch
+      : branches[0]?.id ?? '',
+  );
 
   const filteredWarehouses = warehouses.filter((w) => w.branchId === selectedBranch);
 

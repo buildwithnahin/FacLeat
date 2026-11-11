@@ -16,13 +16,18 @@ function parseForm(formData: FormData) {
     name: formData.get('name'),
     type: formData.get('type') ?? 'MAIN',
     address: formData.get('address') ?? '',
-    isActive: formData.get('isActive') !== 'off',
+    isActive: formData.get('isActive') === 'on' || formData.get('isActive') === 'true',
   };
 }
 
 export async function createWarehouseAction(_prev: WarehouseFormState, formData: FormData): Promise<WarehouseFormState> {
   const parsed = warehouseCreateSchema.safeParse(parseForm(formData));
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     const session = await getSession();
     await warehouseService.create(session, parsed.data);
@@ -36,7 +41,12 @@ export async function createWarehouseAction(_prev: WarehouseFormState, formData:
 
 export async function updateWarehouseAction(_prev: WarehouseFormState, formData: FormData): Promise<WarehouseFormState> {
   const parsed = warehouseUpdateSchema.safeParse({ id: formData.get('id'), ...parseForm(formData) });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
   try {
     const session = await getSession();
     await warehouseService.update(session, parsed.data);

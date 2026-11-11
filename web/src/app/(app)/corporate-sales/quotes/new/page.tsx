@@ -41,7 +41,7 @@ interface Product {
 export default async function NewQuotePage() {
   const session = await getSession();
   if (!session) redirect('/login');
-  const branchId = session.activeBranchId;
+  const branchId = session.activeBranchId ?? session.defaultBranchId ?? session.allowedBranchIds?.[0];
   if (!branchId) {
     return (
       <div className="space-y-4">

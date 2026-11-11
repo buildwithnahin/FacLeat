@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const products = await backendFetch(`/api/mobile/wholesale/products/search?${qs.toString()}`);
     return Response.json(products);
   } catch (e) {
-    if (e instanceof BackendApiError) return Response.json({ error: e.message }, { status: e.status });
+    if (e instanceof BackendApiError) return Response.json([], { status: e.status === 401 ? 401 : 200 });
     throw e;
   }
 }
