@@ -57,18 +57,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   children: [
                     Column(
                       children: [
-                        Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary,
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: const Icon(Icons.shield_moon, color: Colors.white, size: 32),
-                        ),
+                        Image.asset('assets/logo-mark.png', width: 64, height: 64),
                         const SizedBox(height: 16),
                         Text(
-                          'Annex Admin',
+                          'DeshIT-BD SME ERP',
                           style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 4),
@@ -166,6 +158,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
                             )
                           : const Text('Sign in'),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      key: const Key('quickLoginButton'),
+                      onPressed: authState.isLoading
+                          ? null
+                          : () => ref.read(authControllerProvider.notifier).quickLogin(),
+                      icon: const Icon(Icons.bolt_outlined, size: 18),
+                      label: const Text('Quick login as Super Admin'),
                     ),
                   ],
                 ),

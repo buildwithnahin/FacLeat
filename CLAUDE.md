@@ -8,7 +8,7 @@ DeshIT-BD SME ERP — Full Enterprise ERP for leather / factory / showroom / bus
 This file is the master implementation guide for Claude Code / Claude AI to understand the product scope, architecture, development rules, module boundaries, UI direction, design system, and execution order.
 
 
-The project is being **rebuilt from scratch on Next.js + PostgreSQL**, replacing the previous MERN (Express + React/Vite + MongoDB) implementation. The old `client/` and `server/` folders are treated as a reference for business logic, validators, and schemas, but are **not** the source of truth going forward.
+The project is being **rebuilt from scratch on Next.js + MySQL (TiDB Cloud)**, replacing the previous MERN (Express + React/Vite + MongoDB) implementation. The old `client/` and `server/` folders are treated as a reference for business logic, validators, and schemas, but are **not** the source of truth going forward. (Originally built on PostgreSQL/Neon; migrated to MySQL/TiDB Cloud Serverless for free-tier parity with Neon — see git history.)
 
 
 ---
@@ -90,10 +90,17 @@ Use this stack. Do not substitute without explicit user approval.
 
 
 ### Database & ORM
-- **PostgreSQL 16+**
+- **MySQL 8+** (production/staging: TiDB Cloud Serverless, MySQL-wire-protocol compatible)
 - **Prisma ORM** with `prisma migrate` and `prisma generate`
 - **`Decimal`** type for all money / quantity-with-fraction fields
 - Connection via singleton Prisma client (`src/server/db.ts`) to avoid dev-mode leaks
+- No scalar array types (MySQL has none) — model a `String[]`-shaped field as
+  a join table instead; reshape it back to a flat array in the service layer
+  so the API contract is unaffected. No `mode: 'insensitive'` on string
+  filters (Postgres-only `ILIKE` compat) — MySQL/TiDB's default collation is
+  already case-insensitive. Raw SQL (`$queryRaw`) uses `` `backtick` `` or
+  unquoted identifiers, `?` placeholders (not `$1`/`$2`), `IN (...)` instead
+  of `ANY(...)`, and `CAST(x AS type)` instead of `::type`.
 
 
 ### Auth
@@ -560,7 +567,7 @@ Design reference: 24 module folders of PNG exports at `/home/pias-akbar/Download
 
 ### Currency & Locale
 - Dual currency visible in Figma: **₹ (INR)** and **৳ (BDT)**. Branch has a `currency` field (`INR` | `BDT` | others). All display uses `formatCurrency(amount, branchCurrency)`.
-- Date display: `yyyy-MM-dd` in tables, long form elsewhere. Store `timestamptz` in DB.
+- Date display: `yyyy-MM-dd` in tables, long form elsewhere. Store as `DateTime` (MySQL `DATETIME(3)`, UTC) in DB.
 
 
 ### Common components to build first (in `src/components/shared/`)
@@ -944,7 +951,7 @@ The previous codebase (Express + Mongoose + React/Vite) lives in `client/` and `
 
 
 Claude is not building a demo.
-Claude is building a real ERP foundation on Next.js + PostgreSQL.
+Claude is building a real ERP foundation on Next.js + MySQL (TiDB Cloud).
 
 
 Priority order:

@@ -9,7 +9,7 @@ import '../storage/secure_storage.dart';
 /// Base URL for the mobile API surface. Change this single constant when
 /// pointing the app at a staging server or a physical device (where
 /// `localhost` won't resolve to the dev machine).
-const String kApiBaseUrl = 'http://localhost:3000/api/mobile';
+const String kApiBaseUrl = 'https://annex-leather-back-end.onrender.com/api/mobile';
 
 /// Attaches the in-memory access token to every request and transparently
 /// refreshes + retries once on a 401. Concurrent 401s share a single

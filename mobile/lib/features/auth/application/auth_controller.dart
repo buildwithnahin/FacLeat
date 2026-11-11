@@ -113,6 +113,30 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
+  Future<bool> quickLogin() async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final repo = ref.read(authRepositoryProvider);
+      final result = await repo.quickLogin(deviceLabel: 'flutter-mobile-quick');
+      await ref.read(secureStorageProvider).setRefreshToken(result.tokens.refreshToken);
+      state = AuthState(
+        status: AuthStatus.authenticated,
+        accessToken: result.tokens.accessToken,
+        user: result.user,
+      );
+      return true;
+    } on AuthException catch (e) {
+      state = state.copyWith(isLoading: false, errorMessage: e.message);
+      return false;
+    } catch (_) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Something went wrong. Please try again.',
+      );
+      return false;
+    }
+  }
+
   Future<void> logout() async {
     final storage = ref.read(secureStorageProvider);
     final refreshToken = await storage.getRefreshToken();

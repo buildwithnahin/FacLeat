@@ -2,7 +2,7 @@
 
 A full enterprise ERP for leather / factory / showroom / business operations — covering inventory, factory, retail/wholesale/corporate/online sales, purchase, accounting, assets, HR & payroll, reporting, approvals, and audit, with multi-branch support and role-based access.
 
-> **Status:** Being rebuilt from scratch on **Next.js 15 + PostgreSQL + Prisma**, replacing the previous MERN (Express + React/Vite + MongoDB) implementation. The old `client/` and `server/` folders (and `legacy-mern-backup/`) are reference-only for business logic, validators, and schemas — not the source of truth going forward.
+> **Status:** Being rebuilt from scratch on **Next.js 15 + MySQL (TiDB Cloud) + Prisma**, replacing the previous MERN (Express + React/Vite + MongoDB) implementation. The old `client/` and `server/` folders (and `legacy-mern-backup/`) are reference-only for business logic, validators, and schemas — not the source of truth going forward. (Originally built on PostgreSQL/Neon; migrated to MySQL/TiDB Cloud — see git history for the migration.)
 
 ## Table of Contents
 
@@ -49,7 +49,7 @@ The ERP is modular, scalable, permission-driven, audit-ready, and follows the Fi
 | **Styling / UI**      | Tailwind CSS v4, shadcn/ui (Radix), Lucide, Recharts, sonner, next-themes  |
 | **Forms / Validation**| React Hook Form + Zod (`@hookform/resolvers/zod`)                          |
 | **Tables / State**    | TanStack Table (wrapped `<DataTable>`), TanStack Query                     |
-| **Database**          | PostgreSQL 16+ with Prisma ORM (`Decimal(18,4)` for money/qty)             |
+| **Database**          | MySQL/TiDB Cloud with Prisma ORM (`Decimal(18,4)` for money/qty)           |
 | **Auth**              | Auth.js v5 (Credentials), JWT sessions, bcryptjs, middleware RBAC          |
 | **Storage**           | Local disk (dev) + pluggable S3-compatible driver (prod)                   |
 | **Email**             | Resend (preferred) / Nodemailer fallback                                   |
@@ -169,7 +169,7 @@ Follow this order — do not build randomly.
 
 - **Node.js** 20+
 - **pnpm** 9+ (recommended) or npm
-- **PostgreSQL** 16+ (local or hosted)
+- **MySQL** 8+ (local or hosted) — production/staging runs on TiDB Cloud Serverless, which is MySQL-wire-protocol compatible
 
 ## Installation
 
@@ -186,7 +186,7 @@ Create `.env` at the project root:
 
 | Variable              | Description                                     | Example                                              |
 | --------------------- | ----------------------------------------------- | ---------------------------------------------------- |
-| `DATABASE_URL`        | PostgreSQL connection string                    | `postgresql://user:pass@localhost:5432/annex_erp`    |
+| `DATABASE_URL`        | MySQL connection string                         | `mysql://user:pass@localhost:3306/annex_erp`         |
 | `NEXTAUTH_SECRET`     | Auth.js session secret                          | *(generate with `openssl rand -base64 32`)*          |
 | `NEXTAUTH_URL`        | Canonical app URL                               | `http://localhost:3000`                              |
 | `RESEND_API_KEY`      | Resend API key for transactional email          | `re_...`                                             |
