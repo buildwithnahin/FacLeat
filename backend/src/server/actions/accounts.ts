@@ -131,15 +131,18 @@ export async function setPeriodStatusAction(formData: FormData) {
     id: formData.get('id'),
     status: formData.get('status'),
   });
-  if (!parsed.success) return;
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Validation failed' };
+  }
   const session = await getSession();
   try {
     await accountsService.setPeriodStatus(session, parsed.data);
+    revalidatePath('/accounts/periods');
+    return { success: true };
   } catch (e) {
-    if (e instanceof ApiError) return;
-    throw e;
+    if (e instanceof ApiError) return { error: e.message };
+    return { error: 'Failed to update period status' };
   }
-  revalidatePath('/accounts/periods');
 }
 
 export async function getDailyCashFlowAction(filters: {

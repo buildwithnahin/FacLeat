@@ -104,13 +104,13 @@ export function LabelSheet({ products }: LabelSheetProps) {
       });
       if (activePreviewId === p.id) {
         const remaining = Array.from(next);
-        setActivePreviewId(remaining.length > 0 ? remaining[0] : null);
+        setActivePreviewId(remaining.length > 0 && remaining[0] ? remaining[0] : null);
       }
     } else {
       next.add(p.id);
       setQtyById((prev) => ({
         ...prev,
-        [p.id]: prev[p.id] && prev[p.id] > 0 ? prev[p.id] : Math.max(1, globalCopies),
+        [p.id]: (prev[p.id] && prev[p.id]! > 0) ? (prev[p.id] as number) : Math.max(1, globalCopies),
       }));
       setActivePreviewId(p.id);
     }
@@ -131,7 +131,7 @@ export function LabelSheet({ products }: LabelSheetProps) {
       });
       setSelectedIds(next);
       setQtyById(nextQty);
-      if (filteredProducts.length > 0) {
+      if (filteredProducts[0]) {
         setActivePreviewId(filteredProducts[0].id);
       }
     }
@@ -229,7 +229,7 @@ export function LabelSheet({ products }: LabelSheetProps) {
   // Click on "Print Now" or "Print X Labels": switches to the printable format sheet!
   const handleShowPrintableSheet = () => {
     if (totalLabels === 0) {
-      if (filteredProducts.length > 0) {
+      if (filteredProducts.length > 0 && filteredProducts[0]) {
         toggleSelect(filteredProducts[0]);
       }
     }

@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
-import { getScopedBranchIds } from '@/server/auth/scope';
+import { getScopedBranchIds } from '@/server/auth/data-scope';
 import type { AppSession } from '@/server/auth/session';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 import { nextDocumentNumber } from '@/lib/document-number';

@@ -50,6 +50,54 @@ export async function createChartAccountAction(
   redirect('/coa');
 }
 
+export async function createChartAccountInlineAction(input: {
+  code: string;
+  name: string;
+  type: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE';
+  normalSide: 'DEBIT' | 'CREDIT';
+  branchId?: string | null;
+  description?: string;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  account?: { id: string; code: string; name: string; type: string };
+}> {
+  const parsed = chartAccountCreateSchema.safeParse({
+    code: input.code.toUpperCase().trim(),
+    name: input.name.trim(),
+    type: input.type,
+    normalSide: input.normalSide,
+    parentId: null,
+    isPosting: true,
+    isControl: false,
+    currency: 'BDT',
+    branchId: input.branchId || null,
+    openingBalance: 0,
+    description: input.description ?? '',
+    isActive: true,
+  });
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+    };
+  }
+
+  try {
+    const res = await backendFetch<{ id: string; code: string; name: string; type: string }>(
+      '/api/mobile/coa',
+      { method: 'POST', body: JSON.stringify(parsed.data) },
+    );
+    revalidatePath('/accounts/journals/new');
+    revalidatePath('/coa');
+    return { success: true, account: res };
+  } catch (e) {
+    if (e instanceof BackendApiError) return { success: false, error: e.message };
+    return { success: false, error: 'Failed to create account' };
+  }
+}
+
 export async function toggleActiveAction(id: string, isActive: boolean): Promise<void> {
   try {
     await backendFetch(`/api/mobile/coa/${id}/toggle`, {

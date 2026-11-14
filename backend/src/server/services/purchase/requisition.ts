@@ -5,7 +5,7 @@ import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { approvalService } from '@/server/services/approval.service';
-import { getScopedBranchIds } from '@/server/auth/scope';
+import { getScopedBranchIds } from '@/server/auth/data-scope';
 import type { AppSession } from '@/server/auth/session';
 import type {
   RequisitionCreateInput,

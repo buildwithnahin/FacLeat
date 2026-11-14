@@ -246,3 +246,32 @@ export async function completeJoiningAction(_prev: ActionState, fd: FormData): P
   revalidatePath('/hr/offer-contracts');
   return { success: true };
 }
+
+export async function createDesignationAction(
+  name: string,
+  department?: string,
+): Promise<{
+  success: boolean;
+  error?: string;
+  designation?: { name: string; department?: string };
+}> {
+  try {
+    const trimmed = name.trim();
+    if (!trimmed) return { success: false, error: 'Designation name is required' };
+    const res = await backendFetch<{ id: string; name: string }>('/api/mobile/hr/master-data', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'designations',
+        name: trimmed,
+        department: department?.trim() || undefined,
+        status: 'ACTIVE',
+      }),
+    });
+    revalidatePath('/hr/recruitment');
+    return { success: true, designation: { name: res.name, department: department?.trim() } };
+  } catch (e) {
+    if (e instanceof BackendApiError) return { success: false, error: e.message };
+    return { success: false, error: 'Failed to create designation' };
+  }
+}
+

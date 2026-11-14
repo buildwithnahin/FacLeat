@@ -4,7 +4,7 @@ import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import { approvalService } from '@/server/services/approval.service';
-import { getScopedBranchIds } from '@/server/auth/scope';
+import { getScopedBranchIds } from '@/server/auth/data-scope';
 import type { AppSession } from '@/server/auth/session';
 import type { PurchaseOrderCreateInput } from '@/server/validators/purchase';
 import { NotFoundError, ValidationError } from '@/lib/errors';

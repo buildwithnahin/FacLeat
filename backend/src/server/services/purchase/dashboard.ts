@@ -2,7 +2,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
-import { getScopedBranchIds } from '@/server/auth/scope';
+import { getScopedBranchIds } from '@/server/auth/data-scope';
 import type { AppSession } from '@/server/auth/session';
 
 export const dashboardMethods = {

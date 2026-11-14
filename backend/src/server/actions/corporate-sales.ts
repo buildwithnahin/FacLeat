@@ -180,8 +180,3 @@ export async function recordCorporateInvoicePaymentAction(input: unknown) {
     return fail(e);
   }
 }
-    return { success: true };
-  } catch (e) {
-    return fail(e);
-  }
-}

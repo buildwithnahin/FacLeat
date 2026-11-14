@@ -2,7 +2,7 @@ import 'server-only';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { branchService } from '@/server/services/branch.service';
-import { getScopedBranchIds } from '@/server/auth/scope';
+import { getScopedBranchIds } from '@/server/auth/data-scope';
 import type { AppSession } from '@/server/auth/session';
 
 export const lookupMethods = {

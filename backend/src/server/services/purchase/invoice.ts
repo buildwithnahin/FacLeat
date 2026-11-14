@@ -6,7 +6,7 @@ import { recordAudit } from '@/server/audit/logger';
 import { assertOpenPeriod } from '@/server/periods/guards';
 import { approvalService } from '@/server/services/approval.service';
 import { accountsService } from '@/server/services/accounts.service';
-import { getScopedBranchIds } from '@/server/auth/scope';
+import { getScopedBranchIds } from '@/server/auth/data-scope';
 import type { AppSession } from '@/server/auth/session';
 import type { JournalLineInput } from '@/server/validators/accounts';
 import type { InvoiceCreateInput } from '@/server/validators/purchase';
@@ -24,7 +24,7 @@ export const invoiceMethods = {
     return prisma.purchaseInvoice.findMany({
       where: {
         ...(branchIds ? { branchId: { in: branchIds } } : {}),
-        status: filters.status,
+        status: filters.status as any,
         supplierId: filters.supplierId,
         ...(search
           ? {

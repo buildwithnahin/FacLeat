@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
-import { getScopedBranchIds } from '@/server/auth/scope';
+import { getScopedBranchIds } from '@/server/auth/data-scope';
 import type { AppSession } from '@/server/auth/session';
 import type { GrnCreateInput } from '@/server/validators/purchase';
 import { NotFoundError, ValidationError } from '@/lib/errors';
@@ -21,7 +21,7 @@ export const grnMethods = {
     return prisma.goodsReceiving.findMany({
       where: {
         ...(branchIds ? { branchId: { in: branchIds } } : {}),
-        status: filters.status,
+        status: filters.status as any,
         supplierId: filters.supplierId,
         ...(search
           ? {

@@ -226,6 +226,7 @@ export const accountsService = {
       from?: Date;
       to?: Date;
       accountId?: string;
+      search?: string;
       take?: number;
     } = {},
   ) {
@@ -240,6 +241,15 @@ export const accountsService = {
           lte: filters.to,
         },
         lines: filters.accountId ? { some: { accountId: filters.accountId } } : undefined,
+        ...(filters.search
+          ? {
+              OR: [
+                { number: { contains: filters.search } },
+                { memo: { contains: filters.search } },
+                { reference: { contains: filters.search } },
+              ],
+            }
+          : {}),
       },
       include: { branch: true, period: true },
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
@@ -408,6 +418,33 @@ export const accountsService = {
     if (account.branchId) await assertBranchInScope(session, account.branchId);
     const branchIds = await getScopedBranchIds(session, filters.branchId);
 
+    // Calculate prior movements before `from` date to produce accurate effective opening balance
+    let priorDebit = ZERO;
+    let priorCredit = ZERO;
+    if (filters.from) {
+      const priorAgg = await prisma.journalEntryLine.aggregate({
+        where: {
+          accountId: filters.accountId,
+          entry: {
+            status: 'POSTED',
+            ...(branchIds ? { branchId: { in: branchIds } } : {}),
+            date: { lt: filters.from },
+          },
+        },
+        _sum: { debit: true, credit: true },
+      });
+      priorDebit = priorAgg._sum.debit ?? ZERO;
+      priorCredit = priorAgg._sum.credit ?? ZERO;
+    }
+
+    const priorMovement =
+      account.normalSide === 'DEBIT'
+        ? priorDebit.minus(priorCredit)
+        : priorCredit.minus(priorDebit);
+
+    const effectiveOpening = account.openingBalance.plus(priorMovement);
+    let running = effectiveOpening;
+
     const lines = await prisma.journalEntryLine.findMany({
       where: {
         accountId: filters.accountId,
@@ -421,8 +458,6 @@ export const accountsService = {
       orderBy: [{ entry: { date: 'asc' } }, { entry: { createdAt: 'asc' } }, { lineNo: 'asc' }],
     });
 
-    let running =
-      account.normalSide === 'DEBIT' ? account.openingBalance : account.openingBalance.negated();
     const rows = lines.map((l) => {
       const delta = account.normalSide === 'DEBIT' ? l.debit.minus(l.credit) : l.credit.minus(l.debit);
       running = running.plus(delta);
@@ -440,7 +475,7 @@ export const accountsService = {
       };
     });
 
-    return { account, opening: account.openingBalance, rows, closing: running };
+    return { account, opening: effectiveOpening, rows, closing: running };
   },
 
   async listPeriods(session: AppSession | null, filters: { branchId?: string } = {}) {
@@ -536,7 +571,7 @@ export const accountsService = {
     const asset = tb.filter((r) => r.type === 'ASSET');
     const liability = tb.filter((r) => r.type === 'LIABILITY');
     const equity = tb.filter((r) => r.type === 'EQUITY');
-    const totalAsset = asset.reduce((s, r) => s.plus(r.balance), ZERO);
+    const totalAsset = asset.reduce((s, r) => s.plus(r.debit.minus(r.credit)), ZERO);
     const totalLiability = liability.reduce((s, r) => s.plus(r.credit.minus(r.debit)), ZERO);
     const totalEquity = equity.reduce((s, r) => s.plus(r.credit.minus(r.debit)), ZERO);
     const income = tb
@@ -565,12 +600,13 @@ export const accountsService = {
     filters: { branchId?: string; from?: Date; to?: Date } = {},
   ) {
     await authorize(session, 'accounts:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     const rows = await prisma.journalEntryLine.groupBy({
       by: ['accountId'],
       where: {
         entry: {
           status: 'POSTED',
-          branchId: filters.branchId,
+          ...(branchIds ? { branchId: { in: branchIds } } : {}),
           date: { gte: filters.from, lte: filters.to },
         },
       },
@@ -613,12 +649,13 @@ export const accountsService = {
     filters: { branchId?: string; asOf?: Date } = {},
   ) {
     await authorize(session, 'accounts:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     const rows = await prisma.journalEntryLine.groupBy({
       by: ['accountId'],
       where: {
         entry: {
           status: 'POSTED',
-          branchId: filters.branchId,
+          ...(branchIds ? { branchId: { in: branchIds } } : {}),
           date: filters.asOf ? { lte: filters.asOf } : undefined,
         },
       },
@@ -633,6 +670,8 @@ export const accountsService = {
         const acc = byId.get(r.accountId);
         const debit = r._sum.debit ?? ZERO;
         const credit = r._sum.credit ?? ZERO;
+        const balance =
+          acc?.normalSide === 'DEBIT' ? debit.minus(credit) : credit.minus(debit);
         return {
           accountId: r.accountId,
           code: acc?.code ?? '',
@@ -640,7 +679,7 @@ export const accountsService = {
           type: acc?.type ?? 'ASSET',
           debit,
           credit,
-          balance: debit.minus(credit),
+          balance,
         };
       })
       .sort((a, b) => a.code.localeCompare(b.code));
@@ -651,6 +690,7 @@ export const accountsService = {
     filters: { branchId?: string; from: Date; to: Date },
   ) {
     await authorize(session, 'accounts:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
 
     // Net profit for the period
     const is = await this.incomeStatement(session, filters);
@@ -662,68 +702,117 @@ export const accountsService = {
       where: {
         type: 'DEPRECIATION',
         createdAt: { gte: filters.from, lte: filters.to },
-        ...(filters.branchId ? { branchId: filters.branchId } : {}),
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
       },
     });
-    const depreciation = depreciationRows._sum.amount ?? ZERO;
+    let depreciation = depreciationRows._sum.amount ?? ZERO;
 
-    // Helper: get total balance of a COA type as-of a date
-    const balanceByType = async (types: string[], asOf: Date) => {
-      const tb = await this.trialBalance(session, { branchId: filters.branchId, asOf });
-      return tb
-        .filter((r) => types.includes(r.type))
-        .reduce((s, r) => {
-          const net = r.type === 'ASSET' ? r.debit.minus(r.credit) : r.credit.minus(r.debit);
-          return s.plus(net);
-        }, ZERO);
-    };
+    // If no AssetMovement records, fallback to depreciation expense account (code 5340 / Depreciation)
+    if (depreciation.isZero()) {
+      const depAcc = await prisma.chartAccount.findFirst({
+        where: {
+          type: 'EXPENSE',
+          OR: [
+            { code: { startsWith: '534' } },
+            { name: { contains: 'Depreciation' } },
+          ],
+        },
+      });
+      if (depAcc) {
+        const depLineAgg = await prisma.journalEntryLine.aggregate({
+          where: {
+            accountId: depAcc.id,
+            entry: {
+              status: 'POSTED',
+              ...(branchIds ? { branchId: { in: branchIds } } : {}),
+              date: { gte: filters.from, lte: filters.to },
+            },
+          },
+          _sum: { debit: true, credit: true },
+        });
+        const depDebit = depLineAgg._sum.debit ?? ZERO;
+        const depCredit = depLineAgg._sum.credit ?? ZERO;
+        depreciation = depDebit.minus(depCredit);
+        if (depreciation.lt(ZERO)) depreciation = ZERO;
+      }
+    }
 
-    // Changes in working capital (end vs start)
+    // Cash and cash equivalents helper
     const startDate = new Date(filters.from.getTime() - 1);
-    const [inventoryEnd, inventoryStart] = await Promise.all([
-      balanceByType(['ASSET'], filters.to), // rough proxy — ideally filter by COA code
-      balanceByType(['ASSET'], startDate),
+    const [tbStart, tbEnd] = await Promise.all([
+      this.trialBalance(session, { branchId: filters.branchId, asOf: startDate }),
+      this.trialBalance(session, { branchId: filters.branchId, asOf: filters.to }),
     ]);
 
-    // Inventory change from InventoryLedger (qty movement, not used in monetary calc below)
-    await prisma.inventoryLedger.groupBy({
-      by: ['direction'],
-      where: {
-        ...(filters.branchId ? { branchId: filters.branchId } : {}),
-        createdAt: { gte: filters.from, lte: filters.to },
-      },
-      _sum: { quantity: true },
-    });
-    // Use TB-based inventory delta for monetary change
-    const inventoryChange = inventoryEnd.minus(inventoryStart).negated();
+    const isCashAccount = (r: { code: string; name: string }) =>
+      r.code.startsWith('111') ||
+      r.code.startsWith('112') ||
+      r.name.toLowerCase().includes('cash') ||
+      r.name.toLowerCase().includes('bank');
+
+    const openingCash = tbStart
+      .filter((r) => r.type === 'ASSET' && isCashAccount(r))
+      .reduce((s, r) => s.plus(r.debit.minus(r.credit)), ZERO);
+
+    // Changes in working capital (inventory)
+    const isInventoryAccount = (r: { code: string; name: string }) =>
+      r.code.startsWith('114') || r.name.toLowerCase().includes('inventory');
+
+    const invStart = tbStart
+      .filter((r) => r.type === 'ASSET' && isInventoryAccount(r))
+      .reduce((s, r) => s.plus(r.debit.minus(r.credit)), ZERO);
+
+    const invEnd = tbEnd
+      .filter((r) => r.type === 'ASSET' && isInventoryAccount(r))
+      .reduce((s, r) => s.plus(r.debit.minus(r.credit)), ZERO);
+
+    // Indirect method: inventory decrease = positive CF, inventory increase = negative CF
+    const inventoryChange = invStart.minus(invEnd);
 
     // Investing: fixed asset acquisitions in period
     const assetAcquisitions = await prisma.asset.aggregate({
       _sum: { purchaseCost: true },
       where: {
         purchaseDate: { gte: filters.from, lte: filters.to },
-        ...(filters.branchId ? { branchId: filters.branchId } : {}),
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
       },
     });
-    const assetPurchases = (assetAcquisitions._sum.purchaseCost ?? ZERO).negated();
+    let assetPurchases = (assetAcquisitions._sum.purchaseCost ?? ZERO).negated();
+    if (assetPurchases.isZero()) {
+      // Net additions in fixed asset accounts (code 12xx)
+      const faStart = tbStart
+        .filter((r) => r.type === 'ASSET' && r.code.startsWith('12') && !r.name.toLowerCase().includes('accum'))
+        .reduce((s, r) => s.plus(r.debit.minus(r.credit)), ZERO);
+      const faEnd = tbEnd
+        .filter((r) => r.type === 'ASSET' && r.code.startsWith('12') && !r.name.toLowerCase().includes('accum'))
+        .reduce((s, r) => s.plus(r.debit.minus(r.credit)), ZERO);
+      const faDelta = faEnd.minus(faStart);
+      if (faDelta.gt(ZERO)) {
+        assetPurchases = faDelta.negated();
+      }
+    }
 
-    // Financing: equity movements
-    const equityStart = await this.trialBalance(session, { branchId: filters.branchId, asOf: startDate });
-    const equityEnd = await this.trialBalance(session, { branchId: filters.branchId, asOf: filters.to });
-    const equityStartTotal = equityStart.filter((r) => r.type === 'EQUITY').reduce((s, r) => s.plus(r.credit.minus(r.debit)), ZERO);
-    const equityEndTotal = equityEnd.filter((r) => r.type === 'EQUITY').reduce((s, r) => s.plus(r.credit.minus(r.debit)), ZERO);
-    const shareCapitalChange = equityEndTotal.minus(equityStartTotal);
+    // Financing: equity movements (Owner's Capital / Share Capital)
+    const isCapitalAccount = (r: { code: string; name: string; type: string }) =>
+      r.type === 'EQUITY' &&
+      (r.code === '3100' ||
+        r.name.toLowerCase().includes('capital') ||
+        r.name.toLowerCase().includes('owner'));
+
+    const capStart = tbStart
+      .filter(isCapitalAccount)
+      .reduce((s, r) => s.plus(r.credit.minus(r.debit)), ZERO);
+
+    const capEnd = tbEnd
+      .filter(isCapitalAccount)
+      .reduce((s, r) => s.plus(r.credit.minus(r.debit)), ZERO);
+
+    const shareCapitalChange = capEnd.minus(capStart);
 
     const operatingCF = netProfit.plus(depreciation).plus(inventoryChange);
     const investingCF = assetPurchases;
     const financingCF = shareCapitalChange;
     const netChange = operatingCF.plus(investingCF).plus(financingCF);
-
-    // Opening cash: sum of all POSTED journal lines on cash/bank accounts before from
-    const cashTBStart = await this.trialBalance(session, { branchId: filters.branchId, asOf: startDate });
-    const openingCash = cashTBStart
-      .filter((r) => r.code.startsWith('1') && r.type === 'ASSET')
-      .reduce((s, r) => s.plus(r.debit.minus(r.credit)), ZERO);
     const closingCash = openingCash.plus(netChange);
 
     return {
@@ -759,17 +848,41 @@ export const accountsService = {
       this.trialBalance(session, { branchId: filters.branchId, asOf: filters.to }),
     ]);
 
-    const equityBalance = (tb: typeof tbStart, name: string) =>
-      tb.filter((r) => r.type === 'EQUITY' && r.name.toLowerCase().includes(name.toLowerCase()))
-        .reduce((s, r) => s.plus(r.credit.minus(r.debit)), ZERO);
+    const isCapitalAccount = (r: { code: string; name: string; type: string }) =>
+      r.type === 'EQUITY' &&
+      (r.code === '3100' ||
+        r.name.toLowerCase().includes('capital') ||
+        r.name.toLowerCase().includes('owner'));
 
-    const shareCapitalStart = equityBalance(tbStart, 'share capital');
-    const shareCapitalEnd = equityBalance(tbEnd, 'share capital');
+    const isRetainedAccount = (r: { code: string; name: string; type: string }) =>
+      r.type === 'EQUITY' &&
+      (r.code === '3200' || r.name.toLowerCase().includes('retained'));
+
+    const shareCapitalStart = tbStart
+      .filter(isCapitalAccount)
+      .reduce((s, r) => s.plus(r.credit.minus(r.debit)), ZERO);
+
+    const shareCapitalEnd = tbEnd
+      .filter(isCapitalAccount)
+      .reduce((s, r) => s.plus(r.credit.minus(r.debit)), ZERO);
 
     const is = await this.incomeStatement(session, filters);
     const netProfit = is.totals.net;
 
-    const retainedStart = equityBalance(tbStart, 'retained');
+    // Retained earnings opening: balance of retained earnings account before period + prior net income
+    const retainedAccStart = tbStart
+      .filter(isRetainedAccount)
+      .reduce((s, r) => s.plus(r.credit.minus(r.debit)), ZERO);
+
+    const priorIncome = tbStart
+      .filter((r) => r.type === 'INCOME')
+      .reduce((s, r) => s.plus(r.credit.minus(r.debit)), ZERO);
+    const priorExpense = tbStart
+      .filter((r) => r.type === 'EXPENSE')
+      .reduce((s, r) => s.plus(r.debit.minus(r.credit)), ZERO);
+    const priorNetIncome = priorIncome.minus(priorExpense);
+
+    const retainedStart = retainedAccStart.plus(priorNetIncome);
     const retainedEnd = retainedStart.plus(netProfit);
 
     return {
@@ -791,27 +904,48 @@ export const accountsService = {
     filters: { branchId?: string; asOf: Date },
   ) {
     await authorize(session, 'accounts:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
 
     // PP&E schedule from Asset model
     const assets = await prisma.asset.findMany({
       where: {
-        ...(filters.branchId ? { branchId: filters.branchId } : {}),
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
         purchaseDate: { lte: filters.asOf },
         status: { not: 'DISPOSED' },
       },
       include: { category: { select: { name: true } } },
     });
 
+    const yearStart = new Date(filters.asOf.getFullYear(), 0, 1);
+    const additionsCost = assets
+      .filter((a) => a.purchaseDate >= yearStart && a.purchaseDate <= filters.asOf)
+      .reduce((s, a) => s.plus(a.purchaseCost), ZERO);
+
     const totalCost = assets.reduce((s, a) => s.plus(a.purchaseCost), ZERO);
+    const openingCost = totalCost.minus(additionsCost);
+
+    const depAgg = await prisma.assetMovement.aggregate({
+      where: {
+        type: 'DEPRECIATION',
+        createdAt: { gte: yearStart, lte: filters.asOf },
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
+      },
+      _sum: { amount: true },
+    });
+    const depForYear = depAgg._sum.amount ?? ZERO;
+
     const totalAccumDep = assets.reduce((s, a) => s.plus(a.accumulatedDepreciation), ZERO);
+    const openingAccumDep = totalAccumDep.minus(depForYear).gt(ZERO)
+      ? totalAccumDep.minus(depForYear)
+      : ZERO;
     const totalWDV = totalCost.minus(totalAccumDep);
 
     const ppe = {
-      openingCost: totalCost,
-      additions: ZERO,
+      openingCost,
+      additions: additionsCost,
       closingCost: totalCost,
-      openingAccumDep: totalAccumDep,
-      depreciationForYear: ZERO,
+      openingAccumDep,
+      depreciationForYear: depForYear,
       closingAccumDep: totalAccumDep,
       writtenDownValue: totalWDV,
       assets: assets.map((a) => ({
@@ -824,16 +958,18 @@ export const accountsService = {
     };
 
     // Inventory breakdown from InventoryLedger aggregated by product type
-    const branchFilter = filters.branchId
-      ? Prisma.sql`AND il.\`branchId\` = ${filters.branchId}`
-      : Prisma.empty;
+    let branchClause = Prisma.empty;
+    if (branchIds && branchIds.length > 0) {
+      branchClause = Prisma.sql`AND il.\`branchId\` IN (${Prisma.join(branchIds)})`;
+    }
+
     const invRows = await prisma.$queryRaw<{ type: string; value: number }[]>(
       Prisma.sql`
         SELECT p.type, COALESCE(SUM(CASE WHEN il.direction = 'IN' THEN il.quantity ELSE -il.quantity END * il.\`costPerUnit\`), 0) as value
         FROM \`InventoryLedger\` il
         JOIN \`Product\` p ON p.id = il.\`productId\`
         WHERE il.\`createdAt\` <= ${filters.asOf}
-        ${branchFilter}
+        ${branchClause}
         GROUP BY p.type
       `,
     );
@@ -847,10 +983,16 @@ export const accountsService = {
     };
     inventories.total = inventories.rawMaterials.plus(inventories.wip).plus(inventories.finishedGoods);
 
-    // Advances: sub-accounts with "advance" or "deposit" in name
+    // Advances: sub-accounts with "advance" or "deposit" in name or code 1150
     const advanceTB = await this.trialBalance(session, { branchId: filters.branchId, asOf: filters.asOf });
     const advances = advanceTB
-      .filter((r) => r.type === 'ASSET' && (r.name.toLowerCase().includes('advance') || r.name.toLowerCase().includes('deposit')))
+      .filter(
+        (r) =>
+          r.type === 'ASSET' &&
+          (r.name.toLowerCase().includes('advance') ||
+            r.name.toLowerCase().includes('deposit') ||
+            r.code.startsWith('115')),
+      )
       .map((r) => ({ code: r.code, name: r.name, amount: r.debit.minus(r.credit) }));
 
     return { ppe, inventories, advances };

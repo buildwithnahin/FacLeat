@@ -114,17 +114,20 @@ export async function setPeriodStatusAction(formData: FormData) {
     id: formData.get('id'),
     status: formData.get('status'),
   });
-  if (!parsed.success) return;
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Validation failed' };
+  }
   try {
     await backendFetch(`/api/mobile/accounts/periods/${parsed.data.id}/status`, {
       method: 'POST',
       body: JSON.stringify({ status: parsed.data.status }),
     });
+    revalidatePath('/accounts/periods');
+    return { success: true };
   } catch (e) {
-    if (e instanceof BackendApiError) return;
-    throw e;
+    if (e instanceof BackendApiError) return { error: e.message };
+    return { error: 'Failed to update period status' };
   }
-  revalidatePath('/accounts/periods');
 }
 
 interface DailyCashFlowRowDto {
