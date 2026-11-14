@@ -21,8 +21,8 @@ export async function GET(req: NextRequest) {
     entityType: sp.get('entityType') ?? undefined,
     actorId: sp.get('actorId') ?? undefined,
     search: sp.get('search') ?? undefined,
-    from: fromParam ? new Date(fromParam) : undefined,
-    to: toParam ? new Date(toParam) : undefined,
+    from: fromParam && !isNaN(new Date(fromParam).getTime()) ? new Date(fromParam) : undefined,
+    to: toParam && !isNaN(new Date(toParam).getTime()) ? new Date(toParam) : undefined,
     limit: limitParam ? Number(limitParam) : undefined,
     offset: offsetParam ? Number(offsetParam) : undefined,
   };

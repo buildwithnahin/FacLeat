@@ -52,11 +52,17 @@ export default async function AuditPage({
     limit: String(PAGE_SIZE),
     offset: String((page - 1) * PAGE_SIZE),
   });
-  if (sp.branchId) listParams.set('branchId', sp.branchId);
+  if (sp.branchId && sp.branchId !== 'ALL') listParams.set('branchId', sp.branchId);
   if (sp.module && sp.module !== 'ALL') listParams.set('module', sp.module);
   if (sp.search) listParams.set('search', sp.search);
-  if (sp.from) listParams.set('from', new Date(sp.from).toISOString());
-  if (sp.to) listParams.set('to', new Date(`${sp.to}T23:59:59`).toISOString());
+  if (sp.from) {
+    const fromDate = new Date(sp.from);
+    if (!isNaN(fromDate.getTime())) listParams.set('from', fromDate.toISOString());
+  }
+  if (sp.to) {
+    const toDate = new Date(`${sp.to}T23:59:59`);
+    if (!isNaN(toDate.getTime())) listParams.set('to', toDate.toISOString());
+  }
 
   const [{ rows, total }, modules, branches] = await Promise.all([
     backendFetch<{ rows: AuditRow[]; total: number }>(`/api/mobile/audit?${listParams.toString()}`),

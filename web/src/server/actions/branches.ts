@@ -22,7 +22,7 @@ function parseForm(formData: FormData) {
     phone: formData.get('phone') ?? '',
     email: formData.get('email') ?? '',
     allowNegativeStock: formData.get('allowNegativeStock') === 'on',
-    isActive: formData.get('isActive') !== 'off',
+    isActive: formData.get('isActive') === 'on',
   };
 }
 

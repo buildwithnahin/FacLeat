@@ -1,12 +1,13 @@
 import Link from 'next/link';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, RotateCcw } from 'lucide-react';
 import { getSession } from '@/server/auth/session';
 import { backendFetch } from '@/lib/backend-client';
 import { deleteRoleAction } from '@/server/actions/roles';
 import { PageHeader } from '@/components/shared/page-header';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,15 +22,29 @@ interface RoleRow {
   _count: { users: number };
 }
 
-export default async function RolesPage() {
+export default async function RolesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ q?: string }>;
+}) {
+  const sp = (await searchParams) ?? {};
+  const q = sp.q?.trim().toLowerCase() || '';
   const session = await getSession();
-  const roles = await backendFetch<RoleRow[]>('/api/mobile/roles');
+  const allRoles = await backendFetch<RoleRow[]>('/api/mobile/roles');
   const canWrite = session?.permissions.includes('roles:write') ?? false;
   const canDelete = session?.permissions.includes('roles:delete') ?? false;
   const isSuperAdmin = session?.roles.some((role) => role.toLowerCase().includes('super admin')) ?? false;
 
+  const roles = q
+    ? allRoles.filter(
+        (r) =>
+          r.name.toLowerCase().includes(q) ||
+          (r.description && r.description.toLowerCase().includes(q)),
+      )
+    : allRoles;
+
   return (
-    <div>
+    <div className="space-y-4">
       <PageHeader title="Roles" description="Roles bundle permissions. Assign roles to users to grant access.">
         {canWrite && (
           <Button asChild>
@@ -40,6 +55,32 @@ export default async function RolesPage() {
           </Button>
         )}
       </PageHeader>
+
+      <Card>
+        <CardContent className="p-4">
+          <form method="GET" className="flex items-center gap-2 max-w-md">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                name="q"
+                placeholder="Search roles by name or description…"
+                defaultValue={q}
+                className="pl-8 text-sm"
+              />
+            </div>
+            <Button type="submit" variant="outline" size="sm">
+              Search
+            </Button>
+            {q && (
+              <Button type="button" variant="ghost" size="sm" asChild>
+                <Link href="/roles">
+                  <RotateCcw className="h-4 w-4" />
+                </Link>
+              </Button>
+            )}
+          </form>
+        </CardContent>
+      </Card>
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
@@ -54,6 +95,13 @@ export default async function RolesPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
+              {roles.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
+                    {q ? 'No roles match your search.' : 'No roles configured yet.'}
+                  </td>
+                </tr>
+              )}
               {roles.map((r) => (
                 <tr key={r.id} className="hover:bg-muted/30">
                   <td className="px-4 py-3 font-medium flex items-center gap-2">

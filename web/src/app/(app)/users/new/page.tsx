@@ -57,9 +57,7 @@ export default async function NewUserPage() {
       <PageHeader title="New user" description="Create a system user." />
       <UserForm
         mode="create"
-        roles={roles
-          .filter((r) => (ERP_ROLE_NAMES as readonly string[]).includes(r.name))
-          .map((r) => ({ id: r.id, name: r.name, description: r.description }))}
+        roles={roles.map((r) => ({ id: r.id, name: r.name, description: r.description }))}
         branches={branches.filter((b) => b.isActive).map((b) => ({ id: b.id, name: b.name, code: b.code }))}
         employees={employees.map((e) => ({
           id: e.id,

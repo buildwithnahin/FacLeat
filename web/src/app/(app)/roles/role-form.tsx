@@ -60,6 +60,7 @@ export function RoleForm({ mode, initial, permissions }: RoleFormProps) {
   return (
     <form action={formAction} className="space-y-6">
       {mode === 'edit' && <input type="hidden" name="id" value={initial?.id} />}
+      {initial?.isSystem && <input type="hidden" name="name" value={initial.name} />}
       {[...selected].map((k) => (
         <input key={k} type="hidden" name="permissionKeys" value={k} />
       ))}

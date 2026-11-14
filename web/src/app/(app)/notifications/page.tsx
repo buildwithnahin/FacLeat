@@ -1,16 +1,28 @@
 import Link from 'next/link';
+import { Check } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Pill } from '@/components/shared/pill';
 import { backendFetch } from '@/lib/backend-client';
-import { markAllNotificationsReadAction } from '@/server/actions/notifications';
+import {
+  markAllNotificationsReadAction,
+  markNotificationReadAction,
+} from '@/server/actions/notifications';
 
 export const dynamic = 'force-dynamic';
 
 async function markAllReadFormAction() {
   'use server';
   await markAllNotificationsReadAction();
+}
+
+async function markSingleReadFormAction(formData: FormData) {
+  'use server';
+  const id = formData.get('id');
+  if (typeof id === 'string' && id) {
+    await markNotificationReadAction(id);
+  }
 }
 
 export const metadata = { title: 'Notifications' };
@@ -83,15 +95,24 @@ export default async function NotificationsPage({
         ) : (
           <ul className="divide-y">
             {items.map((n) => (
-              <li key={n.id} className={n.readAt ? '' : 'bg-blue-50/40'}>
+              <li key={n.id} className={`flex items-center justify-between gap-3 px-4 py-3 ${n.readAt ? '' : 'bg-blue-50/40'}`}>
                 {n.href ? (
-                  <Link href={n.href} className="block px-4 py-3 hover:bg-muted/40">
+                  <Link href={n.href} className="flex-1 min-w-0 hover:underline">
                     <NotificationRow n={n} />
                   </Link>
                 ) : (
-                  <div className="px-4 py-3">
+                  <div className="flex-1 min-w-0">
                     <NotificationRow n={n} />
                   </div>
+                )}
+                {!n.readAt && (
+                  <form action={markSingleReadFormAction} className="shrink-0">
+                    <input type="hidden" name="id" value={n.id} />
+                    <Button type="submit" variant="ghost" size="xs" className="text-xs text-muted-foreground hover:text-foreground">
+                      <Check className="h-3.5 w-3.5 mr-1" />
+                      Mark read
+                    </Button>
+                  </form>
                 )}
               </li>
             ))}

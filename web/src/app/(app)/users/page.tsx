@@ -1,13 +1,14 @@
 import Link from 'next/link';
-import { Plus, Pencil } from 'lucide-react';
+import { Plus, Pencil, Search, RotateCcw } from 'lucide-react';
 import { getSession } from '@/server/auth/session';
 import { backendFetch } from '@/lib/backend-client';
 import { setUserStatusAction } from '@/server/actions/users';
 import { PageHeader } from '@/components/shared/page-header';
 import { StatusBadge } from '@/components/shared/status-badge';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,13 +27,44 @@ interface UserRow {
   roles: { role: { id: string; name: string } }[];
 }
 
-export default async function UsersPage() {
+interface RoleOption {
+  id: string;
+  name: string;
+}
+
+interface BranchOption {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export default async function UsersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ q?: string; status?: string; roleId?: string; branchId?: string }>;
+}) {
   const session = await getSession();
-  const users = await backendFetch<UserRow[]>('/api/mobile/users');
+  const sp = (await searchParams) ?? {};
+  const q = sp.q?.trim() || '';
+  const status = sp.status || '';
+  const roleId = sp.roleId || '';
+  const branchId = sp.branchId || '';
+
+  const listParams = new URLSearchParams();
+  if (q) listParams.set('q', q);
+  if (status && status !== 'ALL') listParams.set('status', status);
+  if (roleId && roleId !== 'ALL') listParams.set('roleId', roleId);
+  if (branchId && branchId !== 'ALL') listParams.set('branchId', branchId);
+
+  const [users, roles, branches] = await Promise.all([
+    backendFetch<UserRow[]>(`/api/mobile/users?${listParams.toString()}`).catch(() => []),
+    backendFetch<RoleOption[]>('/api/mobile/roles').catch(() => []),
+    backendFetch<BranchOption[]>('/api/mobile/branches?activeOnly=true').catch(() => []),
+  ]);
   const canWrite = session?.permissions.includes('users:write') ?? false;
 
   return (
-    <div>
+    <div className="space-y-4">
       <PageHeader title="Users" description="System users, their roles, and branch access.">
         {canWrite && (
           <Button asChild>
@@ -43,6 +75,85 @@ export default async function UsersPage() {
           </Button>
         )}
       </PageHeader>
+
+      <Card>
+        <CardContent className="p-4">
+          <form method="GET" className="grid grid-cols-1 gap-3 md:grid-cols-5 items-end">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Search</label>
+              <div className="relative mt-1">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  name="q"
+                  placeholder="Name, email, code…"
+                  defaultValue={q}
+                  className="pl-8 text-sm"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Role</label>
+              <select
+                name="roleId"
+                defaultValue={roleId}
+                aria-label="Filter by role"
+                className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="ALL">All Roles</option>
+                {roles.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Branch</label>
+              <select
+                name="branchId"
+                defaultValue={branchId}
+                aria-label="Filter by branch"
+                className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="ALL">All Branches</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.code} — {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Status</label>
+              <select
+                name="status"
+                defaultValue={status}
+                aria-label="Filter by status"
+                className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="DISABLED">DISABLED</option>
+                <option value="PENDING">PENDING</option>
+              </select>
+            </div>
+
+            <div className="flex gap-2">
+              <Button type="submit" className="flex-1">
+                Filter
+              </Button>
+              <Button type="button" variant="outline" asChild>
+                <Link href="/users">
+                  <RotateCcw className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
       <Card className="max-w-full overflow-hidden">
         <div className="max-w-full overflow-x-hidden">
@@ -73,7 +184,7 @@ export default async function UsersPage() {
               {users.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
-                    No users yet.
+                    No users matching the criteria.
                   </td>
                 </tr>
               )}

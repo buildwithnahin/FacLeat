@@ -94,18 +94,55 @@ function userBelongsToCompany(
 }
 
 export const userService = {
-  async list(session: AppSession | null) {
+  async list(
+    session: AppSession | null,
+    filters?: { q?: string; status?: string; roleId?: string; branchId?: string },
+  ) {
     await authorize(session, 'users:read');
+    const whereAnd: any[] = [];
+
+    if (session?.activeCompanyId) {
+      whereAnd.push({
+        OR: [
+          { defaultCompanyId: session.activeCompanyId },
+          { defaultBranch: { companyId: session.activeCompanyId } },
+          { branchAccesses: { some: { branch: { companyId: session.activeCompanyId } } } },
+        ],
+      });
+    }
+
+    if (filters?.status && filters.status !== 'ALL') {
+      whereAnd.push({ status: filters.status });
+    }
+
+    if (filters?.roleId && filters.roleId !== 'ALL') {
+      whereAnd.push({ roles: { some: { roleId: filters.roleId } } });
+    }
+
+    if (filters?.branchId && filters.branchId !== 'ALL') {
+      whereAnd.push({
+        OR: [
+          { branchAccessType: 'ALL_BRANCHES' },
+          { defaultBranchId: filters.branchId },
+          { branchAccesses: { some: { branchId: filters.branchId } } },
+        ],
+      });
+    }
+
+    if (filters?.q) {
+      whereAnd.push({
+        OR: [
+          { name: { contains: filters.q } },
+          { email: { contains: filters.q } },
+          { employee: { code: { contains: filters.q } } },
+          { employee: { firstName: { contains: filters.q } } },
+          { employee: { lastName: { contains: filters.q } } },
+        ],
+      });
+    }
+
     return prisma.user.findMany({
-      where: session?.activeCompanyId
-        ? {
-            OR: [
-              { defaultCompanyId: session.activeCompanyId },
-              { defaultBranch: { companyId: session.activeCompanyId } },
-              { branchAccesses: { some: { branch: { companyId: session.activeCompanyId } } } },
-            ],
-          }
-        : undefined,
+      where: whereAnd.length ? { AND: whereAnd } : undefined,
       orderBy: { createdAt: 'desc' },
       include: USER_INCLUDE,
     });

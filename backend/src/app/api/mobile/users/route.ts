@@ -10,7 +10,13 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
   try {
-    const users = await userService.list(session);
+    const sp = req.nextUrl.searchParams;
+    const users = await userService.list(session, {
+      q: sp.get('q') ?? undefined,
+      status: sp.get('status') ?? undefined,
+      roleId: sp.get('roleId') ?? undefined,
+      branchId: sp.get('branchId') ?? undefined,
+    });
     return Response.json(apiOk(users));
   } catch (err) {
     if (err instanceof ApiError) return Response.json(apiError(err), { status: err.status });
