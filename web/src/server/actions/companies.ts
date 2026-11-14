@@ -20,7 +20,7 @@ function parseForm(formData: FormData) {
     address: formData.get('address') ?? '',
     phone: formData.get('phone') ?? '',
     email: formData.get('email') ?? '',
-    isActive: formData.get('isActive') !== 'off',
+    isActive: formData.get('isActive') === 'on',
   };
 }
 

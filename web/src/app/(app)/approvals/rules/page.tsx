@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Pencil } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,11 +19,19 @@ interface ApprovalRule {
   action: string;
   minAmount: string;
   approverRoles: string[];
+  escalateAfterHours?: number;
   isActive: boolean;
+  description?: string | null;
 }
 
-export default async function ApprovalRulesPage() {
+export default async function ApprovalRulesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ edit?: string }>;
+}) {
+  const sp = (await searchParams) ?? {};
   const rules = await backendFetch<ApprovalRule[]>('/api/mobile/approvals/rules');
+  const editRule = sp.edit ? rules.find((r) => r.id === sp.edit) ?? null : null;
 
   return (
     <div className="space-y-6">
@@ -86,11 +94,22 @@ export default async function ApprovalRulesPage() {
                   </Pill>
                 ),
               },
+              {
+                key: 'action',
+                header: '',
+                cell: (r) => (
+                  <Button size="xs" variant="ghost" asChild>
+                    <Link href={`/approvals/rules?edit=${r.id}`}>
+                      <Pencil className="h-3 w-3 mr-1" /> Edit
+                    </Link>
+                  </Button>
+                ),
+              },
             ]}
           />
         </Card>
 
-        <RuleForm />
+        <RuleForm initial={editRule} />
       </div>
     </div>
   );

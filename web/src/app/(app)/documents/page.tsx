@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { FileText, Settings, Upload } from 'lucide-react';
+import { FileText, Settings, Upload, RotateCcw } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -103,9 +103,18 @@ export default async function DocumentsPage({
             placeholder="Category"
             defaultValue={sp.category ?? ''}
           />
-          <Button type="submit" variant="outline">
-            Filter
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button type="submit" variant="outline">
+              Filter
+            </Button>
+            {(sp.search || sp.category) && (
+              <Button type="button" variant="ghost" asChild>
+                <Link href="/documents">
+                  <RotateCcw className="h-4 w-4" />
+                </Link>
+              </Button>
+            )}
+          </div>
         </form>
       </Card>
 

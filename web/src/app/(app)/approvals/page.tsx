@@ -1,12 +1,11 @@
 import Link from 'next/link';
-import { Settings } from 'lucide-react';
+import { Settings, Clock, CheckCircle2, XCircle, RotateCcw } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/shared/data-table';
 import { Pill } from '@/components/shared/pill';
 import { KpiCard } from '@/components/shared/kpi-card';
-import { Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { getSession } from '@/server/auth/session';
 import { backendFetch } from '@/lib/backend-client';
 import { APPROVAL_STATUS } from '@/server/validators/approvals';
@@ -14,12 +13,6 @@ import { APPROVAL_STATUS } from '@/server/validators/approvals';
 export const dynamic = 'force-dynamic';
 
 export const metadata = { title: 'Approvals' };
-
-// The root implementation also surfaces an HR-recruitment approval queue
-// here (prisma.hrWorkflowRecord + decideRecruitmentRequestAction). The HR
-// module hasn't been migrated to web/ yet, so that section is intentionally
-// left out of this pass rather than faked against a non-existent backend
-// route — re-add once HR ships its own mobile API surface.
 
 type PillTone = 'grey' | 'blue' | 'amber' | 'green' | 'red' | 'orange';
 const TONE: Record<(typeof APPROVAL_STATUS)[number], PillTone> = {
@@ -69,9 +62,10 @@ export default async function ApprovalsPage({
   const session = await getSession();
   const sp = await searchParams;
   const scope = sp.scope ?? 'for-me';
+  const status = sp.status ?? '';
 
   const listParams = new URLSearchParams();
-  if (sp.status && sp.status !== 'ALL') listParams.set('status', sp.status);
+  if (status && status !== 'ALL') listParams.set('status', status);
   if (scope === 'for-me') listParams.set('forMe', '1');
   if (scope === 'mine') listParams.set('mine', '1');
 
@@ -79,6 +73,13 @@ export default async function ApprovalsPage({
     backendFetch<ApprovalRow[]>(`/api/mobile/approvals?${listParams.toString()}`),
     backendFetch<QueueStats>('/api/mobile/approvals/queue-stats'),
   ]);
+
+  const makeTabHref = (targetScope: string) => {
+    const params = new URLSearchParams();
+    params.set('scope', targetScope);
+    if (status && status !== 'ALL') params.set('status', status);
+    return `/approvals?${params.toString()}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -98,17 +99,46 @@ export default async function ApprovalsPage({
         <KpiCard label="Rejected" value={stats.rejected} icon={XCircle} tone="danger" />
       </div>
 
-      <Card className="p-2 flex gap-2">
-        <Button variant={scope === 'for-me' ? 'dark' : 'ghost'} size="sm" asChild>
-          <Link href="/approvals?scope=for-me">For me</Link>
-        </Button>
-        <Button variant={scope === 'mine' ? 'dark' : 'ghost'} size="sm" asChild>
-          <Link href="/approvals?scope=mine">My requests</Link>
-        </Button>
-        <Button variant={scope === 'all' ? 'dark' : 'ghost'} size="sm" asChild>
-          <Link href="/approvals?scope=all">All</Link>
-        </Button>
-      </Card>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Card className="p-1.5 flex gap-1">
+          <Button variant={scope === 'for-me' ? 'dark' : 'ghost'} size="sm" asChild>
+            <Link href={makeTabHref('for-me')}>For me</Link>
+          </Button>
+          <Button variant={scope === 'mine' ? 'dark' : 'ghost'} size="sm" asChild>
+            <Link href={makeTabHref('mine')}>My requests</Link>
+          </Button>
+          <Button variant={scope === 'all' ? 'dark' : 'ghost'} size="sm" asChild>
+            <Link href={makeTabHref('all')}>All</Link>
+          </Button>
+        </Card>
+
+        <form method="GET" className="flex items-center gap-2">
+          <input type="hidden" name="scope" value={scope} />
+          <select
+            name="status"
+            defaultValue={status}
+            aria-label="Filter by status"
+            className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="ALL">All Statuses</option>
+            <option value="PENDING">Pending</option>
+            <option value="APPROVED">Approved</option>
+            <option value="REJECTED">Rejected</option>
+            <option value="CHANGES_REQUESTED">Changes Requested</option>
+            <option value="CANCELLED">Cancelled</option>
+          </select>
+          <Button type="submit" variant="outline" size="sm">
+            Filter
+          </Button>
+          {status && status !== 'ALL' && (
+            <Button type="button" variant="ghost" size="sm" asChild>
+              <Link href={`/approvals?scope=${scope}`}>
+                <RotateCcw className="h-4 w-4" />
+              </Link>
+            </Button>
+          )}
+        </form>
+      </div>
 
       <Card className="p-0">
         <div className="px-4 py-3 border-b text-sm font-medium">
