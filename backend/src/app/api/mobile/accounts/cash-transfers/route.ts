@@ -8,14 +8,16 @@ import { storeVoucherImage } from '@/lib/voucher-image';
 export async function GET(req: NextRequest) {
   const session = await getMobileSession(req);
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
-  if (!session.activeBranchId) return Response.json(apiOk([]));
 
   const sp = req.nextUrl.searchParams;
+  const branchId = sp.get('branchId') ?? session.activeBranchId ?? undefined;
+  if (!branchId) return Response.json(apiOk([]));
+
   const direction = sp.get('direction') === 'RECEIVED' ? 'RECEIVED' : 'SENT';
 
   try {
     const transfers = await accountsService.listCashTransfers(session, {
-      branchId: session.activeBranchId,
+      branchId,
       direction,
       from: sp.get('from') ? new Date(sp.get('from')!) : undefined,
       to: sp.get('to') ? new Date(sp.get('to')!) : undefined,

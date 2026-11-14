@@ -101,7 +101,13 @@ type DailyCashFlowRow = {
 
 type DailyCashFlowData = {
   userName: string;
-  summary: { openingBalance: string; totalIn: string; totalOut: string; netBalance: string };
+  summary: {
+    openingBalance: string;
+    totalIn: string;
+    totalOut: string;
+    netBalance: string;
+    closingBalance: string;
+  };
   rows: DailyCashFlowRow[];
 };
 
@@ -335,6 +341,8 @@ function ErrorBanner({ msg }: { msg: string }) {
 function CashFlowPanel({ onOpenCashEntry }: { onOpenCashEntry: (tab: 'cash-in' | 'cash-out', date: string) => void }) {
   const [fromMonth, setFromMonth] = useState(prevMonth());
   const [toMonth, setToMonth] = useState(currentMonth());
+  const [branchId, setBranchId] = useState('');
+  const [branches, setBranches] = useState<BranchOption[]>([]);
   const [data, setData] = useState<DailyCashFlowData | null>(null);
   const [dayDetails, setDayDetails] = useState<CashFlowDayDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -342,12 +350,12 @@ function CashFlowPanel({ onOpenCashEntry }: { onOpenCashEntry: (tab: 'cash-in' |
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (from: string, to: string) => {
+  const load = useCallback(async (from: string, to: string, bId?: string) => {
     setLoading(true);
     setError(null);
     try {
       const range = cashFlowDateRange(from, to);
-      const result = await getDailyCashFlowAction(range);
+      const result = await getDailyCashFlowAction({ ...range, branchId: bId || undefined });
       setData(result as DailyCashFlowData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load cash flow data');
@@ -361,20 +369,45 @@ function CashFlowPanel({ onOpenCashEntry }: { onOpenCashEntry: (tab: 'cash-in' |
     setDetailsError(null);
     setDayDetails(null);
     try {
-      const result = await getDailyCashFlowDetailsAction({ date });
+      const result = await getDailyCashFlowDetailsAction({ date, branchId: branchId || undefined });
       setDayDetails(result as CashFlowDayDetails);
     } catch (err) {
       setDetailsError(err instanceof Error ? err.message : 'Failed to load transaction history');
     } finally {
       setDetailsLoading(false);
     }
+  }, [branchId]);
+
+  useEffect(() => {
+    listBranchesAction({ includeCurrent: true })
+      .then((b) => setBranches(b as BranchOption[]))
+      .catch(() => {});
   }, []);
 
-  useEffect(() => { load(fromMonth, toMonth); }, [fromMonth, load, toMonth]);
+  useEffect(() => {
+    load(fromMonth, toMonth, branchId);
+  }, [fromMonth, load, toMonth, branchId]);
 
   return (
     <div className="space-y-5">
       <div className="flex items-end gap-4 flex-wrap">
+        {branches.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-gray-500">Branch</span>
+            <select
+              value={branchId}
+              onChange={(e) => setBranchId(e.target.value)}
+              className="h-9 border border-gray-200 rounded-md px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">All Branches</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.code} · {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="flex flex-col gap-1">
           <span className="text-xs text-gray-500">From</span>
           <input type="month" value={fromMonth} onChange={(e) => setFromMonth(e.target.value)}
@@ -385,7 +418,7 @@ function CashFlowPanel({ onOpenCashEntry }: { onOpenCashEntry: (tab: 'cash-in' |
           <input type="month" value={toMonth} onChange={(e) => setToMonth(e.target.value)}
             className="h-9 border border-gray-200 rounded-md px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
-        <button onClick={() => load(fromMonth, toMonth)}
+        <button onClick={() => load(fromMonth, toMonth, branchId)}
           className="h-9 flex items-center gap-2 px-4 border border-gray-200 rounded-md text-sm text-gray-600 hover:bg-gray-50 transition-colors">
           <Filter className="h-3.5 w-3.5" /> Filter
         </button>
@@ -394,11 +427,12 @@ function CashFlowPanel({ onOpenCashEntry }: { onOpenCashEntry: (tab: 'cash-in' |
       {error && <ErrorBanner msg={error} />}
 
       {data && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <SummaryCard icon="+" iconBg="bg-teal-400" amount={fmt(data.summary.openingBalance)} label="Opening balance" cardBg="bg-teal-50 border-teal-100" />
           <SummaryCard icon="+" iconBg="bg-teal-500" amount={fmt(data.summary.totalIn)} label="Total in" cardBg="bg-teal-50 border-teal-100" />
           <SummaryCard icon="−" iconBg="bg-amber-400" amount={fmt(data.summary.totalOut)} label="Total out" cardBg="bg-amber-50 border-amber-100" />
-          <SummaryCard icon="=" iconBg="bg-gray-400" amount={fmt(data.summary.netBalance, { preserveSign: true })} label="Net balance" cardBg="bg-gray-50 border-gray-200" />
+          <SummaryCard icon="=" iconBg="bg-blue-400" amount={fmt(data.summary.netBalance, { preserveSign: true })} label="Net balance" cardBg="bg-blue-50 border-blue-100" />
+          <SummaryCard icon="=" iconBg="bg-indigo-500" amount={fmt(data.summary.closingBalance)} label="Closing balance" cardBg="bg-indigo-50 border-indigo-100" />
         </div>
       )}
 
@@ -415,52 +449,44 @@ function CashFlowPanel({ onOpenCashEntry }: { onOpenCashEntry: (tab: 'cash-in' |
             <tbody>
               {loading && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">Loading…</td></tr>}
               {!loading && data?.rows.length === 0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">No transactions found for this period.</td></tr>}
-              {!loading && data?.rows.map((row, index) => (
-                (() => {
-                  const currentMonth = monthKey(row.date);
-                  const prevMonth = index > 0 ? monthKey(data.rows[index - 1]?.date ?? '') : null;
-                  const nextMonth = index < data.rows.length - 1 ? monthKey(data.rows[index + 1]?.date ?? '') : null;
-                  const showMonthEndClosing = prevMonth !== currentMonth && isActualMonthEnd(row.date);
-                  const showMonthStartOpening = nextMonth !== currentMonth;
-
-                  return (
-                    <tr key={row.date} className="border-b border-gray-100 hover:bg-gray-50/70">
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => openDayDetails(row.date)}
-                          className="text-blue-600 font-medium hover:underline"
-                        >
-                          {fmtDate(row.date)}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-700 tabular-nums whitespace-nowrap">
-                        {showMonthStartOpening ? fmt(row.openingBalance) : ''}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
-                        <span className="text-gray-700">{fmt(row.totalIn)}</span>
-                        <CountBadge count={row.countIn} color="green" />
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
-                        <span className="text-gray-700">{fmt(row.totalOut)}</span>
-                        <CountBadge count={row.countOut} color="red" />
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-700 tabular-nums whitespace-nowrap">{fmt(row.netBalance, { preserveSign: true })}</td>
-                      <td className="px-4 py-3 text-right text-gray-700 tabular-nums whitespace-nowrap">
-                        {showMonthEndClosing ? fmt(row.closingBalance) : ''}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <RowActions
-                          items={[
-                            { label: 'Cash in', onSelect: () => onOpenCashEntry('cash-in', row.date) },
-                            { label: 'Cash out', onSelect: () => onOpenCashEntry('cash-out', row.date) },
-                            { label: 'Transaction details', onSelect: () => openDayDetails(row.date) },
-                          ]}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })()
+              {!loading && data?.rows.map((row) => (
+                <tr key={row.date} className="border-b border-gray-100 hover:bg-gray-50/70">
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => openDayDetails(row.date)}
+                      className="text-blue-600 font-medium hover:underline"
+                    >
+                      {fmtDate(row.date)}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-700 tabular-nums whitespace-nowrap">
+                    {fmt(row.openingBalance)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
+                    <span className="text-gray-700">{fmt(row.totalIn)}</span>
+                    <CountBadge count={row.countIn} color="green" />
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
+                    <span className="text-gray-700">{fmt(row.totalOut)}</span>
+                    <CountBadge count={row.countOut} color="red" />
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-700 tabular-nums whitespace-nowrap font-medium">
+                    {fmt(row.netBalance, { preserveSign: true })}
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-700 tabular-nums whitespace-nowrap font-semibold">
+                    {fmt(row.closingBalance)}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <RowActions
+                      items={[
+                        { label: 'Cash in', onSelect: () => onOpenCashEntry('cash-in', row.date) },
+                        { label: 'Cash out', onSelect: () => onOpenCashEntry('cash-out', row.date) },
+                        { label: 'Transaction details', onSelect: () => openDayDetails(row.date) },
+                      ]}
+                    />
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
@@ -677,11 +703,12 @@ function CashTransferPanel() {
 
       {/* Summary cards */}
       {summary && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <SummaryCard icon="+" iconBg="bg-teal-400" amount={fmt(summary.openingBalance)} label="Opening balance" cardBg="bg-teal-50 border-teal-100" />
           <SummaryCard icon="+" iconBg="bg-teal-500" amount={fmt(summary.totalIn)} label="Total in" cardBg="bg-teal-50 border-teal-100" />
           <SummaryCard icon="−" iconBg="bg-amber-400" amount={fmt(summary.totalOut)} label="Total out" cardBg="bg-amber-50 border-amber-100" />
-          <SummaryCard icon="=" iconBg="bg-gray-400" amount={fmt(summary.netBalance, { preserveSign: true })} label="Net balance" cardBg="bg-gray-50 border-gray-200" />
+          <SummaryCard icon="=" iconBg="bg-blue-400" amount={fmt(summary.netBalance, { preserveSign: true })} label="Net balance" cardBg="bg-blue-50 border-blue-100" />
+          <SummaryCard icon="=" iconBg="bg-indigo-500" amount={fmt(summary.closingBalance)} label="Closing balance" cardBg="bg-indigo-50 border-indigo-100" />
         </div>
       )}
 
@@ -1528,6 +1555,7 @@ function CashOutPanel({ prefillDate }: { prefillDate?: string | null }) {
       formData.set('date', date);
       formData.set('amount', amount);
       formData.set('taxPercent', taxPercent);
+      formData.set('contactId', contactId);
       formData.set('contactName', selectedContact?.name ?? '');
       formData.set('contactType', selectedContact?.type ?? '');
       formData.set('payMode', payMode);

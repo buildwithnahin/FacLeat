@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { MoreHorizontal } from 'lucide-react';
+import { ArrowLeft, MoreHorizontal } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { backendFetch, BackendApiError } from '@/lib/backend-client';
 import {
   DropdownMenu,
@@ -71,11 +72,25 @@ export default async function AccountHistoryPage({ params }: { params: Promise<{
   const rows = [...ledger.rows].reverse();
 
   return (
-    <div className="text-[#003044]">
-      <h1 className="text-[26px] font-medium text-[#006f87]">Account history</h1>
-      <p className="mt-2 text-sm text-slate-500">
-        Account head / <span className="font-semibold text-[#006f87]">{account.name}</span>
-      </p>
+    <div className="text-[#003044] space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-[26px] font-medium text-[#006f87]">Account history</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Account head / <span className="font-semibold text-[#006f87]">{account.name}</span>
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/coa">
+              <ArrowLeft className="h-4 w-4 mr-1" /> Back to Accounts
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/accounts/ledger?accountId=${id}`}>View in Ledger</Link>
+          </Button>
+        </div>
+      </div>
 
       <div className="mt-4 overflow-x-auto rounded-t-lg border bg-white">
         <table className="min-w-[1040px] w-full text-xs">
@@ -108,7 +123,7 @@ export default async function AccountHistoryPage({ params }: { params: Promise<{
                   <td className="px-3 py-3 font-semibold text-[#006f87]">{dateText(row.date)}</td>
                   <td className="px-3 py-3 font-semibold text-[#006f87]">
                     <Link href={`/accounts/journals/${row.entryId}`} className="hover:underline">
-                      {row.number.replace(/\D/g, '') || row.number}
+                      {row.number}
                     </Link>
                   </td>
                   <td className="px-3 py-3 font-semibold text-[#006f87]">{row.reference || 'Journal'}</td>

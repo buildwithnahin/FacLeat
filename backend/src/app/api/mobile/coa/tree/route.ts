@@ -8,8 +8,11 @@ export async function GET(req: NextRequest) {
   const session = await getMobileSession(req);
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
+  const sp = req.nextUrl.searchParams;
+  const branchId = sp.get('branchId') ?? undefined;
+
   try {
-    const accounts = await coaService.tree(session);
+    const accounts = await coaService.tree(session, { branchId });
     return Response.json(apiOk(accounts));
   } catch (err) {
     if (err instanceof ApiError) return Response.json(apiError(err), { status: err.status });

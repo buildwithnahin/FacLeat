@@ -3,7 +3,7 @@ import { revalidateTag, unstable_cache } from 'next/cache';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
-import { assertBranchInScope } from '@/server/auth/data-scope';
+import { assertBranchInScope, getScopedBranchIds } from '@/server/auth/data-scope';
 import { recordAudit } from '@/server/audit/logger';
 import type { AppSession } from '@/server/auth/session';
 import { NotFoundError, ValidationError } from '@/lib/errors';
@@ -49,9 +49,10 @@ export const coaService = {
     });
   },
 
-  async tree(session: AppSession | null) {
+  async tree(session: AppSession | null, filters?: { branchId?: string }) {
     await authorize(session, 'coa:read');
-    const effectiveBranchId = session?.activeBranchId ?? undefined;
+    const effectiveBranchId = filters?.branchId ?? session?.activeBranchId ?? undefined;
+    const branchIds = await getScopedBranchIds(session, effectiveBranchId);
     const accounts = await prisma.chartAccount.findMany({
       where: coaScope(effectiveBranchId),
       orderBy: [{ path: 'asc' }],
@@ -63,7 +64,7 @@ export const coaService = {
         accountId: { in: accounts.map((account) => account.id) },
         entry: {
           status: 'POSTED',
-          branchId: effectiveBranchId,
+          ...(branchIds ? { branchId: { in: branchIds } } : {}),
         },
       },
       _sum: {

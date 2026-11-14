@@ -2,6 +2,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { getScopedBranchIds } from '@/server/auth/data-scope';
 import type { AppSession } from '@/server/auth/session';
 
 export interface AuditFilters {
@@ -20,8 +21,9 @@ export interface AuditFilters {
 export const auditService = {
   async list(session: AppSession | null, filters: AuditFilters = {}) {
     await authorize(session, 'audit:read');
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
     const where: Prisma.AuditLogWhereInput = {
-      branchId: filters.branchId,
+      ...(branchIds ? { branchId: { in: branchIds } } : filters.branchId ? { branchId: filters.branchId } : {}),
       module: filters.module,
       action: filters.action,
       entityType: filters.entityType,
@@ -35,6 +37,9 @@ export const auditService = {
             { entityType: { contains: filters.search } },
             { entityId: { contains: filters.search } },
             { action: { contains: filters.search } },
+            { module: { contains: filters.search } },
+            { actor: { name: { contains: filters.search } } },
+            { actor: { email: { contains: filters.search } } },
           ]
         : undefined,
     };

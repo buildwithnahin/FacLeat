@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { RotateCcw } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,11 +13,18 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Audit log' };
 
 interface Search {
+  branchId?: string;
   module?: string;
   search?: string;
   from?: string;
   to?: string;
   page?: string;
+}
+
+interface BranchDto {
+  id: string;
+  code: string;
+  name: string;
 }
 
 interface AuditRow {
@@ -44,17 +52,20 @@ export default async function AuditPage({
     limit: String(PAGE_SIZE),
     offset: String((page - 1) * PAGE_SIZE),
   });
+  if (sp.branchId) listParams.set('branchId', sp.branchId);
   if (sp.module && sp.module !== 'ALL') listParams.set('module', sp.module);
   if (sp.search) listParams.set('search', sp.search);
   if (sp.from) listParams.set('from', new Date(sp.from).toISOString());
   if (sp.to) listParams.set('to', new Date(`${sp.to}T23:59:59`).toISOString());
 
-  const [{ rows, total }, modules] = await Promise.all([
+  const [{ rows, total }, modules, branches] = await Promise.all([
     backendFetch<{ rows: AuditRow[]; total: number }>(`/api/mobile/audit?${listParams.toString()}`),
     backendFetch<string[]>('/api/mobile/audit/modules'),
+    backendFetch<BranchDto[]>('/api/mobile/branches').catch(() => []),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const hasFilters = Boolean(sp.search || (sp.module && sp.module !== 'ALL') || sp.branchId || sp.from || sp.to);
 
   return (
     <div className="space-y-6">
@@ -64,12 +75,26 @@ export default async function AuditPage({
       />
 
       <Card className="p-4">
-        <form className="grid grid-cols-1 md:grid-cols-[1fr_180px_160px_160px_auto] gap-3 items-end">
+        <form className="grid grid-cols-1 md:grid-cols-[1fr_150px_160px_140px_140px_auto] gap-3 items-end">
           <Input
             name="search"
-            placeholder="Search by entity, action…"
+            placeholder="Search by actor, entity, action…"
             defaultValue={sp.search ?? ''}
           />
+          {branches.length > 0 && (
+            <select
+              name="branchId"
+              defaultValue={sp.branchId ?? ''}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              <option value="">All branches</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.code} · {b.name}
+                </option>
+              ))}
+            </select>
+          )}
           <select
             name="module"
             defaultValue={sp.module ?? 'ALL'}
@@ -84,9 +109,18 @@ export default async function AuditPage({
           </select>
           <Input type="date" name="from" defaultValue={sp.from ?? ''} />
           <Input type="date" name="to" defaultValue={sp.to ?? ''} />
-          <Button type="submit" variant="outline">
-            Filter
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button type="submit" variant="outline">
+              Filter
+            </Button>
+            {hasFilters && (
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/audit">
+                  <RotateCcw className="h-3.5 w-3.5 mr-1" /> Reset
+                </Link>
+              </Button>
+            )}
+          </div>
         </form>
       </Card>
 

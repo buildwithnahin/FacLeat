@@ -26,6 +26,16 @@ interface AuditEntry {
   after: unknown;
 }
 
+function formatJson(val: unknown): string {
+  if (!val) return '—';
+  try {
+    const parsed = typeof val === 'string' ? JSON.parse(val) : val;
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return String(val);
+  }
+}
+
 export default async function AuditDetailPage({
   params,
 }: {
@@ -92,14 +102,14 @@ export default async function AuditDetailPage({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="p-4">
           <div className="text-xs font-semibold mb-2 text-muted-foreground">BEFORE</div>
-          <pre className="text-xs bg-muted/40 rounded p-3 overflow-x-auto">
-            {entry.before ? JSON.stringify(entry.before, null, 2) : '—'}
+          <pre className="text-xs bg-muted/40 rounded p-3 overflow-x-auto whitespace-pre-wrap font-mono">
+            {formatJson(entry.before)}
           </pre>
         </Card>
         <Card className="p-4">
           <div className="text-xs font-semibold mb-2 text-muted-foreground">AFTER</div>
-          <pre className="text-xs bg-muted/40 rounded p-3 overflow-x-auto">
-            {entry.after ? JSON.stringify(entry.after, null, 2) : '—'}
+          <pre className="text-xs bg-muted/40 rounded p-3 overflow-x-auto whitespace-pre-wrap font-mono">
+            {formatJson(entry.after)}
           </pre>
         </Card>
       </div>

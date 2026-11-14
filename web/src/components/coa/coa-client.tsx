@@ -97,7 +97,63 @@ function numberCode(code: string) {
 
 function accountDetail(account: FlatAccount) {
   if (account.detailType && DETAIL_BY_LABEL.has(account.detailType)) return account.detailType;
+  const name = account.name.toLowerCase();
   const code = numberCode(account.code);
+
+  if (account.type === 'ASSET') {
+    if (code === 1110 || String(code).startsWith('112') || name.includes('cash') || name.includes('bank')) {
+      return 'Cash and cash equivalents';
+    }
+    if (code === 1130 || name.includes('receivable')) {
+      return 'Accounts Receivable (A/R)';
+    }
+    if ((code >= 1140 && code < 1200) || name.includes('inventory') || name.includes('advance') || name.includes('deposit')) {
+      return 'Current assets';
+    }
+    if ((code >= 1200 && code < 1700) || name.includes('plant') || name.includes('machinery') || name.includes('equipment') || name.includes('vehicle') || name.includes('furniture')) {
+      return 'Fixed assets';
+    }
+    if (code >= 1700 || name.includes('security') || name.includes('non-current')) {
+      return 'Non-current assets';
+    }
+  }
+
+  if (account.type === 'LIABILITY') {
+    if (code === 2110 || code === 2000 || name.includes('payable') || name.includes('vendor') || name.includes('supplier')) {
+      return 'Accounts Payable (A/P)';
+    }
+    if (name.includes('credit card')) {
+      return 'Credit card';
+    }
+    if (code >= 2100 && code < 2500) {
+      return 'Current liabilities';
+    }
+    if (code >= 2500) {
+      return 'Non-current liabilities';
+    }
+  }
+
+  if (account.type === 'EQUITY') {
+    return "Owner's equity";
+  }
+
+  if (account.type === 'INCOME') {
+    if (code >= 7000 || name.includes('other income')) {
+      return 'Other income';
+    }
+    return 'Income';
+  }
+
+  if (account.type === 'EXPENSE') {
+    if ((code >= 5000 && code < 6000) || name.includes('cost of') || name.includes('cogs') || name.includes('material') || name.includes('labor')) {
+      return 'Cost of sales';
+    }
+    if (code >= 8000 || name.includes('other expense')) {
+      return 'Other expense';
+    }
+    return 'Expenses';
+  }
+
   return (
     COA_DETAIL_TYPES.find(
       (detail) => detail.type === account.type && code >= detail.codeMin && code <= detail.codeMax,
@@ -201,12 +257,20 @@ function AccountActions({
           <span className="sr-only">Actions</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-32">
+      <DropdownMenuContent align="end" className="w-36">
+        {canWrite && (
+          <DropdownMenuItem asChild>
+            <Link href={`/coa/${id}`}>Edit account</Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
           <Link href={`/coa/${id}/history`}>View history</Link>
         </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href={`/accounts/ledger?accountId=${id}`}>View ledger</Link>
+        </DropdownMenuItem>
         {canWrite && (
-          <DropdownMenuItem onSelect={() => onDelete(id)}>
+          <DropdownMenuItem onSelect={() => onDelete(id)} className="text-red-600 focus:text-red-600">
             Delete
           </DropdownMenuItem>
         )}
@@ -242,7 +306,6 @@ function CreateAccountModal({
           <div className="grid gap-x-3 gap-y-4 px-6 py-5 md:grid-cols-2">
             <input type="hidden" name="type" value={selected.type} />
             <input type="hidden" name="normalSide" value={selected.normalSide} />
-            <input type="hidden" name="detailType" value={selected.label} />
             <input type="hidden" name="currency" value="BDT" />
             <input type="hidden" name="isPosting" value="on" />
             <input type="hidden" name="isActive" value="on" />
@@ -270,8 +333,8 @@ function CreateAccountModal({
 
             <div className="space-y-2">
               <Label className="text-xs font-medium text-[#003044]">Detail type <span className="text-red-500">*</span></Label>
-              <select className="h-9 w-full rounded border border-input bg-white px-2 text-xs outline-none">
-                <option>{selected.defaultDetail}</option>
+              <select name="detailType" className="h-9 w-full rounded border border-input bg-white px-2 text-xs outline-none">
+                <option value={selected.defaultDetail}>{selected.defaultDetail}</option>
               </select>
             </div>
 
@@ -338,7 +401,17 @@ function CreateAccountModal({
   );
 }
 
-export function CoaClient({ accounts, canWrite }: { accounts: FlatAccount[]; canWrite: boolean }) {
+export function CoaClient({
+  accounts,
+  canWrite,
+  branches = [],
+  selectedBranchId = '',
+}: {
+  accounts: FlatAccount[];
+  canWrite: boolean;
+  branches?: Array<{ id: string; code: string; name: string }>;
+  selectedBranchId?: string;
+}) {
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [nameFilter, setNameFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -405,7 +478,10 @@ export function CoaClient({ accounts, canWrite }: { accounts: FlatAccount[]; can
   function handleDelete(id: string) {
     if (!window.confirm('Delete this account?')) return;
     startTransition(async () => {
-      await deleteChartAccountAction(id);
+      const res = await deleteChartAccountAction(id);
+      if (res?.error) {
+        alert(res.error);
+      }
     });
   }
 
@@ -415,6 +491,28 @@ export function CoaClient({ accounts, canWrite }: { accounts: FlatAccount[]; can
 
       <div className="rounded-t-md bg-white px-3 py-5">
         <div className="flex flex-wrap items-end gap-3">
+          {branches.length > 0 && (
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Branch</Label>
+              <select
+                value={selectedBranchId}
+                onChange={(e) => {
+                  const url = new URL(window.location.href);
+                  if (e.target.value) url.searchParams.set('branchId', e.target.value);
+                  else url.searchParams.delete('branchId');
+                  window.location.href = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '');
+                }}
+                className="h-8 rounded border border-input bg-white px-2 text-xs"
+              >
+                <option value="">All Branches</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.code} · {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="space-y-1">
             <Label className="text-xs font-semibold">Account Type</Label>
             <TypeDropdown selected={typeFilter} onToggle={toggleFilter} />

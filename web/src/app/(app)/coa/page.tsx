@@ -23,14 +23,36 @@ interface CoaTreeAccountDto {
   createdAt: string;
 }
 
-export default async function CoaPage() {
+interface BranchDto {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export default async function CoaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ branchId?: string }>;
+}) {
+  const { branchId } = await searchParams;
   const session = await getSession();
-  const accounts = await backendFetch<CoaTreeAccountDto[]>('/api/mobile/coa/tree');
+
+  const queryParams = new URLSearchParams();
+  if (branchId) queryParams.set('branchId', branchId);
+
+  const [accounts, branches] = await Promise.all([
+    backendFetch<CoaTreeAccountDto[]>(
+      queryParams.toString() ? `/api/mobile/coa/tree?${queryParams.toString()}` : '/api/mobile/coa/tree',
+    ),
+    backendFetch<BranchDto[]>('/api/mobile/branches').catch(() => []),
+  ]);
   const canWrite = session?.permissions.includes('coa:write') ?? false;
 
   return (
     <CoaClient
       canWrite={canWrite}
+      branches={branches}
+      selectedBranchId={branchId ?? ''}
       accounts={accounts.map((account) => ({
         id: account.id,
         code: account.code,

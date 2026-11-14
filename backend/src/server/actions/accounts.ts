@@ -162,7 +162,8 @@ export async function getDailyCashFlowAction(filters: {
       openingBalance: result.summary.openingBalance.toString(),
       totalIn: result.summary.totalIn.toString(),
       totalOut: result.summary.totalOut.toString(),
-      netBalance: result.summary.closingBalance.toString(),
+      netBalance: result.summary.netBalance.toString(),
+      closingBalance: result.summary.closingBalance.toString(),
     },
     rows: result.rows.map((r) => ({
       date: r.date,
@@ -262,13 +263,13 @@ export async function listCashTransfersAction(filters: {
   });
 }
 
-export async function listBranchesAction() {
+export async function listBranchesAction(opts?: { includeCurrent?: boolean }) {
   const session = await getSession();
   if (!session) return [];
   const { branchService } = await import('@/server/services/branch.service');
   const all = await branchService.listActive(session);
   return all
-    .filter((b) => b.id !== session.activeBranchId)
+    .filter((b) => (opts?.includeCurrent ? true : b.id !== session.activeBranchId))
     .map((b) => ({ id: b.id, name: b.name, code: b.code }));
 }
 

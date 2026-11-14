@@ -1200,10 +1200,11 @@ export const accountsService = {
 
     const totalIn = rows.reduce((s, r) => s.plus(r.totalIn), ZERO);
     const totalOut = rows.reduce((s, r) => s.plus(r.totalOut), ZERO);
+    const netBalance = totalIn.minus(totalOut);
     const closingBalance = openingBalance.plus(totalIn).minus(totalOut);
 
     return {
-      summary: { openingBalance, totalIn, totalOut, closingBalance },
+      summary: { openingBalance, totalIn, totalOut, netBalance, closingBalance },
       rows,
     };
   },

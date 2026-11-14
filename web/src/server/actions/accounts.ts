@@ -143,7 +143,13 @@ interface DailyCashFlowRowDto {
 
 interface DailyCashFlowDto {
   userName: string;
-  summary: { openingBalance: string; totalIn: string; totalOut: string; netBalance: string };
+  summary: {
+    openingBalance: string;
+    totalIn: string;
+    totalOut: string;
+    netBalance: string;
+    closingBalance: string;
+  };
   rows: DailyCashFlowRowDto[];
 }
 
@@ -195,12 +201,13 @@ export async function listCashTransfersAction(filters: {
   return backendFetch(`/api/mobile/accounts/cash-transfers?${sp.toString()}`);
 }
 
-export async function listBranchesAction() {
+export async function listBranchesAction(opts?: { includeCurrent?: boolean }) {
   const session = await getSession();
   if (!session) return [];
   const branches = await backendFetch<Array<{ id: string; name: string; code: string }>>(
     '/api/mobile/branches',
   );
+  if (opts?.includeCurrent) return branches;
   return branches.filter((b) => b.id !== session.activeBranchId);
 }
 

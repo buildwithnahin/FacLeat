@@ -116,10 +116,9 @@ export async function deleteChartAccountAction(id: string): Promise<{ error?: st
     await backendFetch(`/api/mobile/coa/${id}`, { method: 'DELETE' });
   } catch (e) {
     if (e instanceof BackendApiError) return { error: e.message };
-    throw e;
+    return { error: 'Failed to delete account' };
   }
   revalidatePath('/coa');
-  redirect('/coa');
 }
 
 export async function updateChartAccountAction(
