@@ -10,7 +10,9 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
   try {
-    const holidays = await holidaysService.listAll(session);
+    const rawBranchId = req.nextUrl.searchParams.get('branchId');
+    const branchId = rawBranchId && rawBranchId !== 'ALL' ? rawBranchId : undefined;
+    const holidays = await holidaysService.listAll(session, branchId);
     return Response.json(
       apiOk(
         holidays.map((h) => ({

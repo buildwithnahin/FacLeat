@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { RotateCcw } from 'lucide-react';
 import { getSession } from '@/server/auth/session';
 import { backendFetch } from '@/lib/backend-client';
 import { PageHeader } from '@/components/shared/page-header';
@@ -19,6 +21,12 @@ interface AttendanceEmployee {
   holiday: { id: string; branchId: string | null } | null;
 }
 
+interface BranchRow {
+  id: string;
+  code: string;
+  name: string;
+}
+
 function formatTimeValue(value: string | null) {
   if (!value) return '';
   const date = new Date(value);
@@ -27,25 +35,58 @@ function formatTimeValue(value: string | null) {
   return `${hours}:${minutes}`;
 }
 
-export default async function AttendancePage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
+export default async function AttendancePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string; branchId?: string }>;
+}) {
   const sp = await searchParams;
   const dateStr = sp.date ?? new Date().toISOString().slice(0, 10);
+  const branchId = sp.branchId ?? '';
   const session = await getSession();
-  const { employees } = await backendFetch<{ employees: AttendanceEmployee[] }>(`/api/mobile/hr/attendance?date=${dateStr}`);
+
+  const listParams = new URLSearchParams();
+  listParams.set('date', dateStr);
+  if (branchId && branchId !== 'ALL') listParams.set('branchId', branchId);
+
+  const [branches, attendanceData] = await Promise.all([
+    backendFetch<BranchRow[]>('/api/mobile/branches?activeOnly=true').catch(() => []),
+    backendFetch<{ employees: AttendanceEmployee[] }>(`/api/mobile/hr/attendance?${listParams.toString()}`).catch(() => ({ employees: [] })),
+  ]);
+
+  const employees = attendanceData.employees || [];
   const canMark = session?.permissions.includes('hr:attendance') ?? false;
 
   return (
     <div className="space-y-6">
       <PageHeader title="Attendance" description={`Daily attendance for ${dateStr}`}>
-        <form className="flex items-center gap-2">
+        <form method="GET" className="flex flex-wrap items-center gap-2">
           <input
             type="date"
             name="date"
             defaultValue={dateStr}
             className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
           />
+          <select
+            name="branchId"
+            defaultValue={branchId}
+            aria-label="Filter by branch"
+            className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="ALL">All Branches</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.code} — {b.name}
+              </option>
+            ))}
+          </select>
           <Button type="submit" variant="outline">
-            Go
+            Filter
+          </Button>
+          <Button type="button" variant="ghost" asChild>
+            <Link href="/hr/attendance">
+              <RotateCcw className="h-4 w-4" />
+            </Link>
           </Button>
         </form>
       </PageHeader>
@@ -98,7 +139,8 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
                 const r = e.record;
                 let otDisplay = '-';
                 if (r?.checkIn && r?.checkOut) {
-                  const diffHours = (new Date(r.checkOut).getTime() - new Date(r.checkIn).getTime()) / (1000 * 60 * 60);
+                  let diffHours = (new Date(r.checkOut).getTime() - new Date(r.checkIn).getTime()) / (1000 * 60 * 60);
+                  if (diffHours < 0) diffHours += 24;
                   otDisplay = e.holiday ? `${Math.max(0, diffHours).toFixed(1)} hrs (Holiday OT)` : `${Math.max(0, diffHours).toFixed(1)} hrs`;
                 }
 

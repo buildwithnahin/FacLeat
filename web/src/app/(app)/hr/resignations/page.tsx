@@ -86,28 +86,29 @@ function canAccessResignations(session: Awaited<ReturnType<typeof getSession>>) 
 export default async function ResignationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ edit?: string; status?: string; q?: string; error?: string }>;
+  searchParams: Promise<{ edit?: string; status?: string; q?: string; branchId?: string; error?: string }>;
 }) {
-  const { edit, status, q, error } = await searchParams;
+  const { edit, status, q, branchId, error } = await searchParams;
   const session = await getSession();
   const activeBranch = session?.activeBranchId ?? undefined;
+  const branchFilter = branchId ? (branchId === 'ALL' ? undefined : branchId) : activeBranch;
 
   if (!canAccessResignations(session)) {
     throw new ForbiddenError('Missing permission: hr:read or accounts:read');
   }
 
   const listParams = new URLSearchParams();
-  if (activeBranch) listParams.set('branchId', activeBranch);
+  if (branchFilter) listParams.set('branchId', branchFilter);
   if (status) listParams.set('status', status);
   if (q) listParams.set('q', q);
 
   const [employees, confirmationDates, listResult, counts] = await Promise.all([
-    backendFetch<EmployeeRow[]>(`/api/mobile/hr/employees${activeBranch ? `?branchId=${activeBranch}` : ''}`),
+    backendFetch<EmployeeRow[]>(`/api/mobile/hr/employees${branchFilter ? `?branchId=${branchFilter}` : ''}`),
     backendFetch<Record<string, string>>(
-      `/api/mobile/hr/confirmations/confirmation-dates${activeBranch ? `?branchId=${activeBranch}` : ''}`,
+      `/api/mobile/hr/confirmations/confirmation-dates${branchFilter ? `?branchId=${branchFilter}` : ''}`,
     ),
     backendFetch<{ records: ResignationRow[]; unavailable: boolean }>(`/api/mobile/hr/resignations?${listParams.toString()}`),
-    backendFetch<Record<string, number>>(`/api/mobile/hr/resignations/counts${activeBranch ? `?branchId=${activeBranch}` : ''}`),
+    backendFetch<Record<string, number>>(`/api/mobile/hr/resignations/counts${branchFilter ? `?branchId=${branchFilter}` : ''}`),
   ]);
 
   const activeEmployees = employees.filter((e) => e.status !== 'RESIGNED');

@@ -16,7 +16,9 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
   try {
-    const shifts = await shiftsService.listAll(session);
+    const rawBranchId = req.nextUrl.searchParams.get('branchId');
+    const branchId = rawBranchId && rawBranchId !== 'ALL' ? rawBranchId : undefined;
+    const shifts = await shiftsService.listAll(session, branchId);
     return Response.json(
       apiOk(
         shifts.map((s) => ({

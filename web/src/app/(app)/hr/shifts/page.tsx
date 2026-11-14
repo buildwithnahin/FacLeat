@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Plus, Pencil } from 'lucide-react';
+import { Plus, Pencil, RotateCcw } from 'lucide-react';
 import { getSession } from '@/server/auth/session';
 import { backendFetch } from '@/lib/backend-client';
 import { PageHeader } from '@/components/shared/page-header';
@@ -24,6 +24,12 @@ interface ShiftRow {
   weeklyOffDays: string[];
   branch: { code: string; name: string };
   employeeCount: number;
+}
+
+interface BranchRow {
+  id: string;
+  code: string;
+  name: string;
 }
 
 function formatTime(value: string) {
@@ -54,9 +60,22 @@ function shiftTypeLabel(value: string) {
   }
 }
 
-export default async function ShiftsPage() {
+export default async function ShiftsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ branchId?: string }>;
+}) {
+  const sp = (await searchParams) ?? {};
+  const branchId = sp.branchId ?? '';
   const session = await getSession();
-  const shifts = await backendFetch<ShiftRow[]>('/api/mobile/hr/shifts');
+
+  const listParams = new URLSearchParams();
+  if (branchId && branchId !== 'ALL') listParams.set('branchId', branchId);
+
+  const [branches, shifts] = await Promise.all([
+    backendFetch<BranchRow[]>('/api/mobile/branches?activeOnly=true').catch(() => []),
+    backendFetch<ShiftRow[]>(`/api/mobile/hr/shifts?${listParams.toString()}`).catch(() => []),
+  ]);
   const canWrite = session?.permissions.includes('hr:write') ?? false;
 
   return (
@@ -65,14 +84,39 @@ export default async function ShiftsPage() {
         title="Shifts"
         description="Define working hours, attendance thresholds, overtime windows, and weekly off rules."
       >
-        {canWrite && (
-          <Button asChild>
-            <Link href="/hr/shifts/new">
-              <Plus className="h-4 w-4" />
-              New shift
-            </Link>
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <form method="GET" className="flex items-center gap-2">
+            <select
+              name="branchId"
+              defaultValue={branchId}
+              aria-label="Filter by branch"
+              className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="ALL">All Branches</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.code} — {b.name}
+                </option>
+              ))}
+            </select>
+            <Button type="submit" variant="outline" size="sm">
+              Filter
+            </Button>
+            <Button type="button" variant="ghost" size="sm" asChild>
+              <Link href="/hr/shifts">
+                <RotateCcw className="h-4 w-4" />
+              </Link>
+            </Button>
+          </form>
+          {canWrite && (
+            <Button asChild>
+              <Link href="/hr/shifts/new">
+                <Plus className="h-4 w-4" />
+                New shift
+              </Link>
+            </Button>
+          )}
+        </div>
       </PageHeader>
 
       <Card className="overflow-hidden">

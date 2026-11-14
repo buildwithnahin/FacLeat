@@ -12,12 +12,14 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
   const dateStr = req.nextUrl.searchParams.get('date') ?? new Date().toISOString().slice(0, 10);
+  const rawBranchId = req.nextUrl.searchParams.get('branchId');
+  const branchId = rawBranchId && rawBranchId !== 'ALL' ? rawBranchId : undefined;
   const day = new Date(dateStr);
 
   try {
     const [employees, records, holidays] = await Promise.all([
-      hrService.listEmployees(session, { status: 'ACTIVE' }),
-      hrService.listAttendance(session, { from: day, to: day }),
+      hrService.listEmployees(session, { status: 'ACTIVE', branchId }),
+      hrService.listAttendance(session, { from: day, to: day, branchId }),
       holidaysService.listOnDate(session, day),
     ]);
 

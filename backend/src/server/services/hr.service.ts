@@ -44,7 +44,7 @@ function monthBounds(period: string) {
   const m = Number(parts[1]);
   const start = new Date(Date.UTC(y, m - 1, 1));
   const end = new Date(Date.UTC(y, m, 0));
-  const workingDays = end.getUTCDate();
+  const workingDays = Math.max(1, end.getUTCDate());
   return { start, end, workingDays };
 }
 
@@ -52,7 +52,7 @@ export const hrService = {
   // ─── Employees ────────────────────────────────────────────────────────────
   async listEmployees(
     session: AppSession | null,
-    filters: { branchId?: string; status?: string; q?: string } = {},
+    filters: { branchId?: string; status?: string; department?: string; q?: string } = {},
   ) {
     await authorize(session, 'hr:read');
     const branchIds = await getScopedBranchIds(session, filters.branchId);
@@ -60,12 +60,16 @@ export const hrService = {
       where: {
         ...(branchIds ? { branchId: { in: branchIds } } : {}),
         status: filters.status as never,
+        ...(filters.department ? { department: filters.department } : {}),
         OR: filters.q
           ? [
               { code: { contains: filters.q } },
               { firstName: { contains: filters.q } },
               { lastName: { contains: filters.q } },
               { email: { contains: filters.q } },
+              { phone: { contains: filters.q } },
+              { designation: { contains: filters.q } },
+              { department: { contains: filters.q } },
             ]
           : undefined,
       },

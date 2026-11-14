@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
     const employees = await hrService.listEmployees(session, {
       branchId: sp.get('branchId') ?? undefined,
       status: sp.get('status') ?? undefined,
+      department: sp.get('department') ?? undefined,
       q: sp.get('q') ?? undefined,
     });
     return Response.json(
@@ -30,6 +31,8 @@ export async function GET(req: NextRequest) {
           code: e.code,
           firstName: e.firstName,
           lastName: e.lastName,
+          email: e.email,
+          phone: e.phone,
           department: e.department,
           designation: e.designation,
           status: e.status,

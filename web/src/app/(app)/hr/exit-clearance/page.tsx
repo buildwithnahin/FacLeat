@@ -87,11 +87,12 @@ function canAccessExitClearance(session: Awaited<ReturnType<typeof getSession>>)
 export default async function ExitClearancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ id?: string; status?: string; error?: string; q?: string }>;
+  searchParams: Promise<{ id?: string; status?: string; error?: string; q?: string; branchId?: string }>;
 }) {
-  const { id, status, error, q } = await searchParams;
+  const { id, status, error, q, branchId } = await searchParams;
   const session = await getSession();
   const activeBranch = session?.activeBranchId ?? undefined;
+  const branchFilter = branchId ? (branchId === 'ALL' ? undefined : branchId) : activeBranch;
 
   if (!canAccessExitClearance(session)) {
     throw new ForbiddenError('Missing permission: hr:read or accounts:read');
@@ -104,7 +105,7 @@ export default async function ExitClearancePage({
   const canDepartmentApprove = (session?.roles ?? []).some((role) => ['Management', 'HR', 'Admin', 'Super Admin'].includes(role));
 
   const listParams = new URLSearchParams();
-  if (activeBranch) listParams.set('branchId', activeBranch);
+  if (branchFilter) listParams.set('branchId', branchFilter);
   if (status) listParams.set('status', status);
   if (q) listParams.set('q', q);
 

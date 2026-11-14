@@ -1,6 +1,6 @@
 import 'server-only';
 import { prisma } from '@/server/db';
-import { authorize } from '@/server/auth/authorize';
+import { authorize, getScopedBranchIds } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import type { AppSession } from '@/server/auth/session';
 import type { ShiftCreateInput, ShiftUpdateInput } from '@/server/validators/shifts';
@@ -12,9 +12,11 @@ const SHIFT_INCLUDE = {
 } as const;
 
 export const shiftsService = {
-  async listAll(session: AppSession | null) {
+  async listAll(session: AppSession | null, branchId?: string) {
     await authorize(session, 'hr:read');
+    const branchIds = await getScopedBranchIds(session, branchId);
     return prisma.shift.findMany({
+      where: branchIds ? { branchId: { in: branchIds } } : undefined,
       include: SHIFT_INCLUDE,
       orderBy: [{ branch: { name: 'asc' } }, { name: 'asc' }],
     });

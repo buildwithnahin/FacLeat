@@ -1,6 +1,6 @@
 import 'server-only';
 import { prisma } from '@/server/db';
-import { authorize } from '@/server/auth/authorize';
+import { authorize, getScopedBranchIds } from '@/server/auth/authorize';
 import { recordAudit } from '@/server/audit/logger';
 import type { AppSession } from '@/server/auth/session';
 import type { HolidayCreateInput, HolidayUpdateInput } from '@/server/validators/holidays';
@@ -85,9 +85,18 @@ export async function countChargeableLeaveDays(from: Date, to: Date, branchId?: 
 }
 
 export const holidaysService = {
-  async listAll(session: AppSession | null) {
+  async listAll(session: AppSession | null, branchId?: string) {
     await authorize(session, 'hr:read');
+    const branchIds = await getScopedBranchIds(session, branchId);
     return prisma.holiday.findMany({
+      where: branchIds
+        ? {
+            OR: [
+              { branchId: null },
+              { branchId: { in: branchIds } },
+            ],
+          }
+        : undefined,
       include: HOLIDAY_INCLUDE,
       orderBy: [{ startDate: 'asc' }, { name: 'asc' }],
     });

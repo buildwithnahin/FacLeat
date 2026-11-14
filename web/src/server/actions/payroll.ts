@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { backendFetch, BackendApiError } from '@/lib/backend-client';
 
 // Thin wrapper for the simpler `/hr/payroll` list+detail pages (distinct
@@ -46,4 +47,7 @@ export async function payrollStatusAction(fd: FormData) {
   }
   revalidatePath('/hr/payroll');
   revalidatePath(`/hr/payroll/${id}`);
+  if (action === 'cancel') {
+    redirect('/hr/payroll');
+  }
 }

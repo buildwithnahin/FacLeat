@@ -251,6 +251,27 @@ export class PayrollRunService {
               payrollPeriodId,
               status: 'APPROVED'
             }
+          },
+          overtimeRecords: {
+            where: {
+              otMonth: `${period.year}-${period.month.toString().padStart(2, '0')}`,
+              status: 'APPROVED'
+            }
+          },
+          attendance: {
+            where: {
+              date: {
+                gte: period.startDate,
+                lte: period.endDate
+              }
+            }
+          },
+          leaves: {
+            where: {
+              status: 'APPROVED',
+              fromDate: { lte: period.endDate },
+              toDate: { gte: period.startDate }
+            }
           }
         }
       });
@@ -278,6 +299,8 @@ export class PayrollRunService {
       let totalAdvance = 0;
       let totalTax = 0;
 
+      const totalPeriodDays = Math.max(1, Math.round((period.endDate.getTime() - period.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+
       // 5. Calculate for each employee
       for (const emp of employees) {
         const assignment = emp.salaryStructureAssignments[0];
@@ -290,25 +313,29 @@ export class PayrollRunService {
         let transportAllowance = structuredSalary?.transportAllowance ?? Number(emp.transportAllowance);
         let otherAllowance = structuredSalary?.otherAllowance ?? Number(emp.otherAllowance);
 
-        // OT (Mocking 0 for now as Attendance module is not fully integrated here)
-        let overtimeAmount = 0;
+        // OT
+        let overtimeAmount = period.includeOvertime
+          ? emp.overtimeRecords.reduce((sum, ot) => sum + Number(ot.otAmount), 0)
+          : 0;
         let attendanceBonus = 0;
 
         // Bonus
-        let bonusAmount = emp.bonuses.reduce((sum, b) => sum + Number(b.amount), 0);
+        let bonusAmount = period.includeBonus
+          ? emp.bonuses.reduce((sum, b) => sum + Number(b.amount), 0)
+          : 0;
 
         // Loans & Advances
         let loanDeduction = 0;
         let advanceDeduction = 0;
         emp.loans.forEach(loan => {
           loan.repaymentSchedules.forEach(schedule => {
-            if (loan.requestType === 'EMPLOYEE_LOAN') loanDeduction += Number(schedule.installment);
-            if (loan.requestType === 'SALARY_ADVANCE') advanceDeduction += Number(schedule.installment);
+            if (period.includeLoanDeduction && loan.requestType === 'EMPLOYEE_LOAN') loanDeduction += Number(schedule.installment);
+            if (period.includeSalaryAdvance && loan.requestType === 'SALARY_ADVANCE') advanceDeduction += Number(schedule.installment);
           });
         });
 
         // Tax & PF
-        let taxDeduction = structuredSalary?.taxDeduction ?? Number(emp.taxDeduction);
+        let taxDeduction = period.includeTax ? (structuredSalary?.taxDeduction ?? Number(emp.taxDeduction)) : 0;
         let providentFund = structuredSalary?.providentFund ?? Number(emp.providentFund);
 
         // Adjustments
@@ -334,12 +361,14 @@ export class PayrollRunService {
 
         let totalDed = taxDeduction + providentFund + loanDeduction + advanceDeduction + lateDeduction + absentDeduction + otherDeduction;
         
-        let net = gross - totalDed;
+        let net = Math.max(0, gross - totalDed);
 
-        // Ensure net is not negative
-        if (net < 0) {
-          throw new Error(`Calculation error: Employee ${emp.code} has a negative net salary (${net}). Adjust deductions.`);
-        }
+        const presentCount = emp.attendance.filter(a => a.status === 'PRESENT' || a.status === 'LATE').length;
+        const halfDayCount = emp.attendance.filter(a => a.status === 'HALF_DAY').length;
+        const absentCount = emp.attendance.filter(a => a.status === 'ABSENT').length;
+        const leaveDays = emp.leaves.reduce((sum, l) => sum + Number(l.days), 0);
+        const workedDays = emp.attendance.length > 0 ? (presentCount + halfDayCount * 0.5) : totalPeriodDays;
+        const absentDays = emp.attendance.length > 0 ? absentCount : 0;
 
         await tx.payslip.create({
           data: {
@@ -349,9 +378,9 @@ export class PayrollRunService {
             paymentMethod: emp.bankAccount ? 'Bank Transfer' : 'Cash',
             bankName: emp.bankName,
             bankAccount: emp.bankAccount,
-            workedDays: 30, // Mocked
-            leaveDays: 0,
-            absentDays: 0,
+            workedDays: Math.round(workedDays),
+            leaveDays: Math.round(leaveDays),
+            absentDays: Math.round(absentDays),
             basic,
             houseAllowance,
             transportAllowance,

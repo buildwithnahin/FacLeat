@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { formatCurrency } from '@/lib/money';
 import { payrollStatusAction } from '@/server/actions/payroll';
 
 export const dynamic = 'force-dynamic';
@@ -78,9 +79,9 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
       </PageHeader>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <SummaryCard label="Total gross" value={run.totalGross} />
-        <SummaryCard label="Total deduction" value={run.totalDeduction} />
-        <SummaryCard label="Total net payable" value={run.totalNet} accent />
+        <SummaryCard label="Total gross" value={formatCurrency(Number(run.totalGross) || 0, 'BDT')} />
+        <SummaryCard label="Total deduction" value={formatCurrency(Number(run.totalDeduction) || 0, 'BDT')} />
+        <SummaryCard label="Total net payable" value={formatCurrency(Number(run.totalNet) || 0, 'BDT')} accent />
       </div>
 
       <Card className="overflow-hidden">
@@ -107,17 +108,17 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
                 return (
                   <tr key={p.id} className="hover:bg-muted/30">
                     <td className="px-4 py-2 font-mono text-xs">{p.employee.code}</td>
-                    <td className="px-4 py-2">
+                    <td className="px-4 py-2 font-medium">
                       {p.employee.firstName} {p.employee.lastName}
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums">{p.workedDays}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{p.leaveDays}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{p.absentDays}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{p.basic}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{allowances.toFixed(2)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{p.gross}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{deduction.toFixed(2)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums font-semibold">{p.net}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-mono">{formatCurrency(Number(p.basic) || 0, 'BDT')}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-mono">{formatCurrency(allowances, 'BDT')}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-mono">{formatCurrency(Number(p.gross) || 0, 'BDT')}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-mono">{formatCurrency(deduction, 'BDT')}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-semibold font-mono text-primary">{formatCurrency(Number(p.net) || 0, 'BDT')}</td>
                   </tr>
                 );
               })}
