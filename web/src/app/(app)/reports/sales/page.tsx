@@ -1,6 +1,7 @@
 import { backendFetch } from '@/lib/backend-client';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
+import { formatCurrency } from '@/lib/money';
 import { defaultRange, RangeFilter } from '../_components/range-filter';
 
 export const dynamic = 'force-dynamic';
@@ -29,6 +30,12 @@ interface Branch {
   code: string;
 }
 
+function safeDate(val: string | undefined, fallback: string): string {
+  if (!val) return fallback;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? fallback : val;
+}
+
 export default async function SalesReportPage({
   searchParams,
 }: {
@@ -36,18 +43,18 @@ export default async function SalesReportPage({
 }) {
   const sp = await searchParams;
   const range = defaultRange();
-  const from = sp.from ?? range.from;
-  const to = sp.to ?? range.to;
+  const from = safeDate(sp.from, range.from);
+  const to = safeDate(sp.to, range.to);
 
   const qs = new URLSearchParams({ from: new Date(from).toISOString(), to: new Date(`${to}T23:59:59.999Z`).toISOString() });
-  if (sp.branchId) qs.set('branchId', sp.branchId);
+  if (sp.branchId && sp.branchId !== 'ALL') qs.set('branchId', sp.branchId);
 
   const [data, branches] = await Promise.all([
     backendFetch<SalesSummaryDto>(`/api/mobile/reports/general/sales-summary?${qs.toString()}`),
-    backendFetch<Branch[]>('/api/mobile/branches'),
+    backendFetch<Branch[]>('/api/mobile/branches').catch(() => []),
   ]);
 
-  const exportHref = `/api/reports/sales.csv?from=${from}&to=${to}${sp.branchId ? `&branchId=${sp.branchId}` : ''}`;
+  const exportHref = `/api/reports/sales.csv?from=${from}&to=${to}${sp.branchId && sp.branchId !== 'ALL' ? `&branchId=${sp.branchId}` : ''}`;
 
   return (
     <div className="space-y-6">
@@ -58,6 +65,7 @@ export default async function SalesReportPage({
           branchId={sp.branchId}
           branches={branches.map((b) => ({ id: b.id, code: b.code, name: b.name }))}
           exportHref={exportHref}
+          baseHref="/reports/sales"
         />
       </PageHeader>
 
@@ -80,11 +88,11 @@ export default async function SalesReportPage({
                 <tr key={c.key}>
                   <td className="px-4 py-2 font-medium">{c.label}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{c.count}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{c.gross}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{c.discount}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{c.tax}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{c.paid}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{c.outstanding}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{formatCurrency(c.gross, 'BDT')}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{formatCurrency(c.discount, 'BDT')}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{formatCurrency(c.tax, 'BDT')}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-emerald-600">{formatCurrency(c.paid, 'BDT')}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-medium text-amber-600">{formatCurrency(c.outstanding, 'BDT')}</td>
                 </tr>
               ))}
             </tbody>
@@ -92,11 +100,11 @@ export default async function SalesReportPage({
               <tr>
                 <td className="px-4 py-2">Totals</td>
                 <td className="px-4 py-2 text-right tabular-nums">{data.totals.count}</td>
-                <td className="px-4 py-2 text-right tabular-nums">{data.totals.gross}</td>
-                <td className="px-4 py-2 text-right tabular-nums">{data.totals.discount}</td>
-                <td className="px-4 py-2 text-right tabular-nums">{data.totals.tax}</td>
-                <td className="px-4 py-2 text-right tabular-nums">{data.totals.paid}</td>
-                <td className="px-4 py-2 text-right tabular-nums">{data.totals.outstanding}</td>
+                <td className="px-4 py-2 text-right tabular-nums">{formatCurrency(data.totals.gross, 'BDT')}</td>
+                <td className="px-4 py-2 text-right tabular-nums">{formatCurrency(data.totals.discount, 'BDT')}</td>
+                <td className="px-4 py-2 text-right tabular-nums">{formatCurrency(data.totals.tax, 'BDT')}</td>
+                <td className="px-4 py-2 text-right tabular-nums text-emerald-600">{formatCurrency(data.totals.paid, 'BDT')}</td>
+                <td className="px-4 py-2 text-right tabular-nums font-semibold text-amber-600">{formatCurrency(data.totals.outstanding, 'BDT')}</td>
               </tr>
             </tfoot>
           </table>

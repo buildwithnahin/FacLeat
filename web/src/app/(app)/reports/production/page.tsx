@@ -1,5 +1,5 @@
 import { backendFetch } from '@/lib/backend-client';
-import { d } from '@/lib/money';
+import { d, formatCurrency } from '@/lib/money';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable } from '@/components/shared/data-table';
@@ -54,6 +54,12 @@ interface Branch {
   code: string;
 }
 
+function safeDate(val: string | undefined, fallback: string): string {
+  if (!val) return fallback;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? fallback : val;
+}
+
 export default async function ProductionReportPage({
   searchParams,
 }: {
@@ -61,15 +67,15 @@ export default async function ProductionReportPage({
 }) {
   const sp = await searchParams;
   const range = defaultRange();
-  const from = sp.from ?? range.from;
-  const to = sp.to ?? range.to;
+  const from = safeDate(sp.from, range.from);
+  const to = safeDate(sp.to, range.to);
 
   const qs = new URLSearchParams({ from: new Date(from).toISOString(), to: new Date(`${to}T23:59:59.999Z`).toISOString() });
-  if (sp.branchId) qs.set('branchId', sp.branchId);
+  if (sp.branchId && sp.branchId !== 'ALL') qs.set('branchId', sp.branchId);
 
   const [data, branches] = await Promise.all([
     backendFetch<ProductionSummaryDto>(`/api/mobile/reports/general/production-summary?${qs.toString()}`),
-    backendFetch<Branch[]>('/api/mobile/branches'),
+    backendFetch<Branch[]>('/api/mobile/branches').catch(() => []),
   ]);
 
   return (
@@ -80,16 +86,17 @@ export default async function ProductionReportPage({
           to={to}
           branchId={sp.branchId}
           branches={branches.map((b) => ({ id: b.id, code: b.code, name: b.name }))}
+          baseHref="/reports/production"
         />
       </PageHeader>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <Kpi label="Orders" value={`${data.totals.orderCount}`} />
-        <Kpi label="Planned qty" value={data.totals.plannedQty} />
-        <Kpi label="Produced qty" value={data.totals.producedQty} />
+        <Kpi label="Planned qty" value={Number(data.totals.plannedQty).toLocaleString()} />
+        <Kpi label="Produced qty" value={Number(data.totals.producedQty).toLocaleString()} />
         <Kpi label="Overall yield" value={`${data.totals.overallYield}%`} accent />
-        <Kpi label="Scrap qty" value={data.totals.scrapQty} />
-        <Kpi label="Scrap cost" value={data.totals.scrapCost} />
+        <Kpi label="Scrap qty" value={Number(data.totals.scrapQty).toLocaleString()} />
+        <Kpi label="Scrap cost" value={formatCurrency(data.totals.scrapCost, 'BDT')} />
       </div>
 
       <Card className="p-0">
@@ -105,13 +112,13 @@ export default async function ProductionReportPage({
               key: 'planned',
               header: 'Planned',
               align: 'right',
-              cell: (r) => <span className="tabular">{r.plannedQty}</span>,
+              cell: (r) => <span className="tabular">{Number(r.plannedQty).toLocaleString()}</span>,
             },
             {
               key: 'produced',
               header: 'Produced',
               align: 'right',
-              cell: (r) => <span className="tabular">{r.producedQty}</span>,
+              cell: (r) => <span className="tabular">{Number(r.producedQty).toLocaleString()}</span>,
             },
             {
               key: 'variance',
@@ -133,7 +140,7 @@ export default async function ProductionReportPage({
               key: 'scrap',
               header: 'Scrap qty',
               align: 'right',
-              cell: (r) => <span className="tabular">{r.scrapQty}</span>,
+              cell: (r) => <span className="tabular">{Number(r.scrapQty).toLocaleString()}</span>,
             },
             {
               key: 'onTime',
@@ -163,12 +170,12 @@ export default async function ProductionReportPage({
           columns={[
             { key: 'source', header: 'Source', cell: (r) => r.scrapType.replace('_', ' ').toLowerCase() },
             { key: 'count', header: 'Entries', align: 'right', cell: (r) => <span className="tabular">{r.count}</span> },
-            { key: 'qty', header: 'Qty', align: 'right', cell: (r) => <span className="tabular">{r.qty}</span> },
+            { key: 'qty', header: 'Qty', align: 'right', cell: (r) => <span className="tabular">{Number(r.qty).toLocaleString()}</span> },
             {
               key: 'cost',
               header: 'Cost',
               align: 'right',
-              cell: (r) => <span className="tabular font-medium">{r.cost}</span>,
+              cell: (r) => <span className="tabular font-medium text-red-600">{formatCurrency(r.cost, 'BDT')}</span>,
             },
           ]}
         />

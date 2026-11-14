@@ -52,6 +52,19 @@ interface AssetSummary {
 interface Search {
   status?: string;
   search?: string;
+  branchId?: string;
+  categoryId?: string;
+}
+
+interface BranchOption {
+  id: string;
+  name: string;
+  code: string;
+}
+
+interface CategoryOption {
+  id: string;
+  name: string;
 }
 
 export default async function AssetsPage({
@@ -64,11 +77,21 @@ export default async function AssetsPage({
   const listParams = new URLSearchParams();
   if (sp.status && sp.status !== 'ALL') listParams.set('status', sp.status);
   if (sp.search) listParams.set('search', sp.search);
+  if (sp.branchId && sp.branchId !== 'ALL') listParams.set('branchId', sp.branchId);
+  if (sp.categoryId && sp.categoryId !== 'ALL') listParams.set('categoryId', sp.categoryId);
 
-  const [assets, summary] = await Promise.all([
+  const summaryParams = new URLSearchParams();
+  if (sp.branchId && sp.branchId !== 'ALL') summaryParams.set('branchId', sp.branchId);
+  const summaryQs = summaryParams.toString() ? `?${summaryParams.toString()}` : '';
+
+  const [assets, summary, branches, categories] = await Promise.all([
     backendFetch<AssetRow[]>(`/api/mobile/assets?${listParams.toString()}`),
-    backendFetch<AssetSummary>('/api/mobile/assets/summary'),
+    backendFetch<AssetSummary>(`/api/mobile/assets/summary${summaryQs}`),
+    backendFetch<BranchOption[]>('/api/mobile/branches').catch(() => []),
+    backendFetch<CategoryOption[]>('/api/mobile/assets/categories').catch(() => []),
   ]);
+
+  const hasFilter = Boolean(sp.search || (sp.status && sp.status !== 'ALL') || (sp.branchId && sp.branchId !== 'ALL') || (sp.categoryId && sp.categoryId !== 'ALL'));
 
   return (
     <div className="space-y-6">
@@ -114,28 +137,70 @@ export default async function AssetsPage({
       </Card>
 
       <Card className="p-4">
-        <form className="grid grid-cols-1 md:grid-cols-[1fr_220px_160px_auto] gap-3 items-end">
-          <Input
-            name="search"
-            placeholder="Search by code, name, serial…"
-            defaultValue={sp.search ?? ''}
-          />
-          <select
-            name="status"
-            defaultValue={sp.status ?? 'ALL'}
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-          >
-            <option value="ALL">All statuses</option>
-            {ASSET_STATUS.map((s) => (
-              <option key={s} value={s}>
-                {s.replace('_', ' ').toLowerCase()}
-              </option>
-            ))}
-          </select>
-          <Button type="submit" variant="outline">
-            Filter
-          </Button>
-          <div />
+        <form className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 items-end">
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Search</label>
+            <Input
+              name="search"
+              placeholder="Code, name, serial…"
+              defaultValue={sp.search ?? ''}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Branch</label>
+            <select
+              name="branchId"
+              defaultValue={sp.branchId ?? 'ALL'}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              <option value="ALL">All branches</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.code} · {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Category</label>
+            <select
+              name="categoryId"
+              defaultValue={sp.categoryId ?? 'ALL'}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              <option value="ALL">All categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Status</label>
+            <select
+              name="status"
+              defaultValue={sp.status ?? 'ALL'}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              <option value="ALL">All statuses</option>
+              {ASSET_STATUS.map((s) => (
+                <option key={s} value={s}>
+                  {s.replace('_', ' ').toLowerCase()}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit" variant="outline" className="flex-1">
+              Filter
+            </Button>
+            {hasFilter && (
+              <Button variant="ghost" asChild>
+                <Link href="/assets">Reset</Link>
+              </Button>
+            )}
+          </div>
         </form>
       </Card>
 

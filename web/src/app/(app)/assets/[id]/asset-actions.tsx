@@ -1,6 +1,7 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,7 @@ export function AssetActions({
   asset: { id: string; status: string };
   branches: Branch[];
 }) {
+  const router = useRouter();
   const [transferState, transferAction, transferPending] = useActionState<AssetFormState, FormData>(
     transferAssetAction,
     undefined,
@@ -34,6 +36,12 @@ export function AssetActions({
     depreciateAssetAction,
     undefined,
   );
+
+  useEffect(() => {
+    if (transferState?.success || disposeState?.success || deprState?.success) {
+      router.refresh();
+    }
+  }, [transferState?.success, disposeState?.success, deprState?.success, router]);
 
   const disposed = asset.status === 'DISPOSED';
 

@@ -1,10 +1,10 @@
+import Link from 'next/link';
 import { backendFetch } from '@/lib/backend-client';
-import { d } from '@/lib/money';
+import { d, formatCurrency } from '@/lib/money';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   INVENTORY_SECTION_META,
   INVENTORY_SECTION_SLUGS,
@@ -45,10 +45,10 @@ export default async function InventoryReportPage({
   searchParams: Promise<{ branchId?: string; section?: string }>;
 }) {
   const sp = await searchParams;
-  const qs = new URLSearchParams(sp.branchId ? { branchId: sp.branchId } : {});
+  const qs = new URLSearchParams(sp.branchId && sp.branchId !== 'ALL' ? { branchId: sp.branchId } : {});
   const [data, branches] = await Promise.all([
     backendFetch<InventoryValuationDto>(`/api/mobile/reports/general/inventory-valuation?${qs.toString()}`),
-    backendFetch<Branch[]>('/api/mobile/branches'),
+    backendFetch<Branch[]>('/api/mobile/branches').catch(() => []),
   ]);
 
   const activeSection = INVENTORY_SECTION_SLUGS.includes(sp.section as (typeof INVENTORY_SECTION_SLUGS)[number])
@@ -69,17 +69,19 @@ export default async function InventoryReportPage({
 
   const sectionQuery = (slug?: string) => {
     const params = new URLSearchParams();
-    if (sp.branchId) params.set('branchId', sp.branchId);
+    if (sp.branchId && sp.branchId !== 'ALL') params.set('branchId', sp.branchId);
     if (slug) params.set('section', slug);
     const qsStr = params.toString();
     return `/reports/inventory${qsStr ? `?${qsStr}` : ''}`;
   };
 
   const exportParams = new URLSearchParams();
-  if (sp.branchId) exportParams.set('branchId', sp.branchId);
+  if (sp.branchId && sp.branchId !== 'ALL') exportParams.set('branchId', sp.branchId);
   if (activeSection) exportParams.set('section', activeSection);
   const exportQs = exportParams.toString();
   const exportHref = `/api/reports/inventory.csv${exportQs ? `?${exportQs}` : ''}`;
+
+  const isFiltered = Boolean(sp.branchId || sp.section);
 
   return (
     <div className="space-y-6">
@@ -99,8 +101,13 @@ export default async function InventoryReportPage({
                 ))}
               </select>
             </div>
-            <Input type="hidden" />
+            {activeSection && <input type="hidden" name="section" value={activeSection} />}
             <Button type="submit">Apply</Button>
+            {isFiltered && (
+              <Button variant="ghost" asChild>
+                <Link href="/reports/inventory">Reset</Link>
+              </Button>
+            )}
           </form>
           <Button variant="outline" asChild>
             <a href={exportHref}>Export CSV</a>
@@ -110,8 +117,8 @@ export default async function InventoryReportPage({
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Summary label="Products" value={`${rows.length}`} />
-        <Summary label="Total on-hand qty" value={rowsTotals.qty.toString()} />
-        <Summary label="Stock value" value={rowsTotals.value.toString()} accent />
+        <Summary label="Total on-hand qty" value={Number(rowsTotals.qty.toString()).toLocaleString()} />
+        <Summary label="Stock value" value={formatCurrency(rowsTotals.value.toString(), 'BDT')} accent />
       </div>
 
       <div>
@@ -123,8 +130,8 @@ export default async function InventoryReportPage({
             <Card key={s.section}>
               <div className="p-4">
                 <div className="text-xs text-muted-foreground">{s.label}</div>
-                <div className="text-lg font-semibold tabular-nums mt-1">{s.value}</div>
-                <div className="text-xs text-muted-foreground tabular-nums">{s.qty} units</div>
+                <div className="text-lg font-semibold tabular-nums mt-1">{formatCurrency(s.value, 'BDT')}</div>
+                <div className="text-xs text-muted-foreground tabular-nums">{Number(s.qty).toLocaleString()} units</div>
               </div>
             </Card>
           ))}
@@ -172,10 +179,10 @@ export default async function InventoryReportPage({
                   <td className="px-4 py-2">{r.name}</td>
                   <td className="px-4 py-2 text-xs text-muted-foreground">{r.type.replace('_', ' ')}</td>
                   <td className="px-4 py-2 text-xs text-muted-foreground">{r.unit}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{r.qty}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{r.reorderLevel}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{r.cost}</td>
-                  <td className="px-4 py-2 text-right tabular-nums font-semibold">{r.value}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-medium">{Number(r.qty).toLocaleString()}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{Number(r.reorderLevel).toLocaleString()}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{formatCurrency(r.cost, 'BDT')}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-semibold text-emerald-600">{formatCurrency(r.value, 'BDT')}</td>
                   <td className="px-4 py-2">
                     {r.belowReorder ? <Badge variant="destructive">Low stock</Badge> : null}
                   </td>
@@ -185,6 +192,9 @@ export default async function InventoryReportPage({
           </table>
         </div>
       </Card>
+    </div>
+  );
+}
     </div>
   );
 }

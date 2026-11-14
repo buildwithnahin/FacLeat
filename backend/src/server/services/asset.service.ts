@@ -2,6 +2,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
+import { getScopedBranchIds } from '@/server/auth/data-scope';
 import { recordAudit } from '@/server/audit/logger';
 import type { AppSession } from '@/server/auth/session';
 import type {
@@ -53,12 +54,15 @@ function computeDepreciation(
   periodEnd: Date,
 ): Prisma.Decimal {
   if (asset.depreciationMethod === 'NONE') return new Prisma.Decimal(0);
+  if (!asset.usefulLifeMonths || asset.usefulLifeMonths <= 0) return new Prisma.Decimal(0);
 
   const startFrom = asset.lastDepreciatedAt ?? asset.purchaseDate;
   const months = monthsBetween(startFrom, periodEnd);
   if (months <= 0) return new Prisma.Decimal(0);
 
   const depreciable = asset.purchaseCost.minus(asset.salvageValue);
+  if (depreciable.lte(0)) return new Prisma.Decimal(0);
+
   const alreadyDepreciated = asset.accumulatedDepreciation;
   const remaining = depreciable.minus(alreadyDepreciated);
   if (remaining.lte(0)) return new Prisma.Decimal(0);
@@ -128,22 +132,28 @@ export const assetService = {
 
   async list(
     session: AppSession | null,
-    filters: { branchId?: string; status?: string; search?: string } = {},
+    filters: { branchId?: string; categoryId?: string; status?: string; search?: string } = {},
   ) {
     await authorize(session, 'assets:read');
-    const assets = await prisma.asset.findMany({
-      where: {
-        branchId: filters.branchId,
-        status: filters.status as Prisma.AssetWhereInput['status'],
-        OR: filters.search
-          ? [
+    const branchIds = await getScopedBranchIds(session, filters.branchId);
+    const where: Prisma.AssetWhereInput = {
+      ...(branchIds ? { branchId: { in: branchIds } } : {}),
+      ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+      ...(filters.status ? { status: filters.status as Prisma.AssetWhereInput['status'] } : {}),
+      ...(filters.search
+        ? {
+            OR: [
               { code: { contains: filters.search } },
               { name: { contains: filters.search } },
               { serialNumber: { contains: filters.search } },
               { assignedTo: { contains: filters.search } },
-            ]
-          : undefined,
-      },
+              { location: { contains: filters.search } },
+            ],
+          }
+        : {}),
+    };
+    const assets = await prisma.asset.findMany({
+      where,
       orderBy: { code: 'asc' },
       include: ASSET_INCLUDE,
     });
@@ -441,11 +451,12 @@ export const assetService = {
 
   async depreciateBulk(session: AppSession | null, input: AssetDepreciateBulkInput) {
     await authorize(session, 'assets:depreciate');
+    const branchIds = await getScopedBranchIds(session, input.branchId);
     const assets = await prisma.asset.findMany({
       where: {
         status: { not: 'DISPOSED' },
         depreciationMethod: { not: 'NONE' },
-        branchId: input.branchId || undefined,
+        ...(branchIds ? { branchId: { in: branchIds } } : {}),
       },
     });
     let postedCount = 0;
@@ -465,7 +476,8 @@ export const assetService = {
 
   async summary(session: AppSession | null, branchId?: string) {
     await authorize(session, 'assets:read');
-    const where: Prisma.AssetWhereInput = branchId ? { branchId } : {};
+    const branchIds = await getScopedBranchIds(session, branchId);
+    const where: Prisma.AssetWhereInput = branchIds ? { branchId: { in: branchIds } } : {};
     const [inUse, storage, maintenance, disposed, totals] = await Promise.all([
       prisma.asset.count({ where: { ...where, status: 'IN_USE' } }),
       prisma.asset.count({ where: { ...where, status: 'IN_STORAGE' } }),

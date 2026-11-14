@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const filters = {
     branchId: sp.get('branchId') ?? undefined,
+    categoryId: sp.get('categoryId') ?? undefined,
     status: sp.get('status') ?? undefined,
     search: sp.get('search') ?? undefined,
   };

@@ -1,6 +1,7 @@
 import { backendFetch } from '@/lib/backend-client';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
+import { formatCurrency } from '@/lib/money';
 import { defaultRange, RangeFilter } from '../_components/range-filter';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,12 @@ interface Branch {
   code: string;
 }
 
+function safeDate(val: string | undefined, fallback: string): string {
+  if (!val) return fallback;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? fallback : val;
+}
+
 export default async function TopProductsReportPage({
   searchParams,
 }: {
@@ -28,19 +35,19 @@ export default async function TopProductsReportPage({
 }) {
   const sp = await searchParams;
   const range = defaultRange();
-  const from = sp.from ?? range.from;
-  const to = sp.to ?? range.to;
+  const from = safeDate(sp.from, range.from);
+  const to = safeDate(sp.to, range.to);
 
   const qs = new URLSearchParams({
     from: new Date(from).toISOString(),
     to: new Date(`${to}T23:59:59.999Z`).toISOString(),
     limit: '50',
   });
-  if (sp.branchId) qs.set('branchId', sp.branchId);
+  if (sp.branchId && sp.branchId !== 'ALL') qs.set('branchId', sp.branchId);
 
   const [rows, branches] = await Promise.all([
     backendFetch<TopProductRow[]>(`/api/mobile/reports/general/top-products?${qs.toString()}`),
-    backendFetch<Branch[]>('/api/mobile/branches'),
+    backendFetch<Branch[]>('/api/mobile/branches').catch(() => []),
   ]);
 
   return (
@@ -51,6 +58,7 @@ export default async function TopProductsReportPage({
           to={to}
           branchId={sp.branchId}
           branches={branches.map((b) => ({ id: b.id, code: b.code, name: b.name }))}
+          baseHref="/reports/top-products"
         />
       </PageHeader>
 
@@ -79,8 +87,8 @@ export default async function TopProductsReportPage({
                   <td className="px-4 py-2 text-muted-foreground">{i + 1}</td>
                   <td className="px-4 py-2 font-mono text-xs">{r.sku}</td>
                   <td className="px-4 py-2">{r.name}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{r.qty}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{r.revenue}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-medium">{Number(r.qty).toLocaleString()}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-semibold text-emerald-600">{formatCurrency(r.revenue, 'BDT')}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,6 +1,7 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,14 +14,24 @@ import {
 import { DEPRECIATION_METHODS } from '@/server/validators/assets';
 
 export function CategoryForm() {
+  const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [state, action, pending] = useActionState<AssetFormState, FormData>(
     upsertAssetCategoryAction,
     undefined,
   );
+
+  useEffect(() => {
+    if (state?.success) {
+      formRef.current?.reset();
+      router.refresh();
+    }
+  }, [state?.success, router]);
+
   return (
     <Card className="p-4 space-y-3">
       <h3 className="font-semibold text-sm">Add category</h3>
-      <form action={action} className="space-y-3">
+      <form ref={formRef} action={action} className="space-y-3">
         <div>
           <Label>Name *</Label>
           <Input name="name" required />

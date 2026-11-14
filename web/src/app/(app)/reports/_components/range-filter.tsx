@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -7,9 +8,10 @@ interface Props {
   branches?: { id: string; code: string; name: string }[];
   branchId?: string;
   exportHref?: string;
+  baseHref?: string;
 }
 
-export function RangeFilter({ from, to, branches, branchId, exportHref }: Props) {
+export function RangeFilter({ from, to, branches, branchId, exportHref, baseHref }: Props) {
   return (
     <div className="flex flex-wrap items-end gap-2">
       <form className="flex flex-wrap items-end gap-2">
@@ -37,6 +39,11 @@ export function RangeFilter({ from, to, branches, branchId, exportHref }: Props)
           <Input type="date" name="to" defaultValue={to} className="h-9" />
         </div>
         <Button type="submit">Apply</Button>
+        {baseHref && (
+          <Button variant="ghost" asChild>
+            <Link href={baseHref}>Reset</Link>
+          </Button>
+        )}
       </form>
       {exportHref && (
         <Button asChild variant="outline">

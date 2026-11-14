@@ -26,13 +26,14 @@ export interface RangeFilter {
 
 function resolveScopedBranchId(session: AppSession | null, branchId?: string) {
   if (!session) return branchId;
-  if (branchId) {
-    if (!canAccessBranch(session, branchId)) {
-      throw new ForbiddenError(`Branch access denied: ${branchId}`);
+  const clean = branchId && branchId !== 'ALL' && branchId !== '' ? branchId : undefined;
+  if (clean) {
+    if (!canAccessBranch(session, clean)) {
+      throw new ForbiddenError(`Branch access denied: ${clean}`);
     }
-    return branchId;
+    return clean;
   }
-  return session.branchAccessType === 'ALL_BRANCHES' && hasSuperAdminScope(session)
+  return session.branchAccessType === 'ALL_BRANCHES'
     ? undefined
     : session.activeBranchId ?? session.defaultBranchId ?? session.allowedBranchIds[0] ?? undefined;
 }
@@ -70,6 +71,7 @@ export const reportsService = {
         where: {
           branchId,
           invoiceDate: dateFilter,
+          status: { not: 'VOIDED' },
         },
         _sum: { grandTotal: true, discountTotal: true, taxTotal: true, paidTotal: true, balanceDue: true },
         _count: { _all: true },
@@ -202,7 +204,7 @@ export const reportsService = {
       }),
       prisma.corporateInvoiceItem.groupBy({
         by: ['productId'],
-        where: { invoice: { branchId, invoiceDate: dateFilter } },
+        where: { invoice: { branchId, invoiceDate: dateFilter, status: { not: 'VOIDED' } } },
         _sum: { quantity: true, lineTotal: true },
       }),
       prisma.ecommerceOrderItem.groupBy({
@@ -262,12 +264,12 @@ export const reportsService = {
 
     const [poAgg, invAgg, unpaid, byDepartmentAgg] = await Promise.all([
       prisma.purchaseOrder.aggregate({
-        where: { branchId, orderDate: dateFilter },
+        where: { branchId, orderDate: dateFilter, status: { not: 'CANCELLED' } },
         _sum: { grandTotal: true },
         _count: { _all: true },
       }),
       prisma.purchaseInvoice.aggregate({
-        where: { branchId, invoiceDate: dateFilter },
+        where: { branchId, invoiceDate: dateFilter, status: { not: 'CANCELLED' } },
         _sum: { grandTotal: true, paidAmount: true },
         _count: { _all: true },
       }),
@@ -277,7 +279,7 @@ export const reportsService = {
       }),
       prisma.purchaseOrder.groupBy({
         by: ['department'],
-        where: { branchId, orderDate: dateFilter },
+        where: { branchId, orderDate: dateFilter, status: { not: 'CANCELLED' } },
         _sum: { grandTotal: true },
         _count: { _all: true },
       }),
@@ -462,13 +464,13 @@ export const reportsService = {
   async dashboardKpis(session: AppSession | null, f: RangeFilter = {}) {
     await authorize(session, 'reports:read');
     const branchId = resolveScopedBranchId(session, f.branchId);
-    const [sales, purchase, inv, pendingApprovals, lowStock] = await Promise.all([
+    const [sales, purchase, inv, pendingApprovals, activeProducts] = await Promise.all([
       this.salesSummary(session, { ...f, branchId }),
       this.purchaseSummary(session, { ...f, branchId }),
       this.inventoryValuation(session, { branchId }),
-      prisma.approvalRequest.count({ where: { status: 'PENDING', branchId } }),
+      prisma.approvalRequest.count({ where: { status: 'PENDING', ...(branchId ? { branchId } : {}) } }),
       prisma.product.count({
-        where: { isActive: true, reorderLevel: { gt: 0 } },
+        where: { isActive: true, ...(session?.activeCompanyId ? { companyId: session.activeCompanyId } : {}) },
       }),
     ]);
     return {
@@ -480,7 +482,7 @@ export const reportsService = {
       inventoryValue: inv.totals.value,
       pendingApprovals,
       lowStockProducts: inv.rows.filter((r) => r.belowReorder).length,
-      activeProducts: lowStock,
+      activeProducts,
     };
   },
 
@@ -544,6 +546,7 @@ export const reportsService = {
       prisma.tradePayment.aggregate({
         where: {
           paymentDate: { gte: f.from, lte: f.to },
+          status: { not: 'CANCELLED' },
           tradeOrder: { branchId, type: 'EXPORT' },
         },
         _sum: { localAmount: true },
@@ -644,6 +647,7 @@ export const reportsService = {
       prisma.tradePayment.findMany({
         where: {
           paymentDate: { gte: f.from, lte: f.to },
+          status: { not: 'CANCELLED' },
           tradeOrder: { branchId, type: 'EXPORT' },
         },
         select: {
@@ -788,7 +792,7 @@ export const reportsService = {
       })),
       ...tradePayRows.map((r) => ({
         id: r.id,
-        date: r.paymentDate!,
+        date: r.paymentDate ?? new Date(),
         flow: 'IN' as const,
         source: 'Trade Export',
         ref: r.tradeOrder.number,

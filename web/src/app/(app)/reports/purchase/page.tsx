@@ -2,6 +2,7 @@ import { backendFetch } from '@/lib/backend-client';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable } from '@/components/shared/data-table';
+import { formatCurrency } from '@/lib/money';
 import { defaultRange, RangeFilter } from '../_components/range-filter';
 
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,12 @@ interface Branch {
   code: string;
 }
 
+function safeDate(val: string | undefined, fallback: string): string {
+  if (!val) return fallback;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? fallback : val;
+}
+
 export default async function PurchaseReportPage({
   searchParams,
 }: {
@@ -32,15 +39,15 @@ export default async function PurchaseReportPage({
 }) {
   const sp = await searchParams;
   const range = defaultRange();
-  const from = sp.from ?? range.from;
-  const to = sp.to ?? range.to;
+  const from = safeDate(sp.from, range.from);
+  const to = safeDate(sp.to, range.to);
 
   const qs = new URLSearchParams({ from: new Date(from).toISOString(), to: new Date(`${to}T23:59:59.999Z`).toISOString() });
-  if (sp.branchId) qs.set('branchId', sp.branchId);
+  if (sp.branchId && sp.branchId !== 'ALL') qs.set('branchId', sp.branchId);
 
   const [data, branches] = await Promise.all([
     backendFetch<PurchaseSummaryDto>(`/api/mobile/reports/general/purchase-summary?${qs.toString()}`),
-    backendFetch<Branch[]>('/api/mobile/branches'),
+    backendFetch<Branch[]>('/api/mobile/branches').catch(() => []),
   ]);
 
   return (
@@ -51,16 +58,17 @@ export default async function PurchaseReportPage({
           to={to}
           branchId={sp.branchId}
           branches={branches.map((b) => ({ id: b.id, code: b.code, name: b.name }))}
+          baseHref="/reports/purchase"
         />
       </PageHeader>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <Kpi label="Purchase orders" value={`${data.poCount}`} />
-        <Kpi label="PO value" value={data.poTotal} />
+        <Kpi label="PO value" value={formatCurrency(data.poTotal, 'BDT')} />
         <Kpi label="Invoices received" value={`${data.invoiceCount}`} />
-        <Kpi label="Invoice value" value={data.invoiceTotal} />
-        <Kpi label="Paid to suppliers" value={data.invoicePaid} />
-        <Kpi label="Outstanding payable" value={data.openPayable} accent />
+        <Kpi label="Invoice value" value={formatCurrency(data.invoiceTotal, 'BDT')} />
+        <Kpi label="Paid to suppliers" value={formatCurrency(data.invoicePaid, 'BDT')} />
+        <Kpi label="Outstanding payable" value={formatCurrency(data.openPayable, 'BDT')} accent />
       </div>
 
       <Card className="p-0">
@@ -76,7 +84,7 @@ export default async function PurchaseReportPage({
               key: 'total',
               header: 'Total value',
               align: 'right',
-              cell: (r) => <span className="tabular font-medium">{r.total}</span>,
+              cell: (r) => <span className="tabular font-medium text-emerald-600">{formatCurrency(r.total, 'BDT')}</span>,
             },
           ]}
         />

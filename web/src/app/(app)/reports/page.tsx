@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { BarChart3, ShoppingCart, Truck, Package, UsersRound, Banknote, Scale, TrendingUp } from 'lucide-react';
+import { BarChart3, ShoppingCart, Truck, Package, UsersRound, Banknote, Scale, TrendingUp, Factory, ArrowDownUp } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -12,7 +12,9 @@ const REPORTS = [
   { title: 'Top products', subtitle: 'Best-selling items across channels', href: '/reports/top-products', icon: BarChart3 },
   { title: 'Purchase summary', subtitle: 'Orders, invoices, payables', href: '/reports/purchase', icon: Truck },
   { title: 'Inventory valuation', subtitle: 'On-hand qty × cost', href: '/reports/inventory', icon: Package },
+  { title: 'Production output', subtitle: 'Planned vs actual yield & scrap', href: '/reports/production', icon: Factory },
   { title: 'HR summary', subtitle: 'Headcount, last payroll', href: '/reports/hr', icon: UsersRound },
+  { title: 'Cash flow', subtitle: 'Operating, investing & financing flows', href: '/accounts/cash-flow', icon: ArrowDownUp },
   { title: 'Trial balance', subtitle: 'GL balances as of date', href: '/accounts/trial-balance', icon: Banknote },
   { title: 'Balance sheet', subtitle: 'Financial position', href: '/accounts/balance-sheet', icon: Scale },
   { title: 'Income statement', subtitle: 'Revenue & expenses', href: '/accounts/income-statement', icon: TrendingUp },
