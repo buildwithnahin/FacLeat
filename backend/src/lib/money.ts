@@ -21,7 +21,7 @@ const SYMBOL: Record<CurrencyCode, string> = {
 };
 
 const LOCALE: Record<CurrencyCode, string> = {
-  BDT: 'en-BD',
+  BDT: 'en-US',
   INR: 'en-IN',
   USD: 'en-US',
   EUR: 'en-GB',

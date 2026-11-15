@@ -342,7 +342,7 @@ export function PosTerminal({
               >
                 <div className="text-xs text-muted-foreground">{p.sku}</div>
                 <div className="text-sm font-medium line-clamp-2 mt-0.5">{p.name}</div>
-                <div className="text-sm font-semibold text-blue-600 mt-2 tabular">
+                <div className="text-sm font-semibold text-blue-600 mt-2 tabular" suppressHydrationWarning>
                   {fmt(Number(p.sellPrice))}
                 </div>
               </button>
