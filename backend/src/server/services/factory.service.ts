@@ -777,22 +777,6 @@ export const factoryService = {
       throw new ValidationError(`Cannot add cost entries to a ${order.status.toLowerCase()} order`);
     }
 
-    const approvalAmount =
-      input.type === 'LABOUR'
-        ? new Prisma.Decimal(input.hours!).times(input.rate!)
-        : new Prisma.Decimal(input.amount!);
-    await approvalService.ensureApprovedOrRequest(session, {
-      module: 'factory',
-      action: 'cost-entry',
-      entityType: 'ProductionOrder',
-      entityId: order.id,
-      title: `Factory cost entry for ${order.number}`,
-      summary: `${input.type}: ${input.description}`,
-      amount: approvalAmount.toNumber(),
-      currency: 'BDT',
-      branchId: order.branchId,
-    });
-
     return prisma.$transaction(async (tx) => {
       await assertOpenPeriod(tx, order.branchId);
 
