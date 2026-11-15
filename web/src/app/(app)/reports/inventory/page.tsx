@@ -195,9 +195,6 @@ export default async function InventoryReportPage({
     </div>
   );
 }
-    </div>
-  );
-}
 
 function Summary({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (

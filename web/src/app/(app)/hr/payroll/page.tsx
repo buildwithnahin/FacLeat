@@ -168,9 +168,3 @@ export default async function PayrollPage({
     </div>
   );
 }
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
-}
