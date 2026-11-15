@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useActionState, useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, ScanLine } from 'lucide-react';
+import { Trash2, ScanLine, Search, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -84,6 +84,9 @@ export function StockMovementForm({
   const [rows, setRows] = useState<Row[]>([]);
   const [continuous, setContinuous] = useState(continuousScanDefault);
   const scanRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [fromWarehouseId, setFromWarehouseId] = useState(warehouses[0]?.id ?? '');
   const [toWarehouseId, setToWarehouseId] = useState(warehouses[1]?.id ?? warehouses[0]?.id ?? '');
@@ -92,14 +95,26 @@ export function StockMovementForm({
     scanRef.current?.focus();
   }, []);
 
-  const byBarcode = useMemo(() => {
-    const m = new Map<string, ProductOption>();
-    for (const p of products) {
-      if (p.barcode) m.set(p.barcode.toUpperCase(), p);
-      m.set(p.sku.toUpperCase(), p);
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
     }
-    return m;
-  }, [products]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredProducts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter((p) => {
+      const matchName = p.name.toLowerCase().includes(q);
+      const matchSku = p.sku.toLowerCase().includes(q);
+      const matchBarcode = p.barcode ? p.barcode.toLowerCase().includes(q) : false;
+      return matchName || matchSku || matchBarcode;
+    });
+  }, [products, searchQuery]);
 
   const addProduct = (p: ProductOption, quantity = '1') => {
     setRows((prev) => {
@@ -129,19 +144,39 @@ export function StockMovementForm({
   };
 
   const onScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const raw = scanRef.current?.value.trim() ?? '';
-    if (!raw) return;
-    const found = byBarcode.get(raw.toUpperCase());
-    if (!found) {
-      setScanError(`No product matches "${raw}"`);
-    } else {
-      setScanError(null);
-      addProduct(found);
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const raw = searchQuery.trim().toLowerCase();
+      if (!raw) return;
+
+      // 1. Exact match by barcode or SKU
+      let found = products.find(
+        (p) => (p.barcode && p.barcode.toLowerCase() === raw) || p.sku.toLowerCase() === raw,
+      );
+
+      // 2. Exact match by name
+      if (!found) {
+        found = products.find((p) => p.name.toLowerCase() === raw);
+      }
+
+      // 3. Match from filtered list
+      if (!found && filteredProducts.length > 0) {
+        found = filteredProducts[0];
+      }
+
+      if (found) {
+        setScanError(null);
+        addProduct(found);
+        setSearchQuery('');
+        setDropdownOpen(false);
+      } else {
+        setScanError(`No product matches "${searchQuery}"`);
+      }
+
+      if (!continuous) scanRef.current?.blur();
+    } else if (e.key === 'Escape') {
+      setDropdownOpen(false);
     }
-    if (scanRef.current) scanRef.current.value = '';
-    if (!continuous) scanRef.current?.blur();
   };
 
   const updateQty = (idx: number, value: string) => {
@@ -287,26 +322,106 @@ export function StockMovementForm({
 
       <Card>
         <CardContent className="p-6 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1">
-              <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                ref={scanRef}
-                onKeyDown={onScan}
-                placeholder="Scan barcode or type SKU and press Enter…"
-                className="pl-9"
-                autoComplete="off"
-              />
+          <div ref={dropdownRef} className="relative space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  ref={scanRef}
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setDropdownOpen(true);
+                    setScanError(null);
+                  }}
+                  onFocus={() => setDropdownOpen(true)}
+                  onKeyDown={onScan}
+                  placeholder="Scan barcode, type SKU, or search product name…"
+                  className="pl-9 pr-8"
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => setDropdownOpen((prev) => !prev)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1"
+                  title="Toggle product list"
+                >
+                  <ChevronDown className={`h-4 w-4 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1 text-xs"
+                onClick={() => setDropdownOpen((prev) => !prev)}
+              >
+                <Search className="h-3.5 w-3.5" />
+                {dropdownOpen ? 'Hide list' : 'Browse products'}
+              </Button>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
+                <input
+                  type="checkbox"
+                  checked={continuous}
+                  onChange={(e) => setContinuous(e.target.checked)}
+                  className="h-4 w-4 accent-primary"
+                />
+                Continuous scan
+              </label>
             </div>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={continuous}
-                onChange={(e) => setContinuous(e.target.checked)}
-                className="h-4 w-4 accent-primary"
-              />
-              Continuous scan
-            </label>
+
+            {/* Dropdown list of matching products */}
+            {dropdownOpen && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-popover text-popover-foreground border rounded-md shadow-lg max-h-72 overflow-y-auto divide-y">
+                <div className="p-2 text-xs font-semibold text-muted-foreground bg-muted/40 sticky top-0 flex justify-between items-center">
+                  <span>{filteredProducts.length} product{filteredProducts.length === 1 ? '' : 's'} available</span>
+                  <span className="text-[11px] font-normal">Click to add or press Enter</span>
+                </div>
+                {filteredProducts.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    No products match &ldquo;{searchQuery}&rdquo;
+                  </div>
+                ) : (
+                  filteredProducts.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        addProduct(p);
+                        setSearchQuery('');
+                        setDropdownOpen(false);
+                        setScanError(null);
+                        if (continuous) scanRef.current?.focus();
+                      }}
+                      className="w-full text-left px-3 py-2.5 hover:bg-muted/70 transition flex items-center justify-between gap-3 text-sm group"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium group-hover:text-blue-600 truncate">{p.name}</div>
+                        <div className="text-xs text-muted-foreground flex gap-2 items-center mt-0.5">
+                          <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px]">{p.sku}</span>
+                          {p.barcode && <span>Barcode: {p.barcode}</span>}
+                          <span>Unit: {p.unit}</span>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${
+                            TYPE_BADGE_CLASS[p.type] ?? 'bg-muted text-muted-foreground'
+                          }`}
+                        >
+                          {TYPE_LABEL[p.type] ?? p.type}
+                        </span>
+                        {showCost && (
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            Cost: ৳{Number(p.costPrice).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
           {scanError && <p className="text-xs text-destructive">{scanError}</p>}
 
