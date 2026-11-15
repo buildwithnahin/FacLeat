@@ -48,12 +48,17 @@ async function balanceFor(
   warehouseId: string,
   productId: string,
 ): Promise<Prisma.Decimal> {
-  const rows = await tx.$queryRaw<{ balance: number | null }[]>`
-    SELECT CAST(COALESCE(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE -quantity END), 0) AS DECIMAL(18,4)) AS balance
-      FROM \`InventoryLedger\`
-     WHERE \`branchId\` = ${branchId} AND \`warehouseId\` = ${warehouseId} AND \`productId\` = ${productId}
-  `;
-  return new Prisma.Decimal(rows[0]?.balance ?? 0);
+  const ledgerAgg = await tx.inventoryLedger.groupBy({
+    by: ['productId', 'direction'],
+    where: { branchId, warehouseId, productId },
+    _sum: { quantity: true },
+  });
+  let balance = new Prisma.Decimal(0);
+  for (const row of ledgerAgg) {
+    const delta = row._sum.quantity ? new Prisma.Decimal(row._sum.quantity) : new Prisma.Decimal(0);
+    balance = row.direction === 'IN' ? balance.plus(delta) : balance.minus(delta);
+  }
+  return balance;
 }
 
 export interface ProductionCostSummary {
