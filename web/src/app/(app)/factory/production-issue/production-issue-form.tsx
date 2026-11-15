@@ -54,6 +54,16 @@ export function ProductionIssueForm({
     [orders, orderId],
   );
 
+  const uniqueMaterials = useMemo(() => {
+    if (!selectedOrder) return [];
+    const seen = new Set<string>();
+    return selectedOrder.materials.filter((m) => {
+      if (seen.has(m.productId)) return false;
+      seen.add(m.productId);
+      return true;
+    });
+  }, [selectedOrder]);
+
   const syncFromOrder = () => {
     if (!selectedOrder || selectedOrder.materials.length === 0) return;
     setItems(
@@ -199,7 +209,7 @@ export function ProductionIssueForm({
                     }
                     className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
                   >
-                    {selectedOrder?.materials.map((material) => (
+                    {uniqueMaterials.map((material) => (
                       <option key={material.productId} value={material.productId}>
                         {material.label}
                       </option>
