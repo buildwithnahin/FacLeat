@@ -175,18 +175,26 @@ export const wholesaleService = {
       // Negative-stock guard
       if (!warehouse.branch.allowNegativeStock) {
         const productIds = input.items.map((i) => i.productId);
-        const balances = productIds.length === 0
-          ? []
-          : await tx.$queryRaw<
-          { productId: string; balance: string }[]
-        >`SELECT \`productId\`,
-                  CAST(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE -quantity END) AS CHAR) AS balance
-             FROM \`InventoryLedger\`
-            WHERE \`branchId\` = ${input.branchId}
-              AND \`warehouseId\` = ${input.warehouseId}
-              AND \`productId\` IN (${Prisma.join(productIds)})
-            GROUP BY \`productId\``;
-        const balMap = new Map(balances.map((b) => [b.productId, D(b.balance)]));
+        const ledgerAgg = await tx.inventoryLedger.groupBy({
+          by: ['productId', 'direction'],
+          where: {
+            branchId: input.branchId,
+            warehouseId: input.warehouseId,
+            productId: { in: productIds },
+          },
+          _sum: { quantity: true },
+        });
+
+        const balMap = new Map<string, Prisma.Decimal>();
+        for (const row of ledgerAgg) {
+          const current = balMap.get(row.productId) ?? ZERO;
+          const delta = row._sum.quantity ? D(row._sum.quantity) : ZERO;
+          balMap.set(
+            row.productId,
+            row.direction === 'IN' ? current.plus(delta) : current.minus(delta),
+          );
+        }
+
         for (const it of input.items) {
           const bal = balMap.get(it.productId) ?? ZERO;
           if (bal.lt(D(it.quantity))) {

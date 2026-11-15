@@ -495,18 +495,25 @@ export const corporateService = {
               .filter((v): v is string => !!v),
           ),
         );
-        const balances = productIds.length === 0
-          ? []
-          : await tx.$queryRaw<
-          { productId: string; balance: string }[]
-        >`SELECT \`productId\`,
-                  CAST(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE -quantity END) AS CHAR) AS balance
-             FROM \`InventoryLedger\`
-            WHERE \`branchId\` = ${order.branchId}
-              AND \`warehouseId\` = ${input.warehouseId}
-              AND \`productId\` IN (${Prisma.join(productIds)})
-            GROUP BY \`productId\``;
-        const balMap = new Map(balances.map((b) => [b.productId, D(b.balance)]));
+        const ledgerAgg = await tx.inventoryLedger.groupBy({
+          by: ['productId', 'direction'],
+          where: {
+            branchId: order.branchId,
+            warehouseId: input.warehouseId,
+            productId: { in: productIds },
+          },
+          _sum: { quantity: true },
+        });
+
+        const balMap = new Map<string, Prisma.Decimal>();
+        for (const row of ledgerAgg) {
+          const current = balMap.get(row.productId) ?? ZERO;
+          const delta = row._sum.quantity ? D(row._sum.quantity) : ZERO;
+          balMap.set(
+            row.productId,
+            row.direction === 'IN' ? current.plus(delta) : current.minus(delta),
+          );
+        }
         // Aggregate needed per product across all lines in this delivery
         const needed = new Map<string, Prisma.Decimal>();
         for (const d of input.items) {
