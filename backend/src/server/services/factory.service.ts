@@ -62,35 +62,79 @@ async function balanceFor(
 }
 
 export interface ProductionCostSummary {
+  /** Actual consumed material cost (or planned estimate if not yet consumed) */
   materialCost: Prisma.Decimal;
+  /** True if materialCost is based on planned qty (no actual consumption recorded yet) */
+  isEstimatedMaterialCost: boolean;
   labourCost: Prisma.Decimal;
   fixedOverheadCost: Prisma.Decimal;
   percentOverheadCost: Prisma.Decimal;
   wedgeCost: Prisma.Decimal;
   totalCost: Prisma.Decimal;
+  /**
+   * costPerUnit based on producedQty (actual); if not yet produced, based on plannedQty.
+   * Always populated as long as there is a planned qty > 0.
+   */
   costPerUnit: Prisma.Decimal | null;
+  /** Whether costPerUnit is estimated (order not yet completed / no outputs) */
+  isEstimatedCostPerUnit: boolean;
 }
 
 export function getCostSummary(params: {
   outputs: { quantity: Prisma.Decimal; costPerUnit: Prisma.Decimal }[];
-  materials: { consumedQty: Prisma.Decimal; product: { costPrice: Prisma.Decimal } }[];
+  materials: {
+    consumedQty: Prisma.Decimal;
+    plannedQty: Prisma.Decimal;
+    unitCost: Prisma.Decimal | null;
+    product: { costPrice: Prisma.Decimal };
+  }[];
   costEntries: { type: string; amount: Prisma.Decimal }[];
   overheadRate: Prisma.Decimal | null;
   producedQty: Prisma.Decimal;
+  plannedQty: Prisma.Decimal;
 }): ProductionCostSummary {
   const ZERO = new Prisma.Decimal(0);
 
+  // ── Material cost ─────────────────────────────────────────────────────────
+  // Priority 1: if finished-goods outputs have already been costed, use those.
   const outputCost = params.outputs.reduce(
     (s, o) => s.plus(o.quantity.times(o.costPerUnit)),
     ZERO,
   );
-  const materialCost = outputCost.gt(0)
-    ? outputCost
-    : params.materials.reduce(
-        (s, m) => s.plus(m.consumedQty.times(m.product.costPrice)),
-        ZERO,
-      );
 
+  // Priority 2: use actual consumed quantities × effective unit cost.
+  const actualConsumedCost = params.materials.reduce((s, m) => {
+    if (m.consumedQty.gt(0)) {
+      const unitCost = m.unitCost ?? m.product.costPrice;
+      return s.plus(m.consumedQty.times(unitCost));
+    }
+    return s;
+  }, ZERO);
+
+  // Priority 3 (estimation): when nothing consumed yet, use planned qty × effective unit cost.
+  const estimatedMaterialCost = params.materials.reduce((s, m) => {
+    const unitCost = m.unitCost ?? m.product.costPrice;
+    return s.plus(m.plannedQty.times(unitCost));
+  }, ZERO);
+
+  let materialCost: Prisma.Decimal;
+  let isEstimatedMaterialCost: boolean;
+
+  if (outputCost.gt(0)) {
+    // Order already has costed output records — most accurate
+    materialCost = outputCost;
+    isEstimatedMaterialCost = false;
+  } else if (actualConsumedCost.gt(0)) {
+    // Materials have been issued / consumed
+    materialCost = actualConsumedCost;
+    isEstimatedMaterialCost = false;
+  } else {
+    // Nothing consumed yet — show planned / standard cost as an estimate
+    materialCost = estimatedMaterialCost;
+    isEstimatedMaterialCost = true;
+  }
+
+  // ── Labour, overhead, wedge ───────────────────────────────────────────────
   const labourCost = params.costEntries
     .filter((e) => e.type === 'LABOUR')
     .reduce((s, e) => s.plus(e.amount), ZERO);
@@ -103,6 +147,7 @@ export function getCostSummary(params: {
     .filter((e) => e.type === 'WEDGE')
     .reduce((s, e) => s.plus(e.amount), ZERO);
 
+  // % overhead applied on material cost
   const percentOverheadCost = params.overheadRate
     ? materialCost.times(params.overheadRate).dividedBy(100)
     : ZERO;
@@ -113,11 +158,30 @@ export function getCostSummary(params: {
     .plus(percentOverheadCost)
     .plus(wedgeCost);
 
-  const costPerUnit = params.producedQty.gt(0)
-    ? totalCost.dividedBy(params.producedQty).toDecimalPlaces(4)
-    : null;
+  // ── Cost per unit ─────────────────────────────────────────────────────────
+  // Use actual produced qty if available; otherwise fall back to planned qty for estimation.
+  let costPerUnit: Prisma.Decimal | null = null;
+  let isEstimatedCostPerUnit = false;
 
-  return { materialCost, labourCost, fixedOverheadCost, percentOverheadCost, wedgeCost, totalCost, costPerUnit };
+  if (params.producedQty.gt(0)) {
+    costPerUnit = totalCost.dividedBy(params.producedQty).toDecimalPlaces(4);
+    isEstimatedCostPerUnit = false;
+  } else if (params.plannedQty.gt(0)) {
+    costPerUnit = totalCost.dividedBy(params.plannedQty).toDecimalPlaces(4);
+    isEstimatedCostPerUnit = true;
+  }
+
+  return {
+    materialCost,
+    isEstimatedMaterialCost,
+    labourCost,
+    fixedOverheadCost,
+    percentOverheadCost,
+    wedgeCost,
+    totalCost,
+    costPerUnit,
+    isEstimatedCostPerUnit,
+  };
 }
 
 export const factoryService = {

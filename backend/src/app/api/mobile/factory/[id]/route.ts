@@ -33,6 +33,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       costEntries: order.costEntries,
       overheadRate: order.overheadRate,
       producedQty: order.producedQty,
+      plannedQty: order.plannedQty,
     });
 
     return Response.json(apiOk({ order, warehouses, costSummary }));

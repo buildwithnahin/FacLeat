@@ -49,8 +49,9 @@ interface Material {
   unit: string;
   plannedQty: string;
   consumedQty: string;
+  unitCost: string | null;
   fromWarehouseId: string | null;
-  product: { id: string; name: string; sku: string };
+  product: { id: string; name: string; sku: string; costPrice: string };
   fromWarehouse: { id: string; code: string; name: string } | null;
 }
 
@@ -98,12 +99,14 @@ interface Order {
 
 interface CostSummary {
   materialCost: string;
+  isEstimatedMaterialCost: boolean;
   labourCost: string;
   fixedOverheadCost: string;
   percentOverheadCost: string;
   wedgeCost: string;
   totalCost: string;
   costPerUnit: string | null;
+  isEstimatedCostPerUnit: boolean;
 }
 
 interface Warehouse {
@@ -177,8 +180,16 @@ export default async function ProductionOrderPage({
                 {order.status.replace('_', ' ').toLowerCase()}
               </Pill>
             </div>
+            {costSummary.isEstimatedMaterialCost && (
+              <div className="mb-3 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+                ⚠️ Estimated cost — no materials consumed yet. Based on planned quantities × unit cost.
+              </div>
+            )}
             <div className="space-y-2">
-              <CostRow label="Material cost" value={costSummary.materialCost} />
+              <CostRow
+                label={`Material cost${costSummary.isEstimatedMaterialCost ? ' (est.)' : ''}`}
+                value={costSummary.materialCost}
+              />
               <CostRow label="Labour cost" value={costSummary.labourCost} />
               <CostRow label="Fixed overhead" value={costSummary.fixedOverheadCost} />
               <CostRow
@@ -191,8 +202,13 @@ export default async function ProductionOrderPage({
                 <span className="tabular-nums">{d(costSummary.totalCost).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Cost per unit ({order.unit})</span>
-                <span className="tabular-nums">
+                <span>
+                  Cost per unit ({order.unit})
+                  {costSummary.isEstimatedCostPerUnit && (
+                    <span className="ml-1 text-amber-600 font-medium">[est.]</span>
+                  )}
+                </span>
+                <span className="tabular-nums font-semibold text-foreground">
                   {costSummary.costPerUnit ? d(costSummary.costPerUnit).toFixed(4) : '—'}
                 </span>
               </div>
@@ -477,9 +493,12 @@ export default async function ProductionOrderPage({
               plannedQty: m.plannedQty.toString(),
               consumedQty: m.consumedQty.toString(),
               fromWarehouseId: m.fromWarehouseId,
+              defaultCostPerUnit: m.unitCost ?? m.product.costPrice ?? '0',
             })),
           }}
           warehouses={warehouses}
+          suggestedCostPerUnit={costSummary.costPerUnit}
+          isEstimatedCostPerUnit={costSummary.isEstimatedCostPerUnit}
         />
       </div>
     </div>

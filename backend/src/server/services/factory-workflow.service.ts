@@ -457,7 +457,14 @@ export const factoryWorkflowService = {
     const order = await prisma.productionOrder.findUnique({
       where: { id: input.orderId },
       include: {
-        materials: { include: { product: { select: { costPrice: true } } } },
+        materials: {
+          select: {
+            consumedQty: true,
+            plannedQty: true,
+            unitCost: true,
+            product: { select: { costPrice: true } },
+          },
+        },
         costEntries: { select: { type: true, amount: true } },
         outputs: { select: { quantity: true, costPerUnit: true } },
         branch: { select: { currency: true } },
@@ -476,6 +483,7 @@ export const factoryWorkflowService = {
       costEntries: order.costEntries,
       overheadRate: order.overheadRate,
       producedQty: order.producedQty,
+      plannedQty: order.plannedQty,
     });
     const receiveCostPerUnit = costSummary.costPerUnit ?? D(0);
 

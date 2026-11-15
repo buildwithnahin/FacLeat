@@ -23,14 +23,21 @@ type MaterialLite = {
   plannedQty: string;
   consumedQty: string;
   fromWarehouseId: string | null;
+  /** Pre-filled default cost per unit for consumption (unitCost override or product.costPrice) */
+  defaultCostPerUnit: string;
 };
 
 export function ProductionControls({
   order,
   warehouses,
+  suggestedCostPerUnit,
+  isEstimatedCostPerUnit,
 }: {
   order: { id: string; status: string; overheadRate: string; materials: MaterialLite[] };
   warehouses: { id: string; code: string; name: string }[];
+  /** Auto-calculated cost per unit from the cost summary (may be estimated) */
+  suggestedCostPerUnit: string | null;
+  isEstimatedCostPerUnit: boolean;
 }) {
   const [consumeState, consumeAction, consumePending] = useActionState<FactoryFormState, FormData>(
     consumeMaterialsAction,
@@ -55,11 +62,25 @@ export function ProductionControls({
 
   const [consumption, setConsumption] = useState<
     Record<string, { quantity: string; costPerUnit: string }>
-  >({});
+  >(() => {
+    // Pre-fill each material's cost per unit with its default (unitCost override or product.costPrice)
+    const init: Record<string, { quantity: string; costPerUnit: string }> = {};
+    for (const m of order.materials) {
+      init[m.id] = { quantity: '', costPerUnit: m.defaultCostPerUnit ?? '' };
+    }
+    return init;
+  });
 
   useEffect(() => {
     if (consumeState?.success) {
-      setConsumption({});
+      // Reset quantities but keep cost per unit defaults
+      setConsumption((prev) => {
+        const reset: Record<string, { quantity: string; costPerUnit: string }> = {};
+        for (const m of order.materials) {
+          reset[m.id] = { quantity: '', costPerUnit: prev[m.id]?.costPerUnit ?? m.defaultCostPerUnit ?? '' };
+        }
+        return reset;
+      });
     }
   }, [consumeState?.success]);
 
@@ -177,6 +198,13 @@ export function ProductionControls({
       {/* Record output */}
       <Card className="p-4 space-y-3">
         <h3 className="font-semibold text-sm">Record output</h3>
+        {suggestedCostPerUnit && (
+          <div className={`rounded-md px-3 py-2 text-xs border ${isEstimatedCostPerUnit ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
+            {isEstimatedCostPerUnit ? '⚠️ Estimated' : '✓ Calculated'} cost per unit:{' '}
+            <span className="font-bold">{Number(suggestedCostPerUnit).toFixed(4)}</span>
+            {isEstimatedCostPerUnit && ' (based on planned qty — update after actual consumption)'}
+          </div>
+        )}
         <form action={outputAction} className="space-y-3">
           <input type="hidden" name="orderId" value={order.id} />
           <div>
@@ -184,8 +212,21 @@ export function ProductionControls({
             <Input name="quantity" type="number" min="0.0001" step="0.0001" required />
           </div>
           <div>
-            <Label className="text-xs">Cost per unit</Label>
-            <Input name="costPerUnit" type="number" min="0" step="0.0001" defaultValue="0" />
+            <Label className="text-xs">
+              Cost per unit
+              {suggestedCostPerUnit && (
+                <span className="ml-1 text-muted-foreground font-normal">
+                  (auto: {Number(suggestedCostPerUnit).toFixed(4)})
+                </span>
+              )}
+            </Label>
+            <Input
+              name="costPerUnit"
+              type="number"
+              min="0"
+              step="0.0001"
+              defaultValue={suggestedCostPerUnit ?? '0'}
+            />
           </div>
           <div>
             <Label className="text-xs">Target warehouse</Label>
