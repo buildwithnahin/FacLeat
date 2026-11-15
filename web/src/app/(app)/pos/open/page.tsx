@@ -36,7 +36,9 @@ export default async function OpenSessionPage() {
   const session = await getSession();
   if (!session) redirect('/login');
 
-  const data = await backendFetch<OpenFormOptions>('/api/mobile/pos/open');
+  const branchId = session.activeBranchId ?? session.defaultBranchId ?? '';
+  const query = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+  const data = await backendFetch<OpenFormOptions>(`/api/mobile/pos/open${query}`);
   if (data.hasOpenSession) redirect('/pos');
 
   return (

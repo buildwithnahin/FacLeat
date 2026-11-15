@@ -63,9 +63,9 @@ export const posService = {
     });
   },
 
-  async mySessions(session: AppSession | null, limit = 20) {
+  async mySessions(session: AppSession | null, limit = 20, branchId?: string) {
     const actor = await authorize(session, 'pos:sell');
-    const branchIds = await getScopedBranchIds(actor);
+    const branchIds = await getScopedBranchIds(actor, branchId);
     return prisma.posSession.findMany({
       where: {
         cashierId: actor.userId,
@@ -84,10 +84,10 @@ export const posService = {
       where: {
         cashierId: actor.userId,
         status: 'OPEN',
-        ...(actor.activeCompanyId ? { branch: { companyId: actor.activeCompanyId } } : {}),
+        branchId: input.branchId,
       },
     });
-    if (existing) throw new ValidationError('You already have an open session. Close it first.');
+    if (existing) throw new ValidationError('You already have an open session in this branch. Close it first.');
 
     const warehouse = await prisma.warehouse.findUnique({ where: { id: input.warehouseId } });
     if (!warehouse || warehouse.branchId !== input.branchId) {

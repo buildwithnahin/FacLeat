@@ -17,7 +17,8 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
   try {
-    const branchIds = await getScopedBranchIds(session);
+    const branchId = req.nextUrl.searchParams.get('branchId') ?? session.activeBranchId;
+    const branchIds = await getScopedBranchIds(session, branchId);
     const openSession = await prisma.posSession.findFirst({
       where: {
         cashierId: session.userId,

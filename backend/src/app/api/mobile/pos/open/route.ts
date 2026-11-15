@@ -17,7 +17,8 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
   try {
-    const branchIds = await getScopedBranchIds(session);
+    const targetBranch = req.nextUrl.searchParams.get('branchId') ?? session.activeBranchId;
+    const branchIds = await getScopedBranchIds(session, targetBranch);
 
     const existing = await prisma.posSession.findFirst({
       where: {
@@ -30,11 +31,13 @@ export async function GET(req: NextRequest) {
       return Response.json(apiOk({ hasOpenSession: true }));
     }
 
+    const availableBranchIds = await getScopedBranchIds(session, 'ALL');
+
     const [branches, warehouses, lastClosed] = await Promise.all([
       prisma.branch.findMany({
         where: {
           isActive: true,
-          ...(branchIds ? { id: { in: branchIds } } : {}),
+          ...(availableBranchIds ? { id: { in: availableBranchIds } } : {}),
         },
         orderBy: { name: 'asc' },
         select: { id: true, name: true, code: true, currency: true },
@@ -43,7 +46,7 @@ export async function GET(req: NextRequest) {
         where: {
           isActive: true,
           type: { in: ['STORE', 'SHOWROOM', 'MAIN'] },
-          ...(branchIds ? { branchId: { in: branchIds } } : {}),
+          ...(availableBranchIds ? { branchId: { in: availableBranchIds } } : {}),
         },
         orderBy: { name: 'asc' },
         select: { id: true, name: true, code: true, branchId: true },

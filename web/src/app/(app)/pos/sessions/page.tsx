@@ -28,7 +28,9 @@ interface SessionRow {
 export default async function SessionsPage() {
   const session = await getSession();
   if (!session) redirect('/login');
-  const sessions = await backendFetch<SessionRow[]>('/api/mobile/pos/sessions');
+  const branchId = session.activeBranchId ?? session.defaultBranchId ?? '';
+  const query = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+  const sessions = await backendFetch<SessionRow[]>(`/api/mobile/pos/sessions${query}`);
   const open = sessions.find((s) => s.status === 'OPEN');
 
   return (

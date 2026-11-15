@@ -51,7 +51,9 @@ export default async function PosPage() {
   const session = await getSession();
   if (!session) redirect('/login');
 
-  const data = await backendFetch<TerminalData>('/api/mobile/pos/terminal');
+  const branchId = session.activeBranchId ?? session.defaultBranchId ?? '';
+  const query = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+  const data = await backendFetch<TerminalData>(`/api/mobile/pos/terminal${query}`);
 
   if (!data.openSession) {
     return (

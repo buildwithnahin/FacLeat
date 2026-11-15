@@ -32,9 +32,15 @@ export async function getScopedBranchIds(
 ): Promise<string[] | undefined> {
   if (!session) return [];
 
-  if (branchId) {
-    const branch = await assertBranchInScope(session, branchId);
-    return [branch.id];
+  const targetBranchId = branchId !== undefined ? branchId : session.activeBranchId;
+
+  if (targetBranchId && targetBranchId !== 'ALL') {
+    try {
+      const branch = await assertBranchInScope(session, targetBranchId);
+      return [branch.id];
+    } catch {
+      // If the target branch is not in scope or belongs to another company, fall through
+    }
   }
 
   const isSuperAdmin = hasSuperAdminScope(session);

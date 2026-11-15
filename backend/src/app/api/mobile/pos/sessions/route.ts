@@ -9,7 +9,9 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
   try {
-    const sessions = await posService.mySessions(session, 50);
+    const sp = req.nextUrl.searchParams;
+    const branchId = sp.get('branchId') ?? session.activeBranchId ?? undefined;
+    const sessions = await posService.mySessions(session, 50, branchId);
     return Response.json(apiOk(sessions));
   } catch (err) {
     if (err instanceof ApiError) return Response.json(apiError(err), { status: err.status });
