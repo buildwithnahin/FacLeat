@@ -19,9 +19,13 @@ export async function BranchSwitcher({ session }: { session: AppSession }) {
     return null;
   }
 
-  if (branches.length === 0) return null;
+  const filteredBranches = session.activeCompanyId
+    ? branches.filter((b) => b.companyId === session.activeCompanyId)
+    : branches;
 
-  const active = branches.find((b) => b.id === session.activeBranchId) ?? null;
+  if (filteredBranches.length === 0) return null;
+
+  const active = filteredBranches.find((b) => b.id === session.activeBranchId) ?? null;
 
   return (
     <SwitcherDropdown
@@ -32,7 +36,7 @@ export async function BranchSwitcher({ session }: { session: AppSession }) {
       activeId={active?.id}
       onSelectUrl="/api/session/active-branch"
       fieldName="branchId"
-      items={branches.map((b) => ({ id: b.id, name: b.name, meta: `${b.code} · ${b.currency}` }))}
+      items={filteredBranches.map((b) => ({ id: b.id, name: b.name, meta: `${b.code} · ${b.currency}` }))}
     />
   );
 }

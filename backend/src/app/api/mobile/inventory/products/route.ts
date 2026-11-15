@@ -34,9 +34,13 @@ export async function GET(req: NextRequest) {
 
   const sp = req.nextUrl.searchParams;
   const activeOnly = sp.get('activeOnly') === 'true';
+  const branchId = sp.get('branchId') || session.activeBranchId || undefined;
 
   try {
-    const products = await productService.list(session, { type: parseTypeFilter(sp) });
+    const products = await productService.list(session, {
+      type: parseTypeFilter(sp),
+      branchId,
+    });
     const filtered = activeOnly ? products.filter((p) => p.isActive) : products;
     return Response.json(
       apiOk(

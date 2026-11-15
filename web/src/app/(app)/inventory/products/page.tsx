@@ -37,8 +37,13 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   const session = await getSession();
   const sp = await searchParams;
   const section = parseInventorySection(sp.section);
-  const qs = section ? `?section=${section}` : '';
-  const products = await backendFetch<ProductApiRow[]>(`/api/mobile/inventory/products${qs}`);
+  const branchId = session?.activeBranchId || session?.defaultBranchId || undefined;
+
+  const qs = new URLSearchParams();
+  if (section) qs.set('section', section);
+  if (branchId) qs.set('branchId', branchId);
+  const qsStr = qs.toString();
+  const products = await backendFetch<ProductApiRow[]>(`/api/mobile/inventory/products${qsStr ? `?${qsStr}` : ''}`);
   const canWrite = session?.permissions.includes('inventory:write') ?? false;
   const pageTitle = section ? `${INVENTORY_SECTION_META[section].label} Products` : 'All Products';
   const pageDescription = section

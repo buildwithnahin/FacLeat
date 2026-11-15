@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
   const sp = req.nextUrl.searchParams;
-  const branchId = sp.get('branchId') || undefined;
+  const branchId = sp.get('branchId') || session.activeBranchId || undefined;
   const warehouseId = sp.get('warehouseId') ?? undefined;
   const section = parseInventorySection(sp.get('section'));
 

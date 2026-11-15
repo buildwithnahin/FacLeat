@@ -37,7 +37,7 @@ function isRecoverableSessionError(error: unknown) {
   );
 }
 
-const getCachedUserWithRoles = unstable_cache(
+const getCachedUserWithRoles = cache(
   async (userId: string) =>
     prisma.user.findUnique({
       where: { id: userId, status: 'ACTIVE' },
@@ -69,8 +69,6 @@ const getCachedUserWithRoles = unstable_cache(
         },
       },
     }),
-  ['session-user-roles'],
-  { revalidate: 60, tags: ['rbac'] },
 );
 
 export interface BuildSessionOverrides {

@@ -69,6 +69,7 @@ export function SwitcherDropdown({
         return;
       }
       router.refresh();
+      window.location.reload();
     });
   }
 

@@ -70,13 +70,16 @@ async function assertBrandCompanyAccess(brandId: string | null | undefined, comp
 export const productService = {
   async list(
     session: AppSession | null,
-    filters: { type?: Prisma.ProductWhereInput['type'] } = {},
+    filters: { type?: Prisma.ProductWhereInput['type']; branchId?: string } = {},
   ) {
     await authorize(session, 'inventory:read');
+    const branchId = filters.branchId ?? session?.activeBranchId ?? undefined;
+    const companyId = session?.activeCompanyId ?? undefined;
+
     const [products, ledgerAgg] = await Promise.all([
       prisma.product.findMany({
         where: {
-          companyId: session?.activeCompanyId ?? undefined,
+          companyId,
           type: filters.type,
         },
         orderBy: { createdAt: 'desc' },
@@ -84,6 +87,11 @@ export const productService = {
       }),
       prisma.inventoryLedger.groupBy({
         by: ['productId', 'direction'],
+        where: branchId
+          ? { branchId }
+          : companyId
+            ? { branch: { companyId } }
+            : undefined,
         _sum: { quantity: true },
       }),
     ]);
