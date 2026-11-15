@@ -34,11 +34,12 @@ const nextConfig: NextConfig = {
   // warning by pinning the root explicitly instead of deleting either file.
   outputFileTracingRoot: path.resolve(__dirname),
   experimental: {
-    // cPanel/CloudLinux (Hostever) enforces a per-account LVE process/fork
-    // limit — see backend/next.config.ts for the full explanation. Same
-    // mitigation applied here.
-    workerThreads: false,
-    cpus: 1,
+    ...(process.env.CPANEL === 'true'
+      ? {
+          workerThreads: false,
+          cpus: 1,
+        }
+      : {}),
   },
   // Local-Windows-only build workaround — see backend/next.config.ts.
   outputFileTracingExcludes: {

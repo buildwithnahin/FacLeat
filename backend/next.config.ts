@@ -22,17 +22,12 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '6mb',
     },
-    // cPanel/CloudLinux (Hostever) enforces a per-account LVE process/fork
-    // limit. next build normally spawns several worker threads/processes in
-    // parallel for compilation, which can itself trip that limit on a
-    // tightly-constrained shared-hosting account (independent of the
-    // separate Passenger "can't fork the app's own process" issue this
-    // account is also hitting). Forcing a single worker avoids adding to
-    // that pressure. Not scoped to cPanel only — cheap and harmless
-    // everywhere else (Render build machines have far more headroom, so
-    // this just means a slightly less parallel build there).
-    workerThreads: false,
-    cpus: 1,
+    ...(process.env.CPANEL === 'true'
+      ? {
+          workerThreads: false,
+          cpus: 1,
+        }
+      : {}),
   },
   // Local-Windows-only build workaround: Next's output-file-tracing walk
   // hits EPERM on Windows's protected NTFS junctions under the user
