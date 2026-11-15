@@ -377,9 +377,12 @@ export const approvalService = {
         select: { roles: { select: { role: { select: { name: true } } } } },
       });
       const myRoles = user?.roles.map((r) => r.role.name) ?? [];
-      where.steps = {
-        some: { approverRole: { in: myRoles }, status: 'ACTIVE' },
-      };
+      const isSuperAdmin = myRoles.some((r) => r.toLowerCase().includes('super admin'));
+      if (!isSuperAdmin) {
+        where.steps = {
+          some: { approverRole: { in: myRoles }, status: 'ACTIVE' },
+        };
+      }
     }
     const requests = await prisma.approvalRequest.findMany({
       where,
@@ -523,7 +526,8 @@ export const approvalService = {
           ? request.steps.find((s) => s.status === 'CHANGES_REQUESTED')
           : undefined);
       if (!activeStep) throw new ValidationError('No active step to decide on');
-      if (!myRoles.has(activeStep.approverRole)) {
+      const isSuperAdmin = Array.from(myRoles).some((r) => r.toLowerCase().includes('super admin'));
+      if (!myRoles.has(activeStep.approverRole) && !isSuperAdmin) {
         throw new ForbiddenError(
           `Step ${activeStep.sequence} requires role "${activeStep.approverRole}"`,
         );

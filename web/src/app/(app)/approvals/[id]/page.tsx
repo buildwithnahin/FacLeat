@@ -82,8 +82,10 @@ export default async function ApprovalDetailPage({
     (req.status === 'CHANGES_REQUESTED'
       ? req.steps.find((s) => s.status === 'CHANGES_REQUESTED')
       : undefined);
+  const isSuperAdmin =
+    session?.roles.some((r) => r.toLowerCase().includes('super admin')) ?? false;
   const canDecide =
-    !!active && !!session && session.roles.includes(active.approverRole);
+    !!active && !!session && (session.roles.includes(active.approverRole) || isSuperAdmin);
   const canCancel =
     !!session &&
     session.userId === req.requestedById &&
