@@ -1,4 +1,5 @@
 import { backendFetch } from '@/lib/backend-client';
+import { getSession } from '@/server/auth/session';
 import { PageHeader } from '@/components/shared/page-header';
 import { LabelSheet } from './label-sheet';
 
@@ -15,10 +16,35 @@ interface PrintProduct {
   unit: string;
   category: { name: string } | null;
   sellPrice: string;
+  availableQty?: string;
 }
 
-export default async function PrintLabelsPage() {
-  const products = await backendFetch<PrintProduct[]>('/api/mobile/barcode/products/print');
+interface SearchParams {
+  branchId?: string;
+  companyId?: string;
+}
+
+export default async function PrintLabelsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
+  const [session, sp] = await Promise.all([
+    getSession(),
+    searchParams ? await searchParams : ({} as SearchParams),
+  ]);
+
+  const activeCompanyId = sp.companyId || session?.activeCompanyId || session?.defaultCompanyId || undefined;
+  const activeBranchId = sp.branchId || session?.activeBranchId || session?.defaultBranchId || undefined;
+
+  const qs = new URLSearchParams();
+  if (activeCompanyId && activeCompanyId !== 'ALL') qs.set('companyId', activeCompanyId);
+  if (activeBranchId && activeBranchId !== 'ALL') qs.set('branchId', activeBranchId);
+
+  const products = await backendFetch<PrintProduct[]>(
+    `/api/mobile/barcode/products/print${qs.toString() ? `?${qs.toString()}` : ''}`,
+  );
+
   return (
     <div>
       <PageHeader

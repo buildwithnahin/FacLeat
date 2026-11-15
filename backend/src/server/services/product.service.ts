@@ -113,42 +113,179 @@ export const productService = {
     }));
   },
 
-  async listForBarcodeOverview(session: AppSession | null) {
+  async listForBarcodeOverview(
+    session: AppSession | null,
+    filters: {
+      companyId?: string;
+      branchId?: string;
+      search?: string;
+      status?: 'ALL' | 'BARCODED' | 'MISSING';
+      inStockOnly?: boolean;
+    } = {},
+  ) {
     await authorize(session, 'barcode:read');
-    return prisma.product.findMany({
-      where: { companyId: session?.activeCompanyId ?? undefined },
-      orderBy: [{ barcode: 'asc' }, { name: 'asc' }],
-      select: {
-        id: true,
-        sku: true,
-        barcode: true,
-        name: true,
-        size: true,
-        unit: true,
-      },
-    });
+
+    let targetCompanyId = filters.companyId || session?.activeCompanyId || undefined;
+    let targetBranchId = filters.branchId || session?.activeBranchId || undefined;
+
+    if (targetBranchId && targetBranchId !== 'ALL') {
+      const branch = await prisma.branch.findUnique({
+        where: { id: targetBranchId },
+        select: { id: true, companyId: true },
+      });
+      if (branch && !targetCompanyId) {
+        targetCompanyId = branch.companyId;
+      }
+    }
+
+    const where: Prisma.ProductWhereInput = {
+      ...(targetCompanyId ? { companyId: targetCompanyId } : {}),
+    };
+
+    if (filters.search && filters.search.trim()) {
+      const term = filters.search.trim();
+      where.OR = [
+        { name: { contains: term } },
+        { sku: { contains: term } },
+        { barcode: { contains: term } },
+      ];
+    }
+
+    if (filters.status === 'BARCODED') {
+      where.barcode = { not: null };
+    } else if (filters.status === 'MISSING') {
+      where.barcode = null;
+    }
+
+    const [products, ledgerAgg] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        orderBy: [{ barcode: 'asc' }, { name: 'asc' }],
+        select: {
+          id: true,
+          sku: true,
+          barcode: true,
+          name: true,
+          size: true,
+          unit: true,
+          category: { select: { id: true, name: true } },
+          sellPrice: true,
+          company: { select: { id: true, name: true, code: true } },
+        },
+      }),
+      targetBranchId && targetBranchId !== 'ALL'
+        ? prisma.inventoryLedger.groupBy({
+            by: ['productId', 'direction'],
+            where: { branchId: targetBranchId },
+            _sum: { quantity: true },
+          })
+        : targetCompanyId
+          ? prisma.inventoryLedger.groupBy({
+              by: ['productId', 'direction'],
+              where: { branch: { companyId: targetCompanyId } },
+              _sum: { quantity: true },
+            })
+          : [],
+    ]);
+
+    const qtyMap = new Map<string, Prisma.Decimal>();
+    for (const row of ledgerAgg) {
+      const current = qtyMap.get(row.productId) ?? new Prisma.Decimal(0);
+      const delta = row._sum.quantity ? new Prisma.Decimal(row._sum.quantity) : new Prisma.Decimal(0);
+      qtyMap.set(
+        row.productId,
+        row.direction === 'IN' ? current.plus(delta) : current.minus(delta),
+      );
+    }
+
+    let result = products.map((p) => ({
+      id: p.id,
+      sku: p.sku,
+      barcode: p.barcode,
+      name: p.name,
+      size: p.size,
+      unit: p.unit,
+      category: p.category,
+      sellPrice: p.sellPrice.toString(),
+      company: p.company,
+      availableQty: (qtyMap.get(p.id) ?? new Prisma.Decimal(0)).toString(),
+    }));
+
+    if (filters.inStockOnly) {
+      result = result.filter((p) => Number(p.availableQty) > 0);
+    }
+
+    return result;
   },
 
-  async listForBarcodePrint(session: AppSession | null) {
+  async listForBarcodePrint(
+    session: AppSession | null,
+    filters: { companyId?: string; branchId?: string; inStockOnly?: boolean } = {},
+  ) {
     await authorize(session, 'barcode:print');
-    return prisma.product.findMany({
-      where: {
-        companyId: session?.activeCompanyId ?? undefined,
-        barcode: { not: null },
-        isActive: true,
-      },
-      orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        sku: true,
-        barcode: true,
-        name: true,
-        size: true,
-        unit: true,
-        category: { select: { name: true } },
-        sellPrice: true,
-      },
-    });
+
+    let targetCompanyId = filters.companyId || session?.activeCompanyId || undefined;
+    let targetBranchId = filters.branchId || session?.activeBranchId || undefined;
+
+    if (targetBranchId && targetBranchId !== 'ALL') {
+      const branch = await prisma.branch.findUnique({
+        where: { id: targetBranchId },
+        select: { id: true, companyId: true },
+      });
+      if (branch && !targetCompanyId) {
+        targetCompanyId = branch.companyId;
+      }
+    }
+
+    const [products, ledgerAgg] = await Promise.all([
+      prisma.product.findMany({
+        where: {
+          ...(targetCompanyId ? { companyId: targetCompanyId } : {}),
+          barcode: { not: null },
+          isActive: true,
+        },
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          sku: true,
+          barcode: true,
+          name: true,
+          size: true,
+          unit: true,
+          category: { select: { name: true } },
+          sellPrice: true,
+        },
+      }),
+      targetBranchId && targetBranchId !== 'ALL'
+        ? prisma.inventoryLedger.groupBy({
+            by: ['productId', 'direction'],
+            where: { branchId: targetBranchId },
+            _sum: { quantity: true },
+          })
+        : [],
+    ]);
+
+    const qtyMap = new Map<string, Prisma.Decimal>();
+    for (const row of ledgerAgg) {
+      const current = qtyMap.get(row.productId) ?? new Prisma.Decimal(0);
+      const delta = row._sum.quantity ? new Prisma.Decimal(row._sum.quantity) : new Prisma.Decimal(0);
+      qtyMap.set(
+        row.productId,
+        row.direction === 'IN' ? current.plus(delta) : current.minus(delta),
+      );
+    }
+
+    let result = products.map((p) => ({
+      ...p,
+      sellPrice: p.sellPrice.toString(),
+      availableQty: (qtyMap.get(p.id) ?? new Prisma.Decimal(0)).toString(),
+    }));
+
+    if (filters.inStockOnly) {
+      result = result.filter((p) => Number(p.availableQty) > 0);
+    }
+
+    return result;
   },
 
   async assignBarcode(session: AppSession | null, id: string) {

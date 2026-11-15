@@ -87,18 +87,21 @@ async function assertStockAvailable(
   items: { productId: string; quantity: Prisma.Decimal }[],
 ) {
   const productIds = Array.from(new Set(items.map((i) => i.productId)));
-  const balances = productIds.length === 0
-    ? []
-    : await tx.$queryRaw<{ productId: string; balance: string }[]>`
-    SELECT \`productId\`,
-           CAST(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE -quantity END) AS CHAR) AS balance
-      FROM \`InventoryLedger\`
-     WHERE \`branchId\` = ${branchId}
-       AND \`warehouseId\` = ${warehouseId}
-       AND \`productId\` IN (${Prisma.join(productIds)})
-     GROUP BY \`productId\`
-  `;
-  const balanceByProduct = new Map(balances.map((b) => [b.productId, D(b.balance)]));
+  if (productIds.length === 0) return;
+
+  const ledgerAgg = await tx.inventoryLedger.groupBy({
+    by: ['productId', 'direction'],
+    where: { branchId, warehouseId, productId: { in: productIds } },
+    _sum: { quantity: true },
+  });
+
+  const balanceByProduct = new Map<string, Prisma.Decimal>();
+  for (const row of ledgerAgg) {
+    const prev = balanceByProduct.get(row.productId) ?? ZERO;
+    const delta = row._sum.quantity ? new Prisma.Decimal(row._sum.quantity) : ZERO;
+    balanceByProduct.set(row.productId, row.direction === 'IN' ? prev.plus(delta) : prev.minus(delta));
+  }
+
   const needed = new Map<string, Prisma.Decimal>();
   for (const item of items) {
     needed.set(item.productId, (needed.get(item.productId) ?? ZERO).plus(item.quantity));
