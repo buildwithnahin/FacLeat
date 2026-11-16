@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { getSession } from '@/server/auth/session';
 import { backendFetch, BackendApiError } from '@/lib/backend-client';
 import { warehouseCreateSchema, warehouseUpdateSchema } from '@/server/validators/warehouses';
 
@@ -19,7 +20,20 @@ function parseForm(formData: FormData) {
 }
 
 export async function createWarehouseAction(_prev: WarehouseFormState, formData: FormData): Promise<WarehouseFormState> {
-  const parsed = warehouseCreateSchema.safeParse(parseForm(formData));
+  const session = await getSession();
+  const activeBranchId = session?.activeBranchId;
+
+  if (!activeBranchId) {
+    return {
+      error: 'Branch selection required: Please select a branch from the top selector button before creating a warehouse.',
+    };
+  }
+
+  const raw = parseForm(formData);
+  // enforce creation under the branch selected in the top selector
+  raw.branchId = activeBranchId;
+
+  const parsed = warehouseCreateSchema.safeParse(raw);
   if (!parsed.success) {
     return {
       error: parsed.error.issues[0]?.message ?? 'Validation failed',

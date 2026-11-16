@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
+import { Button } from '@/components/ui/button';
 import { DataTable, type DataTableColumn } from '@/components/shared/data-table';
 import { Pill, type PillTone } from '@/components/shared/pill';
 import { getSession } from '@/server/auth/session';
@@ -57,7 +58,11 @@ export default async function ShipmentsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Shipments" description="All shipment records across trade orders." />
+      <PageHeader title="Shipments" description="All shipment records across trade orders.">
+        <Button variant="outline" asChild>
+          <Link href="/trade/orders">Go to Trade Orders</Link>
+        </Button>
+      </PageHeader>
       <DataTable rows={rows} columns={columns} rowKey={(r) => r.id} empty="No shipments recorded." />
     </div>
   );

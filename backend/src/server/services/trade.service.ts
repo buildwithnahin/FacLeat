@@ -657,7 +657,7 @@ export const tradeService = {
     const actor = await authorize(session, 'trade:lc-drawdown');
     const drawdown = await prisma.lCDrawdown.findUnique({
       where: { id: input.drawdownId },
-      include: { lc: true },
+      include: { lc: { include: { tradeOrder: true } } },
     });
     if (!drawdown) throw new NotFoundError('Drawdown not found');
     if (drawdown.status !== 'DOCUMENTS_ACCEPTED') {
@@ -674,6 +674,38 @@ export const tradeService = {
           updatedById: actor.userId,
         },
       });
+
+      // Automatically record TradePayment voucher for this settled drawdown
+      if (drawdown.lc.tradeOrder) {
+        const order = drawdown.lc.tradeOrder;
+        const year = new Date().getFullYear();
+        const count = await tx.tradePayment.count({
+          where: { createdAt: { gte: new Date(`${year}-01-01`) } },
+        });
+        const amount = D(drawdown.amount);
+        const exchangeRate = order.exchangeRate ? D(order.exchangeRate) : D(1);
+        const localAmount = amount.mul(exchangeRate);
+
+        await tx.tradePayment.create({
+          data: {
+            number: nextDocumentNumber('TRP', year, count),
+            tradeOrderId: order.id,
+            branchId: order.branchId,
+            status: 'PAID',
+            currency: drawdown.lc.currency,
+            amount,
+            exchangeRate,
+            localAmount,
+            bankName: drawdown.lc.advisingBank || drawdown.lc.issuingBank || 'LC Settlement Bank',
+            bankReference: `Drawdown #${drawdown.drawdownNumber} (${drawdown.lc.number})`,
+            swiftRef: drawdown.lc.swiftMt700Ref || null,
+            paymentDate: input.paymentReceivedAt ?? new Date(),
+            notes: `Settled via LC Drawdown #${drawdown.drawdownNumber} on ${drawdown.lc.number}`,
+            createdById: actor.userId,
+          },
+        });
+      }
+
       await recordAudit({
         actorId: actor.userId,
         branchId: drawdown.lc.branchId,
@@ -742,6 +774,51 @@ export const tradeService = {
   async listPayments(session: AppSession | null, branchId?: string) {
     await authorize(session, 'trade:read');
     const branchIds = await getScopedBranchIds(session, branchId);
+
+    // Auto-sync any PAYMENT_RECEIVED drawdowns that haven't created a TradePayment record yet
+    const unrecordedDrawdowns = await prisma.lCDrawdown.findMany({
+      where: {
+        status: 'PAYMENT_RECEIVED',
+        lc: { ...(branchIds ? { branchId: { in: branchIds } } : {}) },
+      },
+      include: { lc: { include: { tradeOrder: true } } },
+    });
+
+    for (const dd of unrecordedDrawdowns) {
+      if (!dd.lc.tradeOrder) continue;
+      const ref = `Drawdown #${dd.drawdownNumber} (${dd.lc.number})`;
+      const existing = await prisma.tradePayment.findFirst({
+        where: { tradeOrderId: dd.lc.tradeOrderId, bankReference: ref },
+      });
+      if (!existing) {
+        const year = new Date().getFullYear();
+        const count = await prisma.tradePayment.count({
+          where: { createdAt: { gte: new Date(`${year}-01-01`) } },
+        });
+        const order = dd.lc.tradeOrder;
+        const amount = D(dd.amount);
+        const exchangeRate = order.exchangeRate ? D(order.exchangeRate) : D(1);
+        const localAmount = amount.mul(exchangeRate);
+        await prisma.tradePayment.create({
+          data: {
+            number: nextDocumentNumber('TRP', year, count),
+            tradeOrderId: order.id,
+            branchId: order.branchId,
+            status: 'PAID',
+            currency: dd.lc.currency,
+            amount,
+            exchangeRate,
+            localAmount,
+            bankName: dd.lc.advisingBank || dd.lc.issuingBank || 'LC Settlement Bank',
+            bankReference: ref,
+            swiftRef: dd.lc.swiftMt700Ref || null,
+            paymentDate: dd.paymentReceivedAt || new Date(),
+            notes: `Settled via LC Drawdown #${dd.drawdownNumber} on ${dd.lc.number}`,
+          },
+        });
+      }
+    }
+
     return prisma.tradePayment.findMany({
       where: { ...(branchIds ? { branchId: { in: branchIds } } : {}) },
       include: { tradeOrder: { select: { id: true, number: true, type: true } } },

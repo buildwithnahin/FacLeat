@@ -14,14 +14,19 @@ interface BranchOption {
 }
 
 export default async function NewWarehousePage() {
-  await getSession();
+  const session = await getSession();
   const branches = await backendFetch<BranchOption[]>('/api/mobile/branches?activeOnly=true');
+  const activeBranchId = session?.activeBranchId ?? null;
+  const activeBranch = activeBranchId ? branches.find((b) => b.id === activeBranchId) ?? null : null;
+
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader title="New warehouse" description="Add a stock location under a branch." />
       <WarehouseForm
         mode="create"
         branches={branches.map((b) => ({ id: b.id, name: b.name, code: b.code }))}
+        activeBranchId={activeBranchId}
+        activeBranchName={activeBranch ? `${activeBranch.name} (${activeBranch.code})` : null}
       />
     </div>
   );

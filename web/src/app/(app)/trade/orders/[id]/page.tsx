@@ -184,7 +184,10 @@ export default async function TradeOrderDetailPage({ params }: { params: Promise
             </CardHeader>
             <CardContent>
               {order.shipments.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No shipments recorded.</p>
+                <div className="py-6 text-center space-y-3">
+                  <p className="text-sm text-muted-foreground">No shipments recorded yet for this order.</p>
+                  <AddShipmentButton tradeOrderId={order.id} />
+                </div>
               ) : (
                 <div className="divide-y">
                   {order.shipments.map((s) => (

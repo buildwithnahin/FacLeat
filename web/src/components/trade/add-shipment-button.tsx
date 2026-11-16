@@ -28,7 +28,19 @@ export function AddShipmentButton({ tradeOrderId }: { tradeOrderId: string }) {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(createShipmentSchema),
-    defaultValues: { tradeOrderId },
+    defaultValues: {
+      tradeOrderId,
+      vesselName: '',
+      voyageNumber: '',
+      blNumber: '',
+      carrierName: '',
+      bookingRef: '',
+      containerNumbers: '',
+      sealNumbers: '',
+      portOfLoading: '',
+      portOfDischarge: '',
+      notes: '',
+    },
   });
 
   function onSubmit(values: FormValues) {
@@ -63,21 +75,21 @@ export function AddShipmentButton({ tradeOrderId }: { tradeOrderId: string }) {
                 <FormField control={form.control} name="vesselName" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Vessel Name</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
+                    <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="voyageNumber" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Voyage Number</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
+                    <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="blNumber" render={({ field }) => (
                   <FormItem>
                     <FormLabel>BL Number</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
+                    <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -93,14 +105,14 @@ export function AddShipmentButton({ tradeOrderId }: { tradeOrderId: string }) {
                 <FormField control={form.control} name="carrierName" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Carrier</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
+                    <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="bookingRef" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Booking Ref</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
+                    <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -125,7 +137,7 @@ export function AddShipmentButton({ tradeOrderId }: { tradeOrderId: string }) {
                 <FormField control={form.control} name="containerNumbers" render={({ field }) => (
                   <FormItem className="col-span-2">
                     <FormLabel>Container Numbers</FormLabel>
-                    <FormControl><Input placeholder="MSCU1234567, HLXU9876543" {...field} /></FormControl>
+                    <FormControl><Input placeholder="MSCU1234567, HLXU9876543" {...field} value={field.value ?? ''} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -147,7 +159,7 @@ export function AddShipmentButton({ tradeOrderId }: { tradeOrderId: string }) {
               <FormField control={form.control} name="notes" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Notes</FormLabel>
-                  <FormControl><Textarea rows={2} {...field} /></FormControl>
+                  <FormControl><Textarea rows={2} {...field} value={field.value ?? ''} /></FormControl>
                 </FormItem>
               )} />
               <DialogFooter>

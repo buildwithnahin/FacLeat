@@ -41,9 +41,17 @@ export function NewTradeOrderForm({ defaultBranchId, branches, customers, suppli
     defaultValues: {
       branchId: defaultBranchId,
       type: 'EXPORT',
+      customerId: '',
+      supplierId: '',
+      contractRef: '',
       currency: 'USD',
       exchangeRate: 1,
-      items: [{ description: '', quantity: 1, unitPrice: 0, unit: 'PCS' }],
+      incoterms: '',
+      portOfLoading: '',
+      portOfDischarge: '',
+      goodsDescription: '',
+      notes: '',
+      items: [{ description: '', hsCode: '', quantity: 1, unitPrice: 0, unit: 'PCS' }],
     },
   });
 
@@ -138,7 +146,7 @@ export function NewTradeOrderForm({ defaultBranchId, branches, customers, suppli
             <FormField control={form.control} name="contractRef" render={({ field }) => (
               <FormItem>
                 <FormLabel>Contract Reference</FormLabel>
-                <FormControl><Input placeholder="CONTRACT-001" {...field} /></FormControl>
+                <FormControl><Input placeholder="CONTRACT-001" {...field} value={field.value ?? ''} /></FormControl>
               </FormItem>
             )} />
 
@@ -157,7 +165,7 @@ export function NewTradeOrderForm({ defaultBranchId, branches, customers, suppli
             <FormField control={form.control} name="exchangeRate" render={({ field }) => (
               <FormItem>
                 <FormLabel>Exchange Rate (to BDT)</FormLabel>
-                <FormControl><Input type="number" step="0.000001" {...field} /></FormControl>
+                <FormControl><Input type="number" step="0.000001" {...field} value={field.value ?? ''} /></FormControl>
               </FormItem>
             )} />
 
@@ -176,14 +184,14 @@ export function NewTradeOrderForm({ defaultBranchId, branches, customers, suppli
             <FormField control={form.control} name="portOfLoading" render={({ field }) => (
               <FormItem>
                 <FormLabel>Port of Loading</FormLabel>
-                <FormControl><Input placeholder="Chittagong" {...field} /></FormControl>
+                <FormControl><Input placeholder="Chittagong" {...field} value={field.value ?? ''} /></FormControl>
               </FormItem>
             )} />
 
             <FormField control={form.control} name="portOfDischarge" render={({ field }) => (
               <FormItem>
                 <FormLabel>Port of Discharge</FormLabel>
-                <FormControl><Input placeholder="Hamburg" {...field} /></FormControl>
+                <FormControl><Input placeholder="Hamburg" {...field} value={field.value ?? ''} /></FormControl>
               </FormItem>
             )} />
 
@@ -209,7 +217,7 @@ export function NewTradeOrderForm({ defaultBranchId, branches, customers, suppli
               <FormField control={form.control} name="goodsDescription" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Goods Description</FormLabel>
-                  <FormControl><Textarea rows={2} placeholder="Leather goods, shoes, etc." {...field} /></FormControl>
+                  <FormControl><Textarea rows={2} placeholder="Leather goods, shoes, etc." {...field} value={field.value ?? ''} /></FormControl>
                 </FormItem>
               )} />
             </div>
@@ -218,7 +226,7 @@ export function NewTradeOrderForm({ defaultBranchId, branches, customers, suppli
               <FormField control={form.control} name="notes" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Notes</FormLabel>
-                  <FormControl><Textarea rows={2} {...field} /></FormControl>
+                  <FormControl><Textarea rows={2} {...field} value={field.value ?? ''} /></FormControl>
                 </FormItem>
               )} />
             </div>
@@ -240,7 +248,7 @@ export function NewTradeOrderForm({ defaultBranchId, branches, customers, suppli
                   <FormField control={form.control} name={`items.${idx}.description`} render={({ field }) => (
                     <FormItem>
                       {idx === 0 && <FormLabel>Description</FormLabel>}
-                      <FormControl><Input placeholder="Leather bag" {...field} /></FormControl>
+                      <FormControl><Input placeholder="Leather bag" {...field} value={field.value ?? ''} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -249,7 +257,7 @@ export function NewTradeOrderForm({ defaultBranchId, branches, customers, suppli
                   <FormField control={form.control} name={`items.${idx}.hsCode`} render={({ field }) => (
                     <FormItem>
                       {idx === 0 && <FormLabel>HS Code</FormLabel>}
-                      <FormControl><Input placeholder="4202.11" {...field} /></FormControl>
+                      <FormControl><Input placeholder="4202.11" {...field} value={field.value ?? ''} /></FormControl>
                     </FormItem>
                   )} />
                 </div>
@@ -257,7 +265,7 @@ export function NewTradeOrderForm({ defaultBranchId, branches, customers, suppli
                   <FormField control={form.control} name={`items.${idx}.quantity`} render={({ field }) => (
                     <FormItem>
                       {idx === 0 && <FormLabel>Qty</FormLabel>}
-                      <FormControl><Input type="number" step="0.001" {...field} /></FormControl>
+                      <FormControl><Input type="number" step="0.001" {...field} value={field.value ?? ''} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -266,7 +274,7 @@ export function NewTradeOrderForm({ defaultBranchId, branches, customers, suppli
                   <FormField control={form.control} name={`items.${idx}.unitPrice`} render={({ field }) => (
                     <FormItem>
                       {idx === 0 && <FormLabel>Unit Price</FormLabel>}
-                      <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                      <FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
