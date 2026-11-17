@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Printer, Sparkles, Building2, Store, Search, X, Filter } from 'lucide-react';
+import { Printer, Sparkles, Building2, Store } from 'lucide-react';
 import { getSession } from '@/server/auth/session';
 import { backendFetch } from '@/lib/backend-client';
 import { assignBarcodeAction } from '@/server/actions/barcode';
@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
+import { BarcodeFilterBar } from './barcode-filter-bar';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,18 +83,6 @@ export default async function BarcodePage({
   const selectedCompany = companies.find((c) => c.id === activeCompanyId) ?? null;
   const selectedBranch = branches.find((b) => b.id === activeBranchId) ?? null;
 
-  // Filter branch dropdown based on selected company if applicable
-  const availableBranches = activeCompanyId && activeCompanyId !== 'ALL'
-    ? branches.filter((b) => b.companyId === activeCompanyId)
-    : branches;
-
-  const hasFilter = Boolean(
-    sp.search ||
-    (sp.status && sp.status !== 'ALL') ||
-    (sp.branchId && sp.branchId !== session?.activeBranchId) ||
-    (sp.companyId && sp.companyId !== session?.activeCompanyId)
-  );
-
   const printParams = new URLSearchParams();
   if (activeCompanyId && activeCompanyId !== 'ALL') printParams.set('companyId', activeCompanyId);
   if (activeBranchId && activeBranchId !== 'ALL') printParams.set('branchId', activeBranchId);
@@ -131,81 +119,17 @@ export default async function BarcodePage({
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <Card className="p-4">
-        <form className="grid grid-cols-1 md:grid-cols-[1.5fr_1fr_1fr_1fr_auto] gap-3 items-end">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Search</label>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                name="search"
-                placeholder="Search by SKU, product name, or barcode…"
-                defaultValue={sp.search ?? ''}
-                className="pl-8"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Company</label>
-            <select
-              name="companyId"
-              defaultValue={activeCompanyId ?? 'ALL'}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-            >
-              <option value="ALL">All Companies</option>
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.code})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Branch</label>
-            <select
-              name="branchId"
-              defaultValue={activeBranchId ?? 'ALL'}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-            >
-              <option value="ALL">All Branches</option>
-              {availableBranches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name} ({b.code})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Barcode Status</label>
-            <select
-              name="status"
-              defaultValue={sp.status ?? 'ALL'}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="BARCODED">Barcoded only</option>
-              <option value="MISSING">Missing barcode only</option>
-            </select>
-          </div>
-
-          <div className="flex gap-2">
-            <Button type="submit" variant="outline">
-              <Filter className="h-4 w-4" /> Filter
-            </Button>
-            {hasFilter && (
-              <Button type="button" variant="ghost" asChild>
-                <Link href="/barcode">
-                  <X className="h-4 w-4" /> Clear
-                </Link>
-              </Button>
-            )}
-          </div>
-        </form>
-      </Card>
+      {/* Filter and Search Bar with Real-Time Auto-Update */}
+      <BarcodeFilterBar
+        companies={companies}
+        branches={branches}
+        initialSearch={sp.search ?? ''}
+        initialCompanyId={activeCompanyId ?? 'ALL'}
+        initialBranchId={activeBranchId ?? 'ALL'}
+        initialStatus={sp.status ?? 'ALL'}
+        defaultCompanyId={session?.activeCompanyId || session?.defaultCompanyId}
+        defaultBranchId={session?.activeBranchId || session?.defaultBranchId}
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

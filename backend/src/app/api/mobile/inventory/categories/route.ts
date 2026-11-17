@@ -10,8 +10,13 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
   const flat = req.nextUrl.searchParams.get('flat') === 'true';
+  const type = req.nextUrl.searchParams.get('type') || undefined;
+  const search = req.nextUrl.searchParams.get('search') || req.nextUrl.searchParams.get('q') || undefined;
+
   try {
-    const categories = flat ? await categoryService.listFlat(session) : await categoryService.list(session);
+    const categories = flat
+      ? await categoryService.listFlat(session)
+      : await categoryService.list(session, { type, search });
     return Response.json(apiOk(categories));
   } catch (err) {
     if (err instanceof ApiError) return Response.json(apiError(err), { status: err.status });

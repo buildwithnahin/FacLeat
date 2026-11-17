@@ -767,6 +767,7 @@ model Company {
   branches           Branch[]
   products           Product[]
   productCategories  ProductCategory[]
+  categoryTypes      ProductCategoryType[]
   productBrands      ProductBrand[]
   assetCategories    AssetCategory[]
   customerCategories CustomerCategory[]
@@ -864,6 +865,7 @@ model ProductCategory {
   company     Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
   name        String
   description String?
+  type        String?
   parentId    String?
   parent      ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
   children    ProductCategory[] @relation("CategoryTree")
@@ -874,6 +876,23 @@ model ProductCategory {
 
   @@unique([companyId, name])
   @@index([parentId])
+  @@index([companyId])
+}
+
+model ProductCategoryType {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  code        String
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([companyId, code])
+  @@unique([companyId, name])
   @@index([companyId])
 }
 
