@@ -178,7 +178,7 @@ export function LineItemsEditor({
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
                   <label className="space-y-0.5">
                     <span className="text-muted-foreground">Qty</span>
                     <input
@@ -224,10 +224,29 @@ export function LineItemsEditor({
                       }`}
                     />
                   </label>
+                  <label className="space-y-0.5">
+                    <span className="text-muted-foreground">Tax %</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="any"
+                      value={l.taxRate}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        patch(i, { taxRate: isNaN(val) ? 0 : Math.max(0, Math.min(100, val)) });
+                      }}
+                      className="w-full rounded border px-1.5 py-1 text-right tabular"
+                    />
+                  </label>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tax {l.taxRate}%</span>
-                  <span className="font-medium tabular">{fmt(ln.total)}</span>
+                <div className="flex justify-between items-center text-xs text-muted-foreground pt-1 border-t">
+                  <span>
+                    Tax: {fmt(ln.tax)} ({l.taxRate}%)
+                  </span>
+                  <span className="text-sm font-semibold text-foreground tabular">
+                    Total: {fmt(ln.total)}
+                  </span>
                 </div>
               </div>
             );
