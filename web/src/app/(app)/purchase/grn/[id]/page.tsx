@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, FileText } from 'lucide-react';
+import { ArrowLeft, FileText, RotateCcw } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -65,6 +65,12 @@ export default async function GrnDetailPage({
           <Link href={`/purchase/invoices/new?purchaseOrderId=${grn.purchaseOrderId}&grnId=${grn.id}`}>
             <FileText className="h-4 w-4" />
             Record Invoice
+          </Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href={`/purchase/returns/new?supplierId=${grn.supplier.id}&grnId=${grn.id}`}>
+            <RotateCcw className="h-4 w-4" />
+            Return Goods
           </Link>
         </Button>
       </PageHeader>

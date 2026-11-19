@@ -9,6 +9,7 @@ import { backendFetch, BackendApiError } from '@/lib/backend-client';
 import { formatCurrency, type CurrencyCode } from '@/lib/money';
 import { TradeOrderStatusActions } from '@/components/trade/trade-order-status-actions';
 import { AddShipmentButton } from '@/components/trade/add-shipment-button';
+import { RecordPaymentButton } from '@/components/trade/record-payment-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,7 @@ const SHIP_STATUS_TONE: Record<string, PillTone> = {
 
 interface OrderDetail {
   id: string;
+  branchId: string;
   number: string;
   type: 'EXPORT' | 'IMPORT';
   status: string;
@@ -213,25 +215,61 @@ export default async function TradeOrderDetailPage({ params }: { params: Promise
 
           {/* Payments */}
           <Card>
-            <CardHeader><CardTitle className="text-sm">Foreign Payments</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-sm">Foreign Payments</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Remittances and TT payments recorded against this order
+                </p>
+              </div>
+              <RecordPaymentButton
+                tradeOrderId={order.id}
+                orderNumber={order.number}
+                branchId={order.branchId}
+                currency={order.currency}
+                defaultExchangeRate={order.exchangeRate}
+                totalValue={order.totalValue}
+                existingPaymentsTotal={order.payments.reduce((sum, p) => sum + Number(p.amount), 0)}
+              />
+            </CardHeader>
             <CardContent>
               {order.payments.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No payments recorded.</p>
+                <div className="py-6 text-center space-y-3">
+                  <p className="text-sm text-muted-foreground">No payments recorded yet for this order.</p>
+                  <RecordPaymentButton
+                    tradeOrderId={order.id}
+                    orderNumber={order.number}
+                    branchId={order.branchId}
+                    currency={order.currency}
+                    defaultExchangeRate={order.exchangeRate}
+                    totalValue={order.totalValue}
+                    existingPaymentsTotal={0}
+                  />
+                </div>
               ) : (
                 <div className="divide-y">
                   {order.payments.map((p) => (
                     <div key={p.id} className="py-3 flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-mono">{p.number}</p>
-                        <p className="text-xs text-muted-foreground">{p.bankName} — {p.swiftRef}</p>
-                        {p.paymentDate && <p className="text-xs text-muted-foreground">{new Date(p.paymentDate).toLocaleDateString()}</p>}
+                        <p className="text-sm font-mono font-medium">{p.number}</p>
+                        <p className="text-xs text-muted-foreground">{p.bankName ? `${p.bankName} • ` : ''}{p.swiftRef ? `SWIFT: ${p.swiftRef}` : ''}</p>
+                        {p.paymentDate && <p className="text-xs text-muted-foreground">Date: {new Date(p.paymentDate).toLocaleDateString()}</p>}
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-semibold tabular-nums">{formatCurrency(p.amount.toString(), p.currency)}</p>
-                        <p className="text-xs text-muted-foreground">@ {p.exchangeRate.toString()}</p>
+                        <p className="text-sm font-semibold tabular-nums text-emerald-600">{formatCurrency(p.amount.toString(), p.currency)}</p>
+                        <p className="text-xs text-muted-foreground">@ {p.exchangeRate.toString()} BDT</p>
                       </div>
                     </div>
                   ))}
+                  <div className="pt-3 flex justify-between items-center text-xs font-semibold">
+                    <span className="text-muted-foreground">Total Paid:</span>
+                    <span className="text-sm text-emerald-600 tabular-nums">
+                      {formatCurrency(
+                        order.payments.reduce((sum, p) => sum + Number(p.amount), 0).toFixed(2),
+                        order.currency,
+                      )}
+                    </span>
+                  </div>
                 </div>
               )}
             </CardContent>

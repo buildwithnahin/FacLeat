@@ -8,6 +8,7 @@ import {
   fulfillOrderSchema,
   returnOrderSchema,
   reconcilePaymentsSchema,
+  createChannelSchema,
 } from '@/server/validators/ecommerce';
 
 export async function syncEcommerceOrderAction(input: unknown) {
@@ -115,6 +116,51 @@ export async function reconcileEcommercePaymentsAction(input: unknown) {
     revalidatePath('/ecommerce/reconcile');
     revalidatePath('/ecommerce');
     return { success: true, runId: run.id, matchedCount: run.matchedCount, unmatchedCount: run.unmatchedCount };
+  } catch (e) {
+    if (e instanceof BackendApiError) return { error: e.message };
+    throw e;
+  }
+}
+
+export async function createEcommerceChannelAction(input: unknown) {
+  const parsed = createChannelSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  try {
+    const channel = await backendFetch<{ id: string; name: string; code: string }>(
+      '/api/mobile/ecommerce/channels',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          ...parsed.data,
+          storeUrl: parsed.data.storeUrl || undefined,
+        }),
+      },
+    );
+    revalidatePath('/ecommerce/channels');
+    revalidatePath('/ecommerce');
+    return { success: true, channelId: channel.id, code: channel.code };
+  } catch (e) {
+    if (e instanceof BackendApiError) return { error: e.message };
+    throw e;
+  }
+}
+
+export async function toggleEcommerceChannelAction(channelId: string) {
+  if (!channelId) {
+    return { error: 'Channel ID is required' };
+  }
+  try {
+    await backendFetch(`/api/mobile/ecommerce/channels/${channelId}/toggle`, {
+      method: 'POST',
+    });
+    revalidatePath('/ecommerce/channels');
+    revalidatePath('/ecommerce');
+    return { success: true };
   } catch (e) {
     if (e instanceof BackendApiError) return { error: e.message };
     throw e;

@@ -4,6 +4,7 @@ import { apiError, apiOk } from '@/lib/api';
 import { prisma } from '@/server/db';
 import { authorize } from '@/server/auth/authorize';
 import { warehouseService } from '@/server/services/warehouse.service';
+import { requireWarehouseByType } from '@/server/services/warehouse-workflows.service';
 import { ApiError } from '@/lib/errors';
 
 /**
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
     const [warehouses, quarantine, products, posSales, wholesaleInvoices, corporateInvoices, ecommerceOrders] =
       await Promise.all([
         warehouseService.listActiveForBranch(session, branchId),
-        prisma.warehouse.findFirst({ where: { branchId, type: 'QUARANTINE', isActive: true } }),
+        requireWarehouseByType(branchId, 'QUARANTINE'),
         prisma.product.findMany({
           where: { isActive: true },
           orderBy: { name: 'asc' },

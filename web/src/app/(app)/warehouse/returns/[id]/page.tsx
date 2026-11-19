@@ -26,6 +26,7 @@ interface CustomerReturnDetail {
     id: string;
     quantity: string;
     note: string | null;
+    disposition?: string | null;
     product: { sku: string; name: string; unit: string };
   }[];
 }
@@ -88,6 +89,7 @@ export default async function CustomerReturnDetailPage({
               id: item.id,
               quantity: item.quantity,
               note: item.note,
+              disposition: item.disposition,
               product: {
                 sku: item.product.sku,
                 name: item.product.name,

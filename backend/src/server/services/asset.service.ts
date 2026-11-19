@@ -13,6 +13,7 @@ import type {
   AssetDisposeInput,
   AssetDepreciateInput,
   AssetDepreciateBulkInput,
+  AssetMaintainInput,
 } from '@/server/validators/assets';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 import { nextAssetCode } from '@/lib/document-number';
@@ -335,6 +336,58 @@ export const assetService = {
             branchId: updated.branchId,
             location: updated.location,
             assignedTo: updated.assignedTo,
+          },
+        },
+        tx,
+      );
+
+      return updated;
+    });
+  },
+
+  async maintain(session: AppSession | null, input: AssetMaintainInput) {
+    const actor = await authorize(session, 'assets:write');
+    const asset = await prisma.asset.findUnique({ where: { id: input.assetId } });
+    if (!asset) throw new NotFoundError('Asset not found');
+    if (asset.status === 'DISPOSED') {
+      throw new ValidationError('Cannot perform maintenance on a disposed asset');
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const cost = new Prisma.Decimal(input.cost);
+      const updated = await tx.asset.update({
+        where: { id: asset.id },
+        data: {
+          status: input.status,
+          condition: input.condition || asset.condition,
+        },
+      });
+
+      await tx.assetMovement.create({
+        data: {
+          assetId: asset.id,
+          branchId: asset.branchId,
+          type: 'MAINTENANCE',
+          amount: cost.gt(0) ? cost : null,
+          note: input.note,
+          createdById: actor.userId,
+        },
+      });
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: asset.branchId,
+          module: 'assets',
+          action: 'maintenance',
+          entityType: 'Asset',
+          entityId: asset.id,
+          before: { status: asset.status, condition: asset.condition },
+          after: {
+            status: updated.status,
+            condition: updated.condition,
+            cost: cost.toString(),
+            note: input.note,
           },
         },
         tx,

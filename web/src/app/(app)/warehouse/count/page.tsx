@@ -20,6 +20,7 @@ interface ProductOption {
   barcode: string | null;
   name: string;
   unit: string;
+  costPrice: string;
 }
 
 interface BalanceRow {
@@ -65,7 +66,14 @@ export default async function CountPage() {
       <PhysicalCountForm
         branchId={branchId}
         warehouses={warehouses.map((w) => ({ id: w.id, name: w.name, code: w.code }))}
-        products={products.map((p) => ({ id: p.id, sku: p.sku, barcode: p.barcode, name: p.name, unit: p.unit }))}
+        products={products.map((p) => ({
+          id: p.id,
+          sku: p.sku,
+          barcode: p.barcode,
+          name: p.name,
+          unit: p.unit,
+          costPrice: p.costPrice,
+        }))}
         balanceByWarehouseProduct={balanceByWarehouseProduct}
       />
     </div>

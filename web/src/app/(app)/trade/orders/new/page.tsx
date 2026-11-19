@@ -1,7 +1,7 @@
 import { getSession } from '@/server/auth/session';
 import { backendFetch } from '@/lib/backend-client';
 import { PageHeader } from '@/components/shared/page-header';
-import { NewTradeOrderForm } from '@/components/trade/new-trade-order-form';
+import { NewTradeOrderForm, type TradeProductOption } from '@/components/trade/new-trade-order-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +11,7 @@ interface FormOptions {
   branches: { id: string; name: string; code: string }[];
   customers: { id: string; name: string; code: string }[];
   suppliers: { id: string; name: string; code: string }[];
+  products?: TradeProductOption[];
 }
 
 export default async function NewTradeOrderPage() {
@@ -21,7 +22,7 @@ export default async function NewTradeOrderPage() {
     session?.allowedBranchIds?.[0] ??
     null;
 
-  const { branches, customers, suppliers } = await backendFetch<FormOptions>(
+  const { branches, customers, suppliers, products } = await backendFetch<FormOptions>(
     '/api/mobile/trade/orders/form-options',
   );
 
@@ -33,6 +34,7 @@ export default async function NewTradeOrderPage() {
         branches={branches}
         customers={customers}
         suppliers={suppliers}
+        products={products ?? []}
       />
     </div>
   );

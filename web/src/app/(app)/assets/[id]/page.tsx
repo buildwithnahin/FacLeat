@@ -11,6 +11,7 @@ import { formatCurrency } from '@/lib/money';
 import type { CurrencyCode } from '@/lib/money';
 import { ASSET_STATUS } from '@/server/validators/assets';
 import { AssetActions } from './asset-actions';
+import { AssetTagModal } from './asset-tag-modal';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,13 +88,25 @@ export default async function AssetDetailPage({
   return (
     <div className="space-y-6">
       <PageHeader title={`${asset.code} — ${asset.name}`}>
+        <AssetTagModal
+          asset={{
+            code: asset.code,
+            name: asset.name,
+            serialNumber: asset.serialNumber,
+            categoryName: asset.category?.name ?? 'General',
+            branchName: asset.branch.name,
+            location: asset.location,
+            assignedTo: asset.assignedTo,
+            purchaseDate: asset.purchaseDate,
+          }}
+        />
+        <Button variant="outline" asChild>
+          <Link href={`/assets/${asset.id}/edit`}>Edit</Link>
+        </Button>
         <Button variant="outline" asChild>
           <Link href="/assets">
             <ArrowLeft className="h-4 w-4" /> Back
           </Link>
-        </Button>
-        <Button variant="outline" asChild>
-          <Link href={`/assets/${asset.id}/edit`}>Edit</Link>
         </Button>
       </PageHeader>
 

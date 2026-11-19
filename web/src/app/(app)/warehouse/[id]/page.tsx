@@ -1,21 +1,12 @@
+import { notFound } from 'next/navigation';
 import { getSession } from '@/server/auth/session';
-import { backendFetch } from '@/lib/backend-client';
-import { PageHeader } from '@/components/shared/page-header';
-import { WarehouseForm } from '../warehouse-form';
+import { backendFetch, BackendApiError } from '@/lib/backend-client';
+import { WarehouseDashboard, type WarehouseStockData } from './warehouse-dashboard';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata = { title: 'Edit warehouse' };
-
-interface WarehouseDetail {
-  id: string;
-  branchId: string;
-  code: string;
-  name: string;
-  type: 'MAIN' | 'STORE' | 'WIP' | 'QUARANTINE' | 'DAMAGED' | 'SHOWROOM';
-  address: string | null;
-  isActive: boolean;
-  branch: { name: string };
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  return { title: 'Warehouse / Showroom Dashboard' };
 }
 
 interface BranchOption {
@@ -24,29 +15,32 @@ interface BranchOption {
   code: string;
 }
 
-export default async function EditWarehousePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function WarehouseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  await getSession();
-  const [wh, branches] = await Promise.all([
-    backendFetch<WarehouseDetail>(`/api/mobile/warehouse/warehouses/${id}`),
-    backendFetch<BranchOption[]>('/api/mobile/branches?activeOnly=true'),
-  ]);
+  const session = await getSession();
+
+  let stockData: WarehouseStockData;
+  let branches: BranchOption[];
+
+  try {
+    const [data, branchesData] = await Promise.all([
+      backendFetch<WarehouseStockData>(`/api/mobile/warehouse/warehouses/${id}/stock`),
+      backendFetch<BranchOption[]>('/api/mobile/branches?activeOnly=true'),
+    ]);
+    stockData = data;
+    branches = branchesData;
+  } catch (err) {
+    if (err instanceof BackendApiError && err.status === 404) notFound();
+    throw err;
+  }
+
+  const canWrite = session?.permissions.includes('inventory:write') ?? false;
+
   return (
-    <div>
-      <PageHeader title={wh.name} description={`${wh.branch.name} · ${wh.code}`} />
-      <WarehouseForm
-        mode="edit"
-        initial={{
-          id: wh.id,
-          branchId: wh.branchId,
-          code: wh.code,
-          name: wh.name,
-          type: wh.type,
-          address: wh.address,
-          isActive: wh.isActive,
-        }}
-        branches={branches.map((b) => ({ id: b.id, name: b.name, code: b.code }))}
-      />
-    </div>
+    <WarehouseDashboard
+      data={stockData}
+      branches={branches}
+      canWrite={canWrite}
+    />
   );
 }

@@ -37,10 +37,12 @@ export function CalculatePayrollForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState(1);
 
+  const firstOpenPeriod = payrollPeriods.find((pp) => pp.status === 'OPEN');
+
   const form = useForm<CalculatePayrollFormValues>({
     resolver: zodResolver(calculatePayrollSchema),
     defaultValues: {
-      payrollPeriodId: payrollPeriods[0]?.id || '',
+      payrollPeriodId: firstOpenPeriod?.id || payrollPeriods[0]?.id || '',
       branchId: branches[0]?.id || '',
     },
   });
@@ -93,8 +95,8 @@ export function CalculatePayrollForm({
                         </FormControl>
                         <SelectContent>
                           {payrollPeriods.map((pp) => (
-                            <SelectItem key={pp.id} value={pp.id}>
-                              {pp.name} ({pp.status})
+                            <SelectItem key={pp.id} value={pp.id} disabled={pp.status !== 'OPEN'}>
+                              {pp.name} {pp.status === 'OPEN' ? '— Open' : `(${pp.status.toLowerCase()})`}
                             </SelectItem>
                           ))}
                         </SelectContent>

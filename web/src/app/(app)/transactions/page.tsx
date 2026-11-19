@@ -1,7 +1,20 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Filter, MoreHorizontal, Plus, X, ImageIcon, Building2, Info } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import {
+  Filter,
+  MoreHorizontal,
+  Plus,
+  X,
+  ImageIcon,
+  Building2,
+  Info,
+  Printer,
+  Eye,
+  Search,
+  CheckCircle2,
+  FileText,
+} from 'lucide-react';
 import {
   getDailyCashFlowAction,
   getDailyCashFlowDetailsAction,
@@ -196,12 +209,16 @@ function fmt(val: string | number | undefined, opts?: { preserveSign?: boolean }
 }
 
 function fmtDate(iso: string): string {
+  if (!iso) return '—';
   const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
 function fmtDateTime(iso: string): string {
+  if (!iso) return '—';
   const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
   const h = String(d.getHours()).padStart(2, '0');
   const m = String(d.getMinutes()).padStart(2, '0');
   return `${fmtDate(iso)} ${h}:${m}`;
@@ -332,6 +349,289 @@ function ErrorBanner({ msg }: { msg: string }) {
   return (
     <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
       {msg}
+    </div>
+  );
+}
+
+// ─── Voucher Print Modals ─────────────────────────────────────────────────────
+
+function CashEntryVoucherModal({
+  entry,
+  type,
+  onClose,
+}: {
+  entry: CashInRow | CashOutRow;
+  type: 'IN' | 'OUT';
+  onClose: () => void;
+}) {
+  const isCashIn = type === 'IN';
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 overflow-y-auto py-8 print:p-0 print:bg-white print:static">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden border border-gray-200 print:shadow-none print:border-none print:max-w-none">
+        {/* Modal Top Actions (Hidden on Print) */}
+        <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-b border-gray-200 print:hidden">
+          <div className="flex items-center gap-2">
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                isCashIn ? 'bg-teal-100 text-teal-800' : 'bg-red-100 text-red-800'
+              }`}
+            >
+              {isCashIn ? 'Cash In Voucher' : 'Cash Out Voucher'}
+            </span>
+            <span className="text-sm font-semibold text-gray-700">#{entry.number}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gray-900 text-white text-xs font-medium hover:bg-gray-800 transition-colors shadow-sm"
+            >
+              <Printer className="h-3.5 w-3.5" /> Print Voucher
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Printable Voucher Paper */}
+        <div className="p-8 space-y-6 text-gray-800">
+          {/* Company & Header */}
+          <div className="text-center border-b pb-4">
+            <h1 className="text-xl font-bold tracking-tight text-gray-900">Annex Leather</h1>
+            <p className="text-xs text-gray-500 mt-0.5">{entry.branchName} · Accounts & Finance</p>
+            <div className="mt-2 inline-block px-3 py-1 bg-gray-100 rounded text-xs font-bold uppercase tracking-wider text-gray-700">
+              {isCashIn ? 'MONEY RECEIPT (CASH IN VOUCHER)' : 'DEBIT VOUCHER (CASH OUT PAYMENT)'}
+            </div>
+          </div>
+
+          {/* Voucher Meta Grid */}
+          <div className="grid grid-cols-2 gap-4 text-xs">
+            <div>
+              <p className="text-gray-500">Voucher No:</p>
+              <p className="font-bold text-sm text-gray-900 tabular-nums">#{entry.number}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-gray-500">Date & Time:</p>
+              <p className="font-semibold text-gray-900">{fmtDateTime(entry.date)}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">{isCashIn ? 'Received From:' : 'Paid To:'}</p>
+              <p className="font-semibold text-sm text-gray-900">
+                {entry.contactName || (isCashIn ? 'Cash Customer' : 'Payee')}
+                {entry.contactType && (
+                  <span className="ml-1 text-[10px] text-gray-500 font-normal">({entry.contactType})</span>
+                )}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-gray-500">{isCashIn ? 'Receive Mode:' : 'Payment Mode:'}</p>
+              <p className="font-semibold text-gray-900">{isCashIn ? (entry as CashInRow).receiveMode : (entry as CashOutRow).payMode}</p>
+            </div>
+            {entry.reference && (
+              <div>
+                <p className="text-gray-500">Reference:</p>
+                <p className="font-medium text-gray-800">{entry.reference}</p>
+              </div>
+            )}
+            {entry.projectName && (
+              <div className="text-right">
+                <p className="text-gray-500">Project / Dept:</p>
+                <p className="font-medium text-gray-800">{entry.projectName}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Particulars Table */}
+          <div className="rounded-md border border-gray-200 overflow-hidden text-xs">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200 text-gray-600">
+                <tr>
+                  <th className="px-4 py-2.5 text-left font-semibold">Particulars / Category</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Amount (BDT)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                <tr>
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-gray-800">{entry.category}</p>
+                    {entry.remarks && (
+                      <p className="text-gray-500 text-[11px] mt-0.5">{entry.remarks}</p>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right font-medium tabular-nums">{fmt(entry.amount)}</td>
+                </tr>
+                {entry.taxAmount && Number(entry.taxAmount) > 0 && (
+                  <tr className="bg-gray-50/50">
+                    <td className="px-4 py-2 text-gray-600">Tax / VAT</td>
+                    <td className="px-4 py-2 text-right font-medium tabular-nums">{fmt(entry.taxAmount)}</td>
+                  </tr>
+                )}
+                <tr className="bg-gray-50 font-bold border-t border-gray-200">
+                  <td className="px-4 py-2.5 text-gray-900">Total Net Amount</td>
+                  <td className="px-4 py-2.5 text-right text-sm text-gray-900 tabular-nums">
+                    {fmt(entry.totalAmount)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Attached Image if any */}
+          {entry.imageUrl && (
+            <div className="rounded border border-gray-100 p-3 bg-gray-50/50 print:hidden">
+              <p className="text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                <ImageIcon className="h-3.5 w-3.5" /> Attached Voucher / Slip:
+              </p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={entry.imageUrl}
+                alt="Voucher receipt"
+                className="max-h-60 rounded border shadow-sm mx-auto"
+              />
+            </div>
+          )}
+
+          {/* Signatures */}
+          <div className="pt-12 grid grid-cols-3 gap-6 text-center text-xs">
+            <div className="border-t border-gray-300 pt-1.5 text-gray-600 font-medium">Prepared By</div>
+            <div className="border-t border-gray-300 pt-1.5 text-gray-600 font-medium">Verified / Checked By</div>
+            <div className="border-t border-gray-300 pt-1.5 text-gray-600 font-medium">
+              {isCashIn ? 'Received By' : 'Authorized Signature'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CashTransferVoucherModal({
+  transfer,
+  onClose,
+}: {
+  transfer: CashTransferRow;
+  onClose: () => void;
+}) {
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 overflow-y-auto py-8 print:p-0 print:bg-white print:static">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden border border-gray-200 print:shadow-none print:border-none print:max-w-none">
+        <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-b border-gray-200 print:hidden">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+              Inter-Branch Transfer
+            </span>
+            <span className="text-sm font-semibold text-gray-700">#{transfer.number}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gray-900 text-white text-xs font-medium hover:bg-gray-800 transition-colors shadow-sm"
+            >
+              <Printer className="h-3.5 w-3.5" /> Print Transfer Slip
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-8 space-y-6 text-gray-800">
+          <div className="text-center border-b pb-4">
+            <h1 className="text-xl font-bold tracking-tight text-gray-900">Annex Leather</h1>
+            <p className="text-xs text-gray-500 mt-0.5">Central Treasury & Cash Operations</p>
+            <div className="mt-2 inline-block px-3 py-1 bg-gray-100 rounded text-xs font-bold uppercase tracking-wider text-gray-700">
+              INTER-BRANCH CASH TRANSFER SLIP
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-xs">
+            <div>
+              <p className="text-gray-500">Transfer Slip No:</p>
+              <p className="font-bold text-sm text-gray-900 tabular-nums">#{transfer.number}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-gray-500">Date & Time:</p>
+              <p className="font-semibold text-gray-900">{fmtDateTime(transfer.transferDate)}</p>
+            </div>
+            <div className="bg-gray-50 p-2.5 rounded border border-gray-100">
+              <p className="text-gray-500">From (Source Branch):</p>
+              <p className="font-bold text-gray-900 text-sm mt-0.5">{transfer.fromBranch}</p>
+            </div>
+            <div className="bg-gray-50 p-2.5 rounded border border-gray-100 text-right">
+              <p className="text-gray-500">To (Destination Branch):</p>
+              <p className="font-bold text-gray-900 text-sm mt-0.5">{transfer.toBranch}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">Transfer Mode / Via:</p>
+              <p className="font-semibold text-gray-900">{transfer.transferVia || 'Cash in Hand'}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-gray-500">Reference:</p>
+              <p className="font-semibold text-gray-900">{transfer.reference || '—'}</p>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-gray-200 overflow-hidden text-xs">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200 text-gray-600">
+                <tr>
+                  <th className="px-4 py-2.5 text-left font-semibold">Transfer Description & Remarks</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Transferred Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-gray-800">{transfer.remarks || 'Branch remittance'}</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5">Status: {transfer.status}</p>
+                  </td>
+                  <td className="px-4 py-3 text-right font-bold text-base text-gray-900 tabular-nums">
+                    {fmt(transfer.amount)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {transfer.imageUrl && (
+            <div className="rounded border border-gray-100 p-3 bg-gray-50/50 print:hidden">
+              <p className="text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                <ImageIcon className="h-3.5 w-3.5" /> Attached Voucher / Deposit Slip:
+              </p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={transfer.imageUrl}
+                alt="Transfer receipt"
+                className="max-h-60 rounded border shadow-sm mx-auto"
+              />
+            </div>
+          )}
+
+          <div className="pt-12 grid grid-cols-3 gap-6 text-center text-xs">
+            <div className="border-t border-gray-300 pt-1.5 text-gray-600 font-medium">Dispatched By (From Branch)</div>
+            <div className="border-t border-gray-300 pt-1.5 text-gray-600 font-medium">Transit Courier / Carrier</div>
+            <div className="border-t border-gray-300 pt-1.5 text-gray-600 font-medium">Received By (To Branch)</div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -503,16 +803,27 @@ function CashFlowPanel({ onOpenCashEntry }: { onOpenCashEntry: (tab: 'cash-in' |
                   {dayDetails ? fmtDate(dayDetails.date) : detailsLoading ? 'Loading day details…' : 'Unable to load details'}
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  setDayDetails(null);
-                  setDetailsError(null);
-                  setDetailsLoading(false);
-                }}
-                className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                {dayDetails && (
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gray-900 text-white text-xs font-medium hover:bg-gray-800 transition-colors shadow-sm print:hidden"
+                  >
+                    <Printer className="h-3.5 w-3.5" /> Print Summary
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setDayDetails(null);
+                    setDetailsError(null);
+                    setDetailsLoading(false);
+                  }}
+                  className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             <div className="p-5 space-y-4">
@@ -587,6 +898,7 @@ function CashTransferPanel() {
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<DailyCashFlowData['summary'] | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [selectedTransferModal, setSelectedTransferModal] = useState<CashTransferRow | null>(null);
   const [branches, setBranches] = useState<BranchOption[]>([]);
 
   // Form state
@@ -803,7 +1115,31 @@ function CashTransferPanel() {
                       {row.status.charAt(0) + row.status.slice(1).toLowerCase()}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-center"><RowActions /></td>
+                  <td className="px-4 py-3 text-center">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTransferModal(row)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded border border-teal-200 transition-colors"
+                        title="View / Print Transfer Slip"
+                      >
+                        <Eye className="h-3 w-3" />
+                        Slip
+                      </button>
+                      <RowActions
+                        items={[
+                          {
+                            label: 'View Transfer Slip',
+                            onSelect: () => setSelectedTransferModal(row),
+                          },
+                          {
+                            label: 'Print Voucher',
+                            onSelect: () => setSelectedTransferModal(row),
+                          },
+                        ]}
+                      />
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -952,6 +1288,14 @@ function CashTransferPanel() {
           </div>
         </div>
       )}
+
+      {/* Transfer Voucher Modal */}
+      {selectedTransferModal && (
+        <CashTransferVoucherModal
+          transfer={selectedTransferModal}
+          onClose={() => setSelectedTransferModal(null)}
+        />
+      )}
     </div>
   );
 }
@@ -980,6 +1324,24 @@ function CashInPanel({ prefillDate }: { prefillDate?: string | null }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [contacts, setContacts] = useState<ContactOption[]>([]);
+  const [viewMode, setViewMode] = useState<'form' | 'table'>('form');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [voucherModalEntry, setVoucherModalEntry] = useState<CashInRow | null>(null);
+
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      const matchSearch =
+        !searchQuery ||
+        r.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.contactName && r.contactName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (r.reference && r.reference.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (r.projectName && r.projectName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (r.remarks && r.remarks.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchCategory = !categoryFilter || r.category === categoryFilter;
+      return matchSearch && matchCategory;
+    });
+  }, [rows, searchQuery, categoryFilter]);
 
   // Form state
   const [date, setDate] = useState(nowDateTimeLocal());
@@ -1145,7 +1507,41 @@ function CashInPanel({ prefillDate }: { prefillDate?: string | null }) {
 
       {error && <ErrorBanner msg={error} />}
 
+      {/* View Toggle Bar */}
+      <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setViewMode('form')}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              viewMode === 'form'
+                ? 'bg-teal-700 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            New Entry &amp; Recent
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('table')}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 ${
+              viewMode === 'table'
+                ? 'bg-teal-700 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <span>All Cash In Entries</span>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+              viewMode === 'table' ? 'bg-teal-800 text-teal-100' : 'bg-gray-200 text-gray-700'
+            }`}>
+              {rows.length}
+            </span>
+          </button>
+        </div>
+      </div>
+
       {/* Split layout: form left, recent transactions right */}
+      {viewMode === 'form' && (
       <div className="flex flex-col gap-5 lg:flex-row">
         {/* ── Left: Add cash in entry form ── */}
         <div className="min-w-0 flex-1">
@@ -1419,11 +1815,132 @@ function CashInPanel({ prefillDate }: { prefillDate?: string | null }) {
                     <span className="text-xs text-gray-800 text-right flex-1">{value}</span>
                   </div>
                 ))}
+                <div className="p-3 bg-gray-50 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setVoucherModalEntry(selectedRow)}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-teal-800 bg-teal-100 hover:bg-teal-200 rounded border border-teal-300 transition-colors shadow-sm"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    Print Money Receipt
+                  </button>
+                </div>
               </div>
             )}
           </div>
         </div>
       </div>
+      )}
+
+      {/* ── Table View ── */}
+      {viewMode === 'table' && (
+        <div className="space-y-3">
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-lg border border-gray-200">
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search voucher, contact, ref..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-8 pl-8 pr-3 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-teal-500"
+              />
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="h-8 border border-gray-200 rounded-md px-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white"
+              >
+                <option value="">All Categories</option>
+                {CASH_IN_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <span className="text-xs text-gray-500 whitespace-nowrap">
+                Showing {filteredRows.length} of {rows.length}
+              </span>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Date &amp; Time</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Voucher #</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Contact</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Category</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Mode</th>
+                    <th className="text-right px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Amount</th>
+                    <th className="text-right px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Tax</th>
+                    <th className="text-right px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Total</th>
+                    <th className="text-center px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {loading && (
+                    <tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-400">Loading…</td></tr>
+                  )}
+                  {!loading && filteredRows.length === 0 && (
+                    <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-gray-400">No cash in records found.</td></tr>
+                  )}
+                  {!loading && filteredRows.map((r) => (
+                    <tr key={r.id} className="hover:bg-gray-50/70 transition-colors">
+                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{fmtDateTime(r.date)}</td>
+                      <td className="px-4 py-3 text-xs font-semibold text-blue-600 whitespace-nowrap">#{r.number}</td>
+                      <td className="px-4 py-3 text-xs text-gray-800 whitespace-nowrap">
+                        {r.contactName ? (
+                          <div className="flex items-center gap-1">
+                            <span>{r.contactName}</span>
+                            {r.contactType && (
+                              <span className="text-[10px] px-1 rounded bg-gray-100 text-gray-500">{r.contactType}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-teal-50 text-teal-700 border border-teal-100">
+                          {r.category}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{r.receiveMode}</td>
+                      <td className="px-4 py-3 text-xs text-right tabular-nums text-gray-600 whitespace-nowrap">{fmt(r.amount)}</td>
+                      <td className="px-4 py-3 text-xs text-right tabular-nums text-gray-500 whitespace-nowrap">{r.taxAmount ? fmt(r.taxAmount) : '—'}</td>
+                      <td className="px-4 py-3 text-xs text-right tabular-nums font-semibold text-emerald-700 whitespace-nowrap">{fmt(r.totalAmount)}</td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => setVoucherModalEntry(r)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded border border-teal-200 transition-colors shadow-sm"
+                          title="Print Money Receipt Voucher"
+                        >
+                          <Printer className="h-3 w-3" />
+                          Receipt
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Voucher Modal */}
+      {voucherModalEntry && (
+        <CashEntryVoucherModal
+          entry={voucherModalEntry}
+          type="IN"
+          onClose={() => setVoucherModalEntry(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1476,6 +1993,24 @@ function CashOutPanel({ prefillDate }: { prefillDate?: string | null }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [contacts, setContacts] = useState<ContactOption[]>([]);
+  const [viewMode, setViewMode] = useState<'form' | 'table'>('form');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [voucherModalEntry, setVoucherModalEntry] = useState<CashOutRow | null>(null);
+
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      const matchSearch =
+        !searchQuery ||
+        r.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.contactName && r.contactName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (r.reference && r.reference.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (r.projectName && r.projectName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (r.remarks && r.remarks.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchCategory = !categoryFilter || r.category === categoryFilter;
+      return matchSearch && matchCategory;
+    });
+  }, [rows, searchQuery, categoryFilter]);
 
   // Form state
   const [date, setDate] = useState(nowDateTimeLocal());
@@ -1643,7 +2178,41 @@ function CashOutPanel({ prefillDate }: { prefillDate?: string | null }) {
 
       {error && <ErrorBanner msg={error} />}
 
+      {/* View Toggle Bar */}
+      <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setViewMode('form')}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              viewMode === 'form'
+                ? 'bg-teal-700 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            New Entry &amp; Recent
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('table')}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 ${
+              viewMode === 'table'
+                ? 'bg-red-700 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <span>All Cash Out Entries</span>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+              viewMode === 'table' ? 'bg-red-800 text-red-100' : 'bg-gray-200 text-gray-700'
+            }`}>
+              {rows.length}
+            </span>
+          </button>
+        </div>
+      </div>
+
       {/* Split layout: form left, recent transactions right */}
+      {viewMode === 'form' && (
       <div className="flex flex-col gap-5 lg:flex-row">
         {/* ── Left: Add cash out entry form ── */}
         <div className="min-w-0 flex-1">
@@ -1912,11 +2481,132 @@ function CashOutPanel({ prefillDate }: { prefillDate?: string | null }) {
                     <span className="text-xs text-gray-800 text-right flex-1">{value}</span>
                   </div>
                 ))}
+                <div className="p-3 bg-gray-50 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setVoucherModalEntry(selectedRow)}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-red-800 bg-red-100 hover:bg-red-200 rounded border border-red-300 transition-colors shadow-sm"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    Print Debit Voucher
+                  </button>
+                </div>
               </div>
             )}
           </div>
         </div>
       </div>
+      )}
+
+      {/* ── Table View ── */}
+      {viewMode === 'table' && (
+        <div className="space-y-3">
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-lg border border-gray-200">
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search voucher, payee, ref..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-8 pl-8 pr-3 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-red-500"
+              />
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="h-8 border border-gray-200 rounded-md px-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-red-500 bg-white"
+              >
+                <option value="">All Categories</option>
+                {CASH_OUT_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <span className="text-xs text-gray-500 whitespace-nowrap">
+                Showing {filteredRows.length} of {rows.length}
+              </span>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Date &amp; Time</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Voucher #</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Paid To / Supplier</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Category</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Mode</th>
+                    <th className="text-right px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Amount</th>
+                    <th className="text-right px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Tax</th>
+                    <th className="text-right px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Total</th>
+                    <th className="text-center px-4 py-3 font-semibold text-gray-500 uppercase text-xs tracking-wide">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {loading && (
+                    <tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-400">Loading…</td></tr>
+                  )}
+                  {!loading && filteredRows.length === 0 && (
+                    <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-gray-400">No cash out records found.</td></tr>
+                  )}
+                  {!loading && filteredRows.map((r) => (
+                    <tr key={r.id} className="hover:bg-gray-50/70 transition-colors">
+                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{fmtDateTime(r.date)}</td>
+                      <td className="px-4 py-3 text-xs font-semibold text-blue-600 whitespace-nowrap">#{r.number}</td>
+                      <td className="px-4 py-3 text-xs text-gray-800 whitespace-nowrap">
+                        {r.contactName ? (
+                          <div className="flex items-center gap-1">
+                            <span>{r.contactName}</span>
+                            {r.contactType && (
+                              <span className="text-[10px] px-1 rounded bg-gray-100 text-gray-500">{r.contactType}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-red-50 text-red-700 border border-red-100">
+                          {r.category}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{r.payMode}</td>
+                      <td className="px-4 py-3 text-xs text-right tabular-nums text-gray-600 whitespace-nowrap">{fmt(r.amount)}</td>
+                      <td className="px-4 py-3 text-xs text-right tabular-nums text-gray-500 whitespace-nowrap">{r.taxAmount ? fmt(r.taxAmount) : '—'}</td>
+                      <td className="px-4 py-3 text-xs text-right tabular-nums font-semibold text-red-700 whitespace-nowrap">{fmt(r.totalAmount)}</td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => setVoucherModalEntry(r)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded border border-red-200 transition-colors shadow-sm"
+                          title="Print Debit Voucher"
+                        >
+                          <Printer className="h-3 w-3" />
+                          Voucher
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Voucher Modal */}
+      {voucherModalEntry && (
+        <CashEntryVoucherModal
+          entry={voucherModalEntry}
+          type="OUT"
+          onClose={() => setVoucherModalEntry(null)}
+        />
+      )}
     </div>
   );
 }

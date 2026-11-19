@@ -21,6 +21,7 @@ interface Order {
   unit: string;
   product: { id: string; name: string; sku: string };
   stages: Stage[];
+  isCompleted?: boolean;
 }
 
 interface Warehouse {
@@ -41,6 +42,7 @@ interface Voucher {
   id: string;
   receiveNo: string;
   date: string;
+  createdAt?: string;
   order: { id: string; number: string; product: { name: string; sku: string } };
   warehouse: { id: string; name: string };
   items: VoucherItem[];
@@ -49,9 +51,17 @@ interface Voucher {
 export default async function FinishedGoodsReceivePage() {
   const { orders, warehouses, vouchers } = await backendFetch<{
     orders: Order[];
+    allOrders?: Order[];
     warehouses: Warehouse[];
     vouchers: Voucher[];
-  }>('/api/mobile/factory/finished-goods-receive');
+  }>('/api/mobile/factory/finished-goods-receive?includeCompleted=true');
+
+  const sortedVouchers = [...vouchers].sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : new Date(a.date).getTime();
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : new Date(b.date).getTime();
+    if (timeA !== timeB) return timeB - timeA;
+    return b.receiveNo.localeCompare(a.receiveNo, undefined, { numeric: true });
+  });
 
   return (
     <div className="space-y-6">
@@ -66,6 +76,7 @@ export default async function FinishedGoodsReceivePage() {
           label: `${order.number} — ${order.product.name} (${order.product.sku})`,
           productId: order.productId,
           unit: order.unit as (typeof UNITS)[number],
+          isCompleted: Boolean(order.isCompleted),
           stages: order.stages.map((stage) => ({
             id: stage.id,
             label: `${stage.sequence}. ${stage.name}`,
@@ -91,7 +102,7 @@ export default async function FinishedGoodsReceivePage() {
               </tr>
             </thead>
             <tbody>
-              {vouchers.map((voucher) => (
+              {sortedVouchers.map((voucher) => (
                 <tr key={voucher.id} className="border-t align-top">
                   <td className="px-4 py-3 font-medium">{voucher.receiveNo}</td>
                   <td className="px-4 py-3">
@@ -111,7 +122,7 @@ export default async function FinishedGoodsReceivePage() {
                   </td>
                 </tr>
               ))}
-              {vouchers.length === 0 ? (
+              {sortedVouchers.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                     No finished goods receive vouchers yet.

@@ -38,7 +38,7 @@ async function inventoryBalanceFor(
   return balance;
 }
 
-async function nextVoucherNumber(prefix: string, model: 'productionIssueVoucher' | 'finishedGoodsReceiveVoucher') {
+export async function nextVoucherNumber(prefix: string, model: 'productionIssueVoucher' | 'finishedGoodsReceiveVoucher') {
   const year = new Date().getFullYear();
   const where = {
     createdAt: {
@@ -64,7 +64,7 @@ export const factoryWorkflowService = {
     await authorize(session, 'factory:read');
     return prisma.productionIssueVoucher.findMany({
       where: { branchId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { voucherNo: 'desc' }],
       include: {
         order: { select: { id: true, number: true, product: { select: { name: true, sku: true } } } },
         warehouse: { select: { id: true, name: true, code: true } },
@@ -90,6 +90,9 @@ export const factoryWorkflowService = {
       },
     });
     if (!order) throw new NotFoundError('Production order not found');
+    if (order.status === 'COMPLETED' || order.status === 'CANCELLED') {
+      throw new ValidationError(`Cannot create an issue voucher for a ${order.status.toLowerCase()} order`);
+    }
 
     const warehouse = await prisma.warehouse.findUnique({ where: { id: input.warehouseId } });
     if (!warehouse || warehouse.branchId !== order.branchId) {
@@ -151,17 +154,22 @@ export const factoryWorkflowService = {
     const actor = await authorize(session, 'factory:execute');
     const voucher = await prisma.productionIssueVoucher.findUnique({
       where: { id: input.voucherId },
-      include: { items: true, order: true },
+      include: {
+        items: { include: { product: true } },
+        order: { include: { materials: true, branch: true } },
+      },
     });
     if (!voucher) throw new NotFoundError('Production issue voucher not found');
 
     return prisma.$transaction(async (tx) => {
       let updated;
       if (input.status === 'ISSUED') {
-        if (!['APPROVED', 'REQUESTED'].includes(voucher.status)) {
+        if (!['APPROVED', 'REQUESTED', 'DRAFT'].includes(voucher.status)) {
           throw new ValidationError('Only approved/requested issue vouchers can be marked as issued');
         }
         await assertOpenPeriod(tx, voucher.branchId);
+
+        let totalIssuedValue = D(0);
 
         for (const item of voucher.items) {
           await tx.inventoryLedger.create({
@@ -171,6 +179,7 @@ export const factoryWorkflowService = {
               productId: item.productId,
               direction: 'OUT',
               quantity: item.issuedQty,
+              costPerUnit: item.product.costPrice ?? D(0),
               refType: 'PRODUCTION_ISSUE',
               refId: voucher.id,
               note: `Production issue ${voucher.voucherNo}`,
@@ -187,8 +196,93 @@ export const factoryWorkflowService = {
               voucher: voucher.voucherNo,
               inQty: item.issuedQty,
               balance: item.issuedQty,
+              cost: item.issuedQty.times(item.product.costPrice ?? D(0)),
               operatorId: null,
             },
+          });
+
+          // Sync with order's ProductionMaterial line so single page shows consumed quantities!
+          const existingMaterial = voucher.order.materials.find((m) => m.productId === item.productId);
+          if (existingMaterial) {
+            await tx.productionMaterial.update({
+              where: { id: existingMaterial.id },
+              data: {
+                consumedQty: { increment: item.issuedQty },
+                fromWarehouseId: voucher.warehouseId,
+              },
+            });
+          } else {
+            await tx.productionMaterial.create({
+              data: {
+                orderId: voucher.orderId,
+                productId: item.productId,
+                plannedQty: item.issuedQty,
+                consumedQty: item.issuedQty,
+                unit: item.uom,
+                fromWarehouseId: voucher.warehouseId,
+                note: `Issued via ${voucher.voucherNo}`,
+              },
+            });
+          }
+
+          const lineCost = item.issuedQty.times(item.product.costPrice ?? D(0));
+          totalIssuedValue = totalIssuedValue.plus(lineCost);
+        }
+
+        // Advance order status to IN_PROGRESS if currently PLANNED
+        if (voucher.order.status === 'PLANNED') {
+          await tx.productionOrder.update({
+            where: { id: voucher.orderId },
+            data: {
+              status: 'IN_PROGRESS',
+              actualStartDate: voucher.order.actualStartDate ?? new Date(),
+            },
+          });
+        }
+
+        // Advance first stage to IN_PROGRESS if PENDING
+        const firstStage = await tx.productionStage.findFirst({
+          where: { orderId: voucher.orderId, sequence: 1 },
+        });
+        if (firstStage && firstStage.status === 'PENDING') {
+          await tx.productionStage.update({
+            where: { id: firstStage.id },
+            data: { status: 'IN_PROGRESS', startedAt: new Date() },
+          });
+        }
+
+        // Post accounting GL journal: Debit WIP, Credit INVENTORY_RAW_MATERIAL
+        if (totalIssuedValue.gt(0)) {
+          const wipAccountId = await accountsService.resolveSystemAccount(tx, 'WIP', voucher.branchId);
+          const inventoryAccountId = await accountsService.resolveSystemAccount(
+            tx,
+            'INVENTORY_RAW_MATERIAL',
+            voucher.branchId,
+          );
+          await accountsService.postSystemJournal(tx, {
+            branchId: voucher.branchId,
+            date: voucher.date,
+            memo: `Production issue ${voucher.voucherNo} for ${voucher.order.number}`,
+            sourceModule: 'factory',
+            sourceRefType: 'ProductionIssueVoucher',
+            sourceRefId: voucher.id,
+            actorUserId: actor.userId,
+            lines: [
+              {
+                accountId: wipAccountId,
+                debit: totalIssuedValue.toNumber(),
+                credit: 0,
+                currency: voucher.order.branch.currency,
+                fxRate: 1,
+              },
+              {
+                accountId: inventoryAccountId,
+                debit: 0,
+                credit: totalIssuedValue.toNumber(),
+                currency: voucher.order.branch.currency,
+                fxRate: 1,
+              },
+            ],
           });
         }
       }
@@ -222,7 +316,7 @@ export const factoryWorkflowService = {
     await authorize(session, 'factory:read');
     return prisma.processTracking.findMany({
       where: { branchId },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { updatedAt: 'desc' }, { trackingNo: 'desc' }],
       include: {
         order: { select: { id: true, number: true } },
         product: { select: { id: true, name: true, sku: true } },
@@ -313,6 +407,43 @@ export const factoryWorkflowService = {
         }
       }
 
+      if (order.status === 'PLANNED') {
+        await tx.productionOrder.update({
+          where: { id: order.id },
+          data: { status: 'IN_PROGRESS', actualStartDate: order.actualStartDate ?? new Date() },
+        });
+      }
+
+      // Update ProductionOrder.producedQty and check if order is completed!
+      const totalPassed = voucher.items
+        .filter((it) => it.qualityStatus === 'PASSED')
+        .reduce((sum, it) => sum.plus(it.quantity), D(0));
+
+      if (totalPassed.gt(0)) {
+        const updatedOrder = await tx.productionOrder.update({
+          where: { id: order.id },
+          data: {
+            producedQty: { increment: totalPassed },
+            actualStartDate: order.actualStartDate ?? new Date(),
+          },
+        });
+
+        const isCompleted = updatedOrder.producedQty.gte(updatedOrder.plannedQty);
+        if (isCompleted) {
+          await tx.productionOrder.update({
+            where: { id: order.id },
+            data: {
+              status: 'COMPLETED',
+              actualEndDate: new Date(),
+            },
+          });
+          await tx.productionStage.updateMany({
+            where: { orderId: order.id, status: { in: ['PENDING', 'IN_PROGRESS'] } },
+            data: { status: 'COMPLETED', completedAt: new Date() },
+          });
+        }
+      }
+
       await recordAudit({
         actorId: actor.userId,
         branchId: order.branchId,
@@ -334,7 +465,7 @@ export const factoryWorkflowService = {
         branchId,
         voucher: { startsWith: 'PRCV-' },
       },
-      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [{ createdAt: 'desc' }, { date: 'desc' }, { id: 'desc' }],
       include: {
         order: { select: { id: true, number: true } },
         product: { select: { id: true, name: true, sku: true } },
@@ -417,6 +548,13 @@ export const factoryWorkflowService = {
         data: { status: 'IN_PROGRESS', startedAt: new Date() },
       });
 
+      if (order.status === 'PLANNED') {
+        await tx.productionOrder.update({
+          where: { id: order.id },
+          data: { status: 'IN_PROGRESS', actualStartDate: order.actualStartDate ?? new Date() },
+        });
+      }
+
       await recordAudit({
         actorId: actor.userId,
         branchId: order.branchId,
@@ -441,7 +579,7 @@ export const factoryWorkflowService = {
     await authorize(session, 'factory:read');
     return prisma.finishedGoodsReceiveVoucher.findMany({
       where: { branchId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { receiveNo: 'desc' }],
       include: {
         order: { select: { id: true, number: true, product: { select: { name: true, sku: true } } } },
         warehouse: { select: { id: true, name: true, code: true } },
@@ -534,6 +672,20 @@ export const factoryWorkflowService = {
             },
           });
           receivedValue = receivedValue.plus(item.quantity.times(receiveCostPerUnit));
+
+          // Also create ProductionOutput record so single-page outputs table displays this!
+          await tx.productionOutput.create({
+            data: {
+              orderId: order.id,
+              productId: item.productId,
+              unit: order.unit,
+              quantity: item.quantity,
+              costPerUnit: receiveCostPerUnit,
+              toWarehouseId: input.warehouseId,
+              note: input.remarks || `Finished goods receive ${voucher.receiveNo}`,
+              createdById: actor.userId,
+            },
+          });
         }
 
         await tx.wipLedger.create({
@@ -583,6 +735,36 @@ export const factoryWorkflowService = {
             },
           ],
         });
+      }
+
+      // Update ProductionOrder.producedQty and check if order is completed!
+      const totalPassed = voucher.items
+        .filter((it) => it.qualityStatus === 'PASSED')
+        .reduce((sum, it) => sum.plus(it.quantity), D(0));
+
+      if (totalPassed.gt(0)) {
+        const updatedOrder = await tx.productionOrder.update({
+          where: { id: order.id },
+          data: {
+            producedQty: { increment: totalPassed },
+            actualStartDate: order.actualStartDate ?? new Date(),
+          },
+        });
+
+        const isCompleted = updatedOrder.producedQty.gte(updatedOrder.plannedQty);
+        if (isCompleted) {
+          await tx.productionOrder.update({
+            where: { id: order.id },
+            data: {
+              status: 'COMPLETED',
+              actualEndDate: new Date(),
+            },
+          });
+          await tx.productionStage.updateMany({
+            where: { orderId: order.id, status: { in: ['PENDING', 'IN_PROGRESS'] } },
+            data: { status: 'COMPLETED', completedAt: new Date() },
+          });
+        }
       }
 
       await recordAudit({

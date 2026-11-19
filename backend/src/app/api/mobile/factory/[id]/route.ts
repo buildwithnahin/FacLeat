@@ -27,6 +27,16 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       select: { id: true, code: true, name: true },
     });
 
+    const products = await prisma.product.findMany({
+      where: {
+        isActive: true,
+        ...(session.companyId ? { companyId: session.companyId } : {}),
+        type: { in: ['RAW_MATERIAL', 'CONSUMABLE', 'WORK_IN_PROGRESS', 'FINISHED_GOOD'] },
+      },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, sku: true, unit: true, costPrice: true, type: true },
+    });
+
     const costSummary = getCostSummary({
       outputs: order.outputs,
       materials: order.materials,
@@ -36,7 +46,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       plannedQty: order.plannedQty,
     });
 
-    return Response.json(apiOk({ order, warehouses, costSummary }));
+    return Response.json(apiOk({ order, warehouses, products, costSummary }));
   } catch (err) {
     if (err instanceof ApiError) return Response.json(apiError(err), { status: err.status });
     console.error(`GET /api/mobile/factory/${id} failed`, err);

@@ -32,6 +32,7 @@ interface Order {
   notes: string | null;
   product: { id: string; name: string; sku: string };
   materials: Material[];
+  isIssueCompleted?: boolean;
 }
 
 interface Warehouse {
@@ -53,6 +54,7 @@ interface Issue {
   voucherNo: string;
   status: string;
   date: string;
+  createdAt?: string;
   order: { id: string; number: string; product: { name: string; sku: string } };
   warehouse: { id: string; name: string };
   items: IssueItem[];
@@ -61,9 +63,17 @@ interface Issue {
 export default async function ProductionIssuePage() {
   const { orders, warehouses, issues } = await backendFetch<{
     orders: Order[];
+    allOrders?: Order[];
     warehouses: Warehouse[];
     issues: Issue[];
-  }>('/api/mobile/factory/production-issue');
+  }>('/api/mobile/factory/production-issue?includeCompleted=true');
+
+  const sortedIssues = [...issues].sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : new Date(a.date).getTime();
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : new Date(b.date).getTime();
+    if (timeA !== timeB) return timeB - timeA;
+    return b.voucherNo.localeCompare(a.voucherNo, undefined, { numeric: true });
+  });
 
   return (
     <div className="space-y-6">
@@ -78,6 +88,7 @@ export default async function ProductionIssuePage() {
           number: order.number,
           productLabel: `${order.product.name} (${order.product.sku})`,
           department: order.notes || '-',
+          isIssueCompleted: Boolean(order.isIssueCompleted),
           materials: order.materials.map((material) => ({
             productId: material.productId,
             label: `${material.product.name} (${material.product.sku})`,
@@ -108,7 +119,7 @@ export default async function ProductionIssuePage() {
               </tr>
             </thead>
             <tbody>
-              {issues.map((issue) => (
+              {sortedIssues.map((issue) => (
                 <tr key={issue.id} className="border-t align-top">
                   <td className="px-4 py-3 font-medium">{issue.voucherNo}</td>
                   <td className="px-4 py-3">
@@ -154,7 +165,7 @@ export default async function ProductionIssuePage() {
                   </td>
                 </tr>
               ))}
-              {issues.length === 0 ? (
+              {sortedIssues.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                     No production issue vouchers yet.

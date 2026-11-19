@@ -9,10 +9,12 @@ export const dynamic = 'force-dynamic';
 
 export const metadata = { title: 'Stock transfer' };
 
-interface ShowroomWarehouse {
+interface WarehouseRecord {
   id: string;
   name: string;
   code: string;
+  type?: string;
+  isActive: boolean;
   branchId: string;
   branch: { name: string; code: string };
 }
@@ -32,19 +34,19 @@ export default async function TransferPage() {
   const session = await getSession();
   const branchId = session?.activeBranchId || session?.defaultBranchId || session?.allowedBranchIds?.[0];
 
-  const [warehouses, products] = await Promise.all([
-    backendFetch<ShowroomWarehouse[]>('/api/mobile/warehouse/warehouses?showrooms=true'),
+  const [allWarehouses, products] = await Promise.all([
+    backendFetch<WarehouseRecord[]>('/api/mobile/warehouse/warehouses'),
     backendFetch<ProductOption[]>('/api/mobile/inventory/products?activeOnly=true'),
   ]);
 
-  const uniqueBranchCount = new Set(warehouses.map((warehouse) => warehouse.branchId)).size;
+  const warehouses = allWarehouses.filter((w) => w.isActive);
 
-  if (warehouses.length < 2 || uniqueBranchCount < 2) {
+  if (warehouses.length < 2) {
     return (
       <div>
         <PageHeader title="Stock transfer" />
         <Card className="p-6 text-sm text-muted-foreground">
-          You need active showroom warehouses in at least two different branches to transfer stock.
+          You need at least two active warehouses to perform a stock transfer.
         </Card>
       </div>
     );
@@ -54,17 +56,17 @@ export default async function TransferPage() {
     <div>
       <PageHeader
         title="Stock transfer"
-        description="Move stock between showroom warehouses in different branches."
+        description="Move stock between warehouses within the same branch or across branches."
       />
       <StockMovementForm
         mode="transfer"
         branchId={branchId ?? warehouses[0]!.branchId}
         warehouses={warehouses.map((w) => ({
           id: w.id,
-          name: w.name,
+          name: w.type ? `${w.name} [${w.type}]` : w.name,
           code: w.code,
-          branchName: w.branch.name,
-          branchCode: w.branch.code,
+          branchName: w.branch?.name,
+          branchCode: w.branch?.code,
         }))}
         products={products.map((p) => ({
           id: p.id,
@@ -78,7 +80,7 @@ export default async function TransferPage() {
         }))}
         action={postTransferAction}
         submitLabel="Post transfer"
-        showCost={false}
+        showCost={true}
         cancelHref="/warehouse"
       />
     </div>

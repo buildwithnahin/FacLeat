@@ -46,15 +46,45 @@ async function getBalances(
   }));
 }
 
-async function requireWarehouseByType(branchId: string, type: WarehouseType) {
-  const warehouse = await prisma.warehouse.findFirst({
+export async function requireWarehouseByType(branchId: string, type: WarehouseType) {
+  let warehouse = await prisma.warehouse.findFirst({
     where: { branchId, type, isActive: true },
     orderBy: { createdAt: 'asc' },
   });
   if (!warehouse) {
-    throw new ValidationError(
-      `This branch needs an active ${type.toLowerCase()} warehouse for this workflow`,
-    );
+    const inactive = await prisma.warehouse.findFirst({
+      where: { branchId, type },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (inactive) {
+      warehouse = await prisma.warehouse.update({
+        where: { id: inactive.id },
+        data: { isActive: true },
+      });
+    } else {
+      const codeBase = type === 'QUARANTINE' ? 'QRT' : type === 'DAMAGED' ? 'DMG' : type === 'WIP' ? 'WIP' : type.slice(0, 4);
+      const existingWithCode = await prisma.warehouse.findUnique({
+        where: { branchId_code: { branchId, code: codeBase } },
+      });
+      const code = existingWithCode ? `${codeBase}-${Date.now().toString().slice(-4)}` : codeBase;
+      const typeNames: Record<WarehouseType, string> = {
+        QUARANTINE: 'Quarantine / Inspection',
+        DAMAGED: 'Damaged Goods Warehouse',
+        WIP: 'Work In Progress (WIP)',
+        MAIN: 'Main Warehouse',
+        STORE: 'Store Warehouse',
+        SHOWROOM: 'Showroom Store',
+      };
+      warehouse = await prisma.warehouse.create({
+        data: {
+          branchId,
+          code,
+          name: typeNames[type] || `${type} Warehouse`,
+          type,
+          isActive: true,
+        },
+      });
+    }
   }
   return warehouse;
 }

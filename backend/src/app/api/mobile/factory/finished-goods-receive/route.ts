@@ -15,14 +15,18 @@ export async function GET(req: NextRequest) {
   try {
     await authorize(session, 'factory:read');
     const branchId = session.activeBranchId ?? undefined;
+    const includeCompleted = req.nextUrl.searchParams.get('includeCompleted') === 'true';
 
     const [orders, warehouses, vouchers] = await Promise.all([
       prisma.productionOrder.findMany({
         where: { branchId: branchId || undefined, status: { in: ['IN_PROGRESS', 'COMPLETED'] } },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { number: 'desc' }, { id: 'desc' }],
         include: {
           product: { select: { id: true, name: true, sku: true } },
           stages: { orderBy: { sequence: 'asc' } },
+          finishedGoodsReceiveVouchers: {
+            include: { items: true },
+          },
         },
       }),
       prisma.warehouse.findMany({
@@ -37,7 +41,35 @@ export async function GET(req: NextRequest) {
       factoryWorkflowService.listFinishedGoodsReceives(session, branchId),
     ]);
 
-    return Response.json(apiOk({ orders, warehouses, vouchers }));
+    const mappedOrders = orders.map((order) => {
+      const totalReceived = order.finishedGoodsReceiveVouchers.reduce(
+        (acc, v) => acc + v.items.reduce((sum, it) => sum + Number(it.quantity || 0), 0),
+        0,
+      );
+      const isReceivedFull = totalReceived >= Number(order.plannedQty);
+      const isProducedFull = Number(order.producedQty) >= Number(order.plannedQty);
+
+      const isCompleted = order.status === 'COMPLETED' || isReceivedFull || isProducedFull;
+
+      return {
+        ...order,
+        isCompleted,
+        totalReceived,
+      };
+    });
+
+    const returnedOrders = includeCompleted
+      ? mappedOrders
+      : mappedOrders.filter((o) => !o.isCompleted);
+
+    return Response.json(
+      apiOk({
+        orders: returnedOrders,
+        allOrders: mappedOrders,
+        warehouses,
+        vouchers,
+      }),
+    );
   } catch (err) {
     if (err instanceof ApiError) return Response.json(apiError(err), { status: err.status });
     console.error('GET /api/mobile/factory/finished-goods-receive failed', err);

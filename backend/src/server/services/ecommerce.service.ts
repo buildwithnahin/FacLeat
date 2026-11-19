@@ -132,12 +132,78 @@ export const ecommerceService = {
     return { open, packed, shipped, returns, unreconciled };
   },
 
-  async listChannels(session: AppSession | null, branchId?: string) {
+  async listChannels(session: AppSession | null, branchId?: string, activeOnly = false) {
     await authorize(session, 'ecommerce:read');
     return prisma.ecommerceChannel.findMany({
-      where: { branchId, isActive: true },
+      where: {
+        ...(branchId ? { branchId } : {}),
+        ...(activeOnly ? { isActive: true } : {}),
+      },
       orderBy: { name: 'asc' },
     });
+  },
+
+  async createChannel(
+    session: AppSession | null,
+    input: {
+      branchId: string;
+      code: string;
+      name: string;
+      type?: 'SHOPIFY' | 'WOOCOMMERCE' | 'FACEBOOK' | 'DARAZ' | 'MANUAL' | 'OTHER';
+      storeUrl?: string;
+    },
+  ) {
+    const actor = await authorize(session, 'ecommerce:sync');
+    const existing = await prisma.ecommerceChannel.findUnique({
+      where: { branchId_code: { branchId: input.branchId, code: input.code } },
+    });
+    if (existing) throw new ValidationError('Channel code already exists in this branch');
+
+    const channel = await prisma.ecommerceChannel.create({
+      data: {
+        branchId: input.branchId,
+        code: input.code,
+        name: input.name,
+        type: input.type ?? 'MANUAL',
+        storeUrl: input.storeUrl || null,
+        isActive: true,
+      },
+    });
+
+    await recordAudit({
+      actorId: actor.userId,
+      branchId: input.branchId,
+      module: 'ecommerce',
+      action: 'create-channel',
+      entityType: 'EcommerceChannel',
+      entityId: channel.id,
+      after: { code: channel.code, name: channel.name },
+    });
+
+    return channel;
+  },
+
+  async toggleChannelActive(session: AppSession | null, channelId: string) {
+    const actor = await authorize(session, 'ecommerce:sync');
+    const channel = await prisma.ecommerceChannel.findUnique({ where: { id: channelId } });
+    if (!channel) throw new NotFoundError('Channel not found');
+
+    const updated = await prisma.ecommerceChannel.update({
+      where: { id: channelId },
+      data: { isActive: !channel.isActive },
+    });
+
+    await recordAudit({
+      actorId: actor.userId,
+      branchId: channel.branchId,
+      module: 'ecommerce',
+      action: 'toggle-channel',
+      entityType: 'EcommerceChannel',
+      entityId: channel.id,
+      after: { isActive: updated.isActive },
+    });
+
+    return updated;
   },
 
   async listReconciliationRuns(session: AppSession | null, branchId?: string) {
@@ -152,14 +218,29 @@ export const ecommerceService = {
 
   async listOrders(
     session: AppSession | null,
-    filters: { branchId?: string; status?: string; search?: string } = {},
+    filters: {
+      branchId?: string;
+      channelId?: string;
+      status?: string;
+      search?: string;
+      from?: string;
+      to?: string;
+    } = {},
   ) {
     await authorize(session, 'ecommerce:read');
     const branchIds = await getScopedBranchIds(session, filters.branchId);
     return prisma.ecommerceOrder.findMany({
       where: {
         ...(branchIds ? { branchId: { in: branchIds } } : {}),
+        channelId: filters.channelId || undefined,
         status: filters.status as Prisma.EcommerceOrderWhereInput['status'],
+        orderDate:
+          filters.from || filters.to
+            ? {
+                gte: filters.from ? new Date(filters.from) : undefined,
+                lte: filters.to ? new Date(new Date(filters.to).setHours(23, 59, 59, 999)) : undefined,
+              }
+            : undefined,
         OR: filters.search
           ? [
               { number: { contains: filters.search } },

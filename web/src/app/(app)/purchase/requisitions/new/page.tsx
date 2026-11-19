@@ -9,7 +9,7 @@ export const metadata = { title: 'New Purchase Requisition' };
 
 interface PurchaseLookups {
   branches: { id: string; name: string; code: string; currency: string }[];
-  products: { id: string; sku: string; name: string; unit: string }[];
+  products: { id: string; sku: string; name: string; unit: string; costPrice?: string }[];
 }
 
 export default async function NewRequisitionPage() {
@@ -34,6 +34,7 @@ export default async function NewRequisitionPage() {
           sku: product.sku,
           name: product.name,
           unit: product.unit,
+          costPrice: product.costPrice,
         }))}
       />
     </div>

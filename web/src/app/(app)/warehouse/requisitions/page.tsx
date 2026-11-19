@@ -41,17 +41,19 @@ interface RequisitionRow {
 export default async function StockRequisitionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; direction?: string }>;
 }) {
   const session = await getSession();
   const branchId = session?.activeBranchId || session?.defaultBranchId || session?.allowedBranchIds?.[0];
   const params = await searchParams;
   const status = params.status && params.status !== 'ALL' ? params.status : undefined;
+  const direction = params.direction && params.direction !== 'ALL' ? params.direction : undefined;
   const query = (params.q ?? '').trim().toLowerCase();
 
   const qs = new URLSearchParams();
-  if (branchId) qs.set('destinationBranchId', branchId);
+  if (branchId) qs.set('branchId', branchId);
   if (status) qs.set('status', status);
+  if (direction) qs.set('direction', direction);
 
   const rawRows = await backendFetch<RequisitionRow[]>(`/api/mobile/warehouse/requisitions?${qs.toString()}`);
 
@@ -73,12 +75,20 @@ export default async function StockRequisitionPage({
         title="Showroom Requisitions"
         description="Track showroom requests through approval, warehouse assignment, in-transit movement, and receipt."
       >
-        <Button variant="dark" asChild>
-          <Link href="/warehouse/requisitions/new">
-            <Plus className="h-4 w-4" />
-            New requisition
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/warehouse/requisitions/dispatch">Dispatch Queue</Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/warehouse/requisitions/receive">Receive Queue</Link>
+          </Button>
+          <Button variant="dark" asChild>
+            <Link href="/warehouse/requisitions/new">
+              <Plus className="h-4 w-4" />
+              New requisition
+            </Link>
+          </Button>
+        </div>
       </PageHeader>
 
       <Card className="p-4">
@@ -93,9 +103,18 @@ export default async function StockRequisitionPage({
             />
           </div>
           <select
+            name="direction"
+            defaultValue={params.direction ?? 'ALL'}
+            className="flex h-9 w-44 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+          >
+            <option value="ALL">All Requisitions</option>
+            <option value="INCOMING">My Showroom Requests</option>
+            <option value="OUTGOING">Warehouse Fulfillments</option>
+          </select>
+          <select
             name="status"
             defaultValue={params.status ?? 'ALL'}
-            className="flex h-9 w-48 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            className="flex h-9 w-44 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
           >
             <option value="ALL">All statuses</option>
             {Object.keys(STATUS_TONE).map((value) => (

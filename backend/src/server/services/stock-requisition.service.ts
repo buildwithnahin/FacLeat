@@ -120,29 +120,59 @@ export const stockRequisitionService = {
       status?: StockRequisitionStatus;
       sourceBranchId?: string;
       destinationBranchId?: string;
+      direction?: 'ALL' | 'INCOMING' | 'OUTGOING';
+      allBranches?: boolean;
     } = {},
   ) {
-    await authorize(session, 'warehouse:transfer', { branchId: filters.branchId ?? filters.destinationBranchId });
+    await authorize(session, 'warehouse:transfer');
+
+    const where: Prisma.StockRequisitionWhereInput = {};
+    if (filters.status) where.status = filters.status;
+
+    if (filters.destinationBranchId) {
+      where.branchId = filters.destinationBranchId;
+    }
+
+    if (filters.sourceBranchId) {
+      where.sourceWarehouse = { branchId: filters.sourceBranchId };
+    }
+
+    if (filters.branchId && !filters.destinationBranchId && !filters.sourceBranchId && !filters.allBranches) {
+      if (filters.direction === 'INCOMING') {
+        where.branchId = filters.branchId;
+      } else if (filters.direction === 'OUTGOING') {
+        where.sourceWarehouse = { branchId: filters.branchId };
+      } else {
+        where.OR = [
+          { branchId: filters.branchId },
+          { sourceWarehouse: { branchId: filters.branchId } },
+          { transfers: { some: { fromBranchId: filters.branchId } } },
+          { transfers: { some: { toBranchId: filters.branchId } } },
+        ];
+      }
+    }
 
     return prisma.stockRequisition.findMany({
-      where: {
-        branchId: filters.destinationBranchId ?? filters.branchId,
-        status: filters.status,
-        sourceWarehouse: filters.sourceBranchId ? { branchId: filters.sourceBranchId } : undefined,
-      },
+      where,
       orderBy: { createdAt: 'desc' },
       include: REQUISITION_INCLUDE,
     });
   },
 
-  async listReceiptTransfers(session: AppSession | null, branchId: string) {
-    await authorize(session, 'warehouse:transfer', { branchId });
+  async listReceiptTransfers(session: AppSession | null, branchId?: string, allBranches?: boolean) {
+    await authorize(session, 'warehouse:transfer');
+
+    const isAdmin = session?.roles.some((r) => r.toLowerCase().includes('admin'));
+    const where: Prisma.StockTransferWhereInput = {
+      status: { in: ['DISPATCHED', 'IN_TRANSIT', 'RECEIVED'] },
+    };
+
+    if (branchId && !allBranches && !isAdmin) {
+      where.toBranchId = branchId;
+    }
 
     return prisma.stockTransfer.findMany({
-      where: {
-        toBranchId: branchId,
-        status: { in: ['DISPATCHED', 'IN_TRANSIT', 'RECEIVED'] },
-      },
+      where,
       orderBy: { updatedAt: 'desc' },
       include: {
         requisition: {

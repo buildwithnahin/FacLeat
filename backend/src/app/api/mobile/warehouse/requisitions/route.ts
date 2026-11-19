@@ -14,8 +14,11 @@ export async function GET(req: NextRequest) {
   const status = sp.get('status');
   try {
     const rows = await stockRequisitionService.listRequisitions(session, {
+      branchId: sp.get('branchId') ?? undefined,
       destinationBranchId: sp.get('destinationBranchId') ?? undefined,
       sourceBranchId: sp.get('sourceBranchId') ?? undefined,
+      direction: (sp.get('direction') as 'ALL' | 'INCOMING' | 'OUTGOING') ?? undefined,
+      allBranches: sp.get('allBranches') === 'true',
       status: status ? (status as StockRequisitionStatus) : undefined,
     });
     return Response.json(
@@ -24,10 +27,32 @@ export async function GET(req: NextRequest) {
           id: row.id,
           number: row.number,
           status: row.status,
+          priority: row.priority,
           requiredDate: row.requiredDate.toISOString(),
           showroomWarehouse: row.showroomWarehouse,
           sourceWarehouse: row.sourceWarehouse,
-          items: row.items.map((item) => ({ id: item.id })),
+          items: row.items.map((item) => ({
+            id: item.id,
+            productId: item.productId,
+            productName: item.product?.name ?? '',
+            sku: item.product?.sku ?? '',
+            unit: item.unit,
+            requestedQty: item.requestedQty.toString(),
+            approvedQty: item.approvedQty.toString(),
+            dispatchedQty: item.dispatchedQty.toString(),
+            receivedQty: item.receivedQty.toString(),
+          })),
+          transfers: row.transfers.map((t) => ({
+            id: t.id,
+            number: t.number,
+            status: t.status,
+            vehicle: t.vehicle,
+            driverName: t.driverName,
+            driverPhone: t.driverPhone,
+            gatePassNo: t.gatePassNo,
+            trackingNo: t.trackingNo,
+            updatedAt: t.updatedAt.toISOString(),
+          })),
         })),
       ),
     );

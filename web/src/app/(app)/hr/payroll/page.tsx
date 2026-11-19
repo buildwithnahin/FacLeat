@@ -60,7 +60,11 @@ export default async function PayrollPage({
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Payroll" description="Monthly payroll runs. Each run generates a payslip per employee." />
+      <PageHeader title="Payroll" description="Monthly payroll runs. Each run generates a payslip per employee.">
+        <Button asChild>
+          <Link href="/hr/payroll-run">Payroll Calculation Engine</Link>
+        </Button>
+      </PageHeader>
 
       {canProcess && (
         <Card>

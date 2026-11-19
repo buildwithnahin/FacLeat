@@ -10,12 +10,21 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
 
   const sp = req.nextUrl.searchParams;
-  const branchId = sp.get('branchId') || session.activeBranchId || undefined;
+  const allBranches = sp.get('allBranches') === 'true' || sp.get('branchId') === 'ALL';
+  const branchId = allBranches ? undefined : (sp.get('branchId') || session.activeBranchId || undefined);
   const warehouseId = sp.get('warehouseId') ?? undefined;
+  const warehouseType = (sp.get('type') || sp.get('warehouseType') || undefined) as
+    | import('@prisma/client').WarehouseType
+    | undefined;
   const section = parseInventorySection(sp.get('section'));
 
   try {
-    const rows = await stockService.balanceSnapshotDetailed(session, { branchId, warehouseId, section });
+    const rows = await stockService.balanceSnapshotDetailed(session, {
+      branchId,
+      warehouseId,
+      warehouseType,
+      section,
+    });
     return Response.json(
       apiOk(
         rows.map((r) => ({

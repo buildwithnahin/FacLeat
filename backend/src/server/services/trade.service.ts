@@ -722,7 +722,9 @@ export const tradeService = {
   // ─── Trade Payments ──────────────────────────────────────────────────────────
 
   async createPayment(session: AppSession | null, input: CreateTradePaymentInput) {
-    const actor = await authorize(session, 'trade:payment');
+    const actor = session?.permissions.includes('trade:payment')
+      ? await authorize(session, 'trade:payment')
+      : await authorize(session, 'trade:write');
     const order = await prisma.tradeOrder.findUnique({ where: { id: input.tradeOrderId } });
     if (!order) throw new NotFoundError('Trade order not found');
 
@@ -844,7 +846,7 @@ export const tradeService = {
 
   async getOrderFormOptions(session: AppSession | null) {
     await authorize(session, 'trade:read');
-    const [branches, customers, suppliers] = await Promise.all([
+    const [branches, customers, suppliers, products] = await Promise.all([
       prisma.branch.findMany({ where: { isActive: true }, select: { id: true, name: true, code: true } }),
       prisma.customer.findMany({
         where: { status: 'ACTIVE', type: { in: ['EXPORT', 'CORPORATE'] } },
@@ -856,8 +858,21 @@ export const tradeService = {
         select: { id: true, name: true, code: true },
         orderBy: { name: 'asc' },
       }),
+      prisma.product.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          unit: true,
+          sellPrice: true,
+          costPrice: true,
+          type: true,
+        },
+        orderBy: { name: 'asc' },
+      }),
     ]);
-    return { branches, customers, suppliers };
+    return { branches, customers, suppliers, products };
   },
 
   async getLCFormOptions(session: AppSession | null, branchId?: string) {

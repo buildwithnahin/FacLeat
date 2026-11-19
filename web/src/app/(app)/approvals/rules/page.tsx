@@ -30,7 +30,10 @@ export default async function ApprovalRulesPage({
   searchParams?: Promise<{ edit?: string }>;
 }) {
   const sp = (await searchParams) ?? {};
-  const rules = await backendFetch<ApprovalRule[]>('/api/mobile/approvals/rules');
+  const [rules, roles] = await Promise.all([
+    backendFetch<ApprovalRule[]>('/api/mobile/approvals/rules'),
+    backendFetch<{ id: string; name: string }[]>('/api/mobile/roles').catch(() => []),
+  ]);
   const editRule = sp.edit ? rules.find((r) => r.id === sp.edit) ?? null : null;
 
   return (
@@ -109,7 +112,7 @@ export default async function ApprovalRulesPage({
           />
         </Card>
 
-        <RuleForm initial={editRule} />
+        <RuleForm initial={editRule} availableRoles={roles.map((r) => r.name)} />
       </div>
     </div>
   );

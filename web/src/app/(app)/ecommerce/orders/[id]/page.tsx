@@ -9,6 +9,7 @@ import { Pill, type PillTone } from '@/components/shared/pill';
 import { backendFetch, BackendApiError } from '@/lib/backend-client';
 import { formatCurrency, type CurrencyCode } from '@/lib/money';
 import { OrderActions } from './order-actions';
+import { OrderPackingSlip } from './order-packing-slip';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,9 +73,13 @@ interface OrderDetail {
   orderDate: string;
   channel: { name: string };
   customerName: string | null;
+  customerPhone?: string | null;
+  customerEmail?: string | null;
   warehouse: { id: string; name: string } | null;
   branchId: string;
   paymentStatus: string;
+  paidTotal?: string;
+  reconciledAmount?: string;
   courier: string | null;
   trackingNo: string | null;
   shipToAddress: string | null;
@@ -123,11 +128,34 @@ export default async function EcommerceOrderDetailPage({
         title={`Order ${order.number}`}
         description={`${order.channel.name} · ${order.customerName ?? 'Guest'}`}
       >
-        <Button variant="outline" asChild>
-          <Link href="/ecommerce/orders">
-            <ArrowLeft className="h-4 w-4" /> All orders
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <OrderPackingSlip
+            order={{
+              number: order.number,
+              orderDate: order.orderDate,
+              channelName: order.channel.name,
+              customerName: order.customerName,
+              customerPhone: order.customerPhone ?? null,
+              shipToAddress: order.shipToAddress,
+              courier: order.courier,
+              trackingNo: order.trackingNo,
+              notes: order.notes,
+              currency: currency,
+              items: order.items,
+              subtotal: order.subtotal,
+              discountTotal: order.discountTotal,
+              shippingTotal: order.shippingTotal,
+              taxTotal: order.taxTotal,
+              grandTotal: order.grandTotal,
+              paidTotal: order.paidTotal ?? '0',
+            }}
+          />
+          <Button variant="outline" asChild>
+            <Link href="/ecommerce/orders">
+              <ArrowLeft className="h-4 w-4" /> All orders
+            </Link>
+          </Button>
+        </div>
       </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-6">
@@ -156,22 +184,30 @@ export default async function EcommerceOrderDetailPage({
                 <div className="text-xs text-muted-foreground">Payment status</div>
                 <div>{order.paymentStatus.toLowerCase().replace(/_/g, ' ')}</div>
               </div>
+              {order.customerPhone && (
+                <div>
+                  <div className="text-xs text-muted-foreground">Customer Phone</div>
+                  <div className="font-mono tabular">{order.customerPhone}</div>
+                </div>
+              )}
               {order.courier && (
                 <div>
                   <div className="text-xs text-muted-foreground">Courier</div>
                   <div>
-                    {order.courier} {order.trackingNo ? `· ${order.trackingNo}` : ''}
+                    {order.courier} {order.trackingNo ? `· #${order.trackingNo}` : ''}
                   </div>
                 </div>
               )}
             </div>
             {order.shipToAddress && (
               <div className="text-sm border-t pt-3 text-muted-foreground mt-4">
-                Ship to: {order.shipToAddress}
+                <span className="font-medium text-foreground">Ship to:</span> {order.shipToAddress}
               </div>
             )}
             {order.notes && (
-              <div className="text-sm border-t pt-3 text-muted-foreground mt-4">{order.notes}</div>
+              <div className="text-sm border-t pt-3 text-muted-foreground mt-4">
+                <span className="font-medium text-foreground">Order Notes:</span> {order.notes}
+              </div>
             )}
           </Card>
 

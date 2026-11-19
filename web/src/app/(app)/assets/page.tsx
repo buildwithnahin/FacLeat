@@ -11,6 +11,8 @@ import { backendFetch } from '@/lib/backend-client';
 import { formatCurrency } from '@/lib/money';
 import type { CurrencyCode } from '@/lib/money';
 import { ASSET_STATUS } from '@/server/validators/assets';
+import { AssetExportButton } from './asset-export-button';
+import { BulkDepreciationModal } from './bulk-depreciation-modal';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,17 +95,36 @@ export default async function AssetsPage({
 
   const hasFilter = Boolean(sp.search || (sp.status && sp.status !== 'ALL') || (sp.branchId && sp.branchId !== 'ALL') || (sp.categoryId && sp.categoryId !== 'ALL'));
 
+  const exportData = assets.map((a) => ({
+    code: a.code,
+    name: a.name,
+    category: a.category?.name,
+    branch: a.branch.name,
+    location: a.location ?? undefined,
+    assignedTo: a.assignedTo ?? undefined,
+    purchaseCost: a.purchaseCost,
+    bookValue: a.bookValue,
+    status: a.status,
+  }));
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Assets" description="Track, transfer, depreciate, and dispose assets">
-        <Button variant="outline" asChild>
-          <Link href="/assets/categories">Categories</Link>
-        </Button>
-        <Button variant="dark" asChild>
-          <Link href="/assets/new">
-            <Plus className="h-4 w-4" /> Add Asset
-          </Link>
-        </Button>
+      <PageHeader title="Fixed Assets" description="Enterprise asset lifecycle: register, tag, transfer, maintain, depreciate, and dispose.">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/assets/categories">Categories</Link>
+          </Button>
+          <AssetExportButton assets={exportData} />
+          <BulkDepreciationModal
+            branches={branches}
+            currentBranchId={sp.branchId && sp.branchId !== 'ALL' ? sp.branchId : undefined}
+          />
+          <Button variant="dark" size="sm" asChild>
+            <Link href="/assets/new">
+              <Plus className="h-4 w-4" /> Add Asset
+            </Link>
+          </Button>
+        </div>
       </PageHeader>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

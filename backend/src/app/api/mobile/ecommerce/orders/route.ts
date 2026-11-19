@@ -19,8 +19,11 @@ export async function GET(req: NextRequest) {
   try {
     const orders = await ecommerceService.listOrders(session, {
       branchId: branchId ?? undefined,
+      channelId: sp.get('channelId') ?? undefined,
       status: sp.get('status') ?? undefined,
       search: sp.get('search') ?? undefined,
+      from: sp.get('from') ?? undefined,
+      to: sp.get('to') ?? undefined,
     });
     return Response.json(apiOk(orders));
   } catch (err) {

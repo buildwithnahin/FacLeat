@@ -51,7 +51,19 @@ export function UploadForm({ branches }: { branches: Branch[] }) {
         </div>
         <div>
           <Label>Category</Label>
-          <Input name="category" placeholder="invoice, contract, license…" />
+          <Input name="category" list="upload-categories" placeholder="invoice, contract, license…" />
+          <datalist id="upload-categories">
+            <option value="contract" />
+            <option value="invoice" />
+            <option value="receipt" />
+            <option value="license" />
+            <option value="policy" />
+            <option value="report" />
+            <option value="certificate" />
+            <option value="tax" />
+            <option value="compliance" />
+            <option value="identity" />
+          </datalist>
         </div>
         <div>
           <Label>Tags (comma-separated)</Label>

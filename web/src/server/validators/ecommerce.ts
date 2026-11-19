@@ -10,6 +10,15 @@ export const ECOMMERCE_CHANNEL_TYPES = [
   'OTHER',
 ] as const;
 
+export const createChannelSchema = z.object({
+  branchId: z.string().cuid(),
+  code: z.string().trim().min(1).max(32),
+  name: z.string().trim().min(1).max(120),
+  type: z.enum(ECOMMERCE_CHANNEL_TYPES).default('MANUAL'),
+  storeUrl: z.string().trim().url().optional().or(z.literal('')),
+});
+export type CreateChannelInput = z.infer<typeof createChannelSchema>;
+
 const syncOrderItemSchema = z.object({
   sku: z.string().trim().min(1),
   name: z.string().trim().min(1),

@@ -231,13 +231,32 @@ export const customerService = {
     const actor = await authorize(session, 'crm:delete');
     const existing = await prisma.customer.findUnique({
       where: { id },
-      include: { _count: { select: { ledger: true, interactions: true } } },
+      include: {
+        _count: {
+          select: {
+            ledger: true,
+            interactions: true,
+            wholesaleInvoices: true,
+            corporateQuotes: true,
+            corporateOrders: true,
+            corporateInvoices: true,
+            tradeOrders: true,
+          },
+        },
+      },
     });
     if (!existing) throw new NotFoundError('Customer not found');
     await assertBranchInScope(actor, existing.branchId);
-    if (existing._count.ledger > 0) {
+    if (
+      existing._count.ledger > 0 ||
+      existing._count.wholesaleInvoices > 0 ||
+      existing._count.corporateQuotes > 0 ||
+      existing._count.corporateOrders > 0 ||
+      existing._count.corporateInvoices > 0 ||
+      existing._count.tradeOrders > 0
+    ) {
       throw new ValidationError(
-        'Customer has ledger activity — deactivate instead of deleting.',
+        'Customer has active transactions or ledger records — please deactivate instead of deleting.',
       );
     }
     return prisma.$transaction(async (tx) => {

@@ -15,6 +15,9 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
     } else {
       const email = formData.get('email');
       const password = formData.get('password');
+      if (!email || !password) {
+        return { error: 'Please enter both email and password.' };
+      }
       await signIn('credentials', { email, password, redirectTo: callbackUrl });
     }
     return undefined;

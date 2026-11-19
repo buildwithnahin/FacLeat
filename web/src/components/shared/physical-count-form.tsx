@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, useActionState } from 'react';
-import { ScanLine, Trash2 } from 'lucide-react';
+import { ScanLine, Trash2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { postPhysicalCountAction, type StockFormState } from '@/server/actions/stock';
+import { formatCurrency } from '@/lib/money';
 
 export interface PhysicalCountProductOption {
   id: string;
@@ -16,6 +17,7 @@ export interface PhysicalCountProductOption {
   barcode: string | null;
   name: string;
   unit: string;
+  costPrice?: string;
 }
 
 export interface PhysicalCountWarehouseOption {
@@ -29,6 +31,7 @@ interface Row {
   sku: string;
   name: string;
   unit: string;
+  costPrice: number;
   system: string;
   counted: string;
 }
@@ -55,6 +58,7 @@ export function PhysicalCountForm({
   );
   const [rows, setRows] = useState<Row[]>([]);
   const [warehouseId, setWarehouseId] = useState<string>(warehouses[0]?.id ?? '');
+  const [manualProductId, setManualProductId] = useState(products[0]?.id ?? '');
   const [continuous, setContinuous] = useState(true);
   const scanRef = useRef<HTMLInputElement>(null);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -101,6 +105,7 @@ export function PhysicalCountForm({
           sku: p.sku,
           name: p.name,
           unit: p.unit,
+          costPrice: Number(p.costPrice || 0),
           system: balanceByProduct[p.id] ?? '0',
           counted: '1',
         },
@@ -137,15 +142,22 @@ export function PhysicalCountForm({
     const sys = Number(r.system || 0);
     const cnt = Number(r.counted || 0);
     const variance = cnt - sys;
-    return { ...r, variance };
+    const varianceValue = variance * r.costPrice;
+    return { ...r, variance, varianceValue };
   });
 
   const itemsJson = JSON.stringify(
-    rows.map((r) => ({ productId: r.productId, countedQuantity: r.counted })),
+    rows.map((r) => ({
+      productId: r.productId,
+      countedQuantity: r.counted,
+      costPerUnit: r.costPrice.toString(),
+    })),
   );
 
   const hasMismatch = withVariance.some((r) => r.variance !== 0);
   const totalMismatch = withVariance.filter((r) => r.variance !== 0).length;
+  const totalCountedQty = rows.reduce((acc, r) => acc + Number(r.counted || 0), 0);
+  const totalNetVarianceValue = withVariance.reduce((acc, r) => acc + r.varianceValue, 0);
 
   return (
     <form action={formAction} className="space-y-6">
@@ -172,11 +184,51 @@ export function PhysicalCountForm({
             </select>
           </div>
           <div className="md:col-span-2 space-y-2">
-            <Label htmlFor="note">Note</Label>
-            <Textarea id="note" name="note" rows={1} placeholder="Optional reason / session info" />
+            <Label htmlFor="note">Count note</Label>
+            <Textarea id="note" name="note" rows={1} placeholder="Audit session name, reason, or rack notes" />
           </div>
         </CardContent>
       </Card>
+
+      {/* KPI metrics for counted vs system */}
+      {rows.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="p-4 border">
+            <div className="text-xs text-muted-foreground uppercase font-semibold">Total Counted Units</div>
+            <div className="text-2xl font-bold mt-1 tabular">{totalCountedQty}</div>
+            <div className="text-xs text-muted-foreground mt-1">{rows.length} product(s) in session</div>
+          </Card>
+          <Card className="p-4 border">
+            <div className="text-xs text-muted-foreground uppercase font-semibold">Discrepancy Items</div>
+            <div className="text-2xl font-bold mt-1 tabular">
+              {totalMismatch}{' '}
+              <span className="text-sm font-normal text-muted-foreground">
+                ({rows.length - totalMismatch} matched)
+              </span>
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {totalMismatch > 0 ? 'Requires stock adjustment' : 'Perfect match'}
+            </div>
+          </Card>
+          <Card className="p-4 border">
+            <div className="text-xs text-muted-foreground uppercase font-semibold">Net Financial Variance</div>
+            <div
+              className={`text-2xl font-bold mt-1 tabular ${
+                totalNetVarianceValue > 0
+                  ? 'text-emerald-700'
+                  : totalNetVarianceValue < 0
+                    ? 'text-destructive'
+                    : 'text-muted-foreground'
+              }`}
+            >
+              {totalNetVarianceValue > 0 ? `+${formatCurrency(totalNetVarianceValue)}` : formatCurrency(totalNetVarianceValue)}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {totalNetVarianceValue > 0 ? 'Stock Surplus (Gain)' : totalNetVarianceValue < 0 ? 'Stock Shortage (Loss)' : 'No Financial Discrepancy'}
+            </div>
+          </Card>
+        </div>
+      )}
 
       <Card>
         <CardContent className="p-6 space-y-4">
@@ -191,7 +243,7 @@ export function PhysicalCountForm({
                 autoComplete="off"
               />
             </div>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
               <input
                 type="checkbox"
                 checked={continuous}
@@ -203,6 +255,32 @@ export function PhysicalCountForm({
           </div>
           {scanError && <p className="text-xs text-destructive">{scanError}</p>}
 
+          {/* Manual dropdown picker */}
+          <div className="flex gap-2">
+            <select
+              value={manualProductId}
+              onChange={(e) => setManualProductId(e.target.value)}
+              className="flex h-9 flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.sku})
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const found = products.find((p) => p.id === manualProductId);
+                if (found) addProduct(found);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              Add item
+            </Button>
+          </div>
+
           <div className="rounded-md border overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
@@ -210,46 +288,65 @@ export function PhysicalCountForm({
                   <th className="text-left font-semibold px-3 py-2">#</th>
                   <th className="text-left font-semibold px-3 py-2">SKU</th>
                   <th className="text-left font-semibold px-3 py-2">Name</th>
+                  <th className="text-right font-semibold px-3 py-2">Unit Cost</th>
                   <th className="text-right font-semibold px-3 py-2">System</th>
                   <th className="text-right font-semibold px-3 py-2">Counted</th>
-                  <th className="text-right font-semibold px-3 py-2">Variance</th>
+                  <th className="text-right font-semibold px-3 py-2">Qty Variance</th>
+                  <th className="text-right font-semibold px-3 py-2">Value Variance</th>
                   <th className="text-right font-semibold px-3 py-2"></th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {withVariance.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground text-sm">
-                      Scan items to start counting.
+                    <td colSpan={9} className="px-3 py-10 text-center text-muted-foreground text-sm">
+                      Scan barcodes or select products above to start physical count.
                     </td>
                   </tr>
                 )}
                 {withVariance.map((r, i) => (
-                  <tr key={r.productId}>
+                  <tr key={r.productId} className="hover:bg-muted/20">
                     <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{r.sku}</td>
+                    <td className="px-3 py-2 font-mono text-xs font-medium">{r.sku}</td>
                     <td className="px-3 py-2">{r.name}</td>
-                    <td className="px-3 py-2 text-right tabular text-muted-foreground">{r.system}</td>
+                    <td className="px-3 py-2 text-right tabular text-muted-foreground">
+                      {formatCurrency(r.costPrice)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular text-muted-foreground font-medium">
+                      {r.system} {r.unit}
+                    </td>
                     <td className="px-3 py-2 text-right">
                       <Input
                         value={r.counted}
                         onChange={(e) => updateCounted(i, e.target.value)}
                         type="text"
                         inputMode="decimal"
-                        className="h-8 w-28 text-right tabular ml-auto"
+                        className="h-8 w-24 text-right tabular ml-auto"
                       />
                     </td>
                     <td
                       className={
-                        'px-3 py-2 text-right tabular font-medium ' +
+                        'px-3 py-2 text-right tabular font-semibold ' +
                         (r.variance > 0
-                          ? 'text-success'
+                          ? 'text-emerald-700'
                           : r.variance < 0
                             ? 'text-destructive'
                             : 'text-muted-foreground')
                       }
                     >
                       {r.variance > 0 ? `+${r.variance}` : r.variance}
+                    </td>
+                    <td
+                      className={
+                        'px-3 py-2 text-right tabular font-medium ' +
+                        (r.varianceValue > 0
+                          ? 'text-emerald-700'
+                          : r.varianceValue < 0
+                            ? 'text-destructive'
+                            : 'text-muted-foreground')
+                      }
+                    >
+                      {r.varianceValue > 0 ? `+${formatCurrency(r.varianceValue)}` : formatCurrency(r.varianceValue)}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <Button
@@ -270,8 +367,8 @@ export function PhysicalCountForm({
           {rows.length > 0 && (
             <p className="text-xs text-muted-foreground">
               {totalMismatch > 0
-                ? `${totalMismatch} item(s) will generate adjustment rows on submit.`
-                : 'All counted items match the system — no adjustments needed.'}
+                ? `${totalMismatch} item(s) will automatically generate adjustment ledger rows (IN/OUT) with accurate unit costs.`
+                : 'All counted items match the system stock — no adjustments needed.'}
             </p>
           )}
         </CardContent>
@@ -281,7 +378,7 @@ export function PhysicalCountForm({
 
       <div className="flex items-center gap-2">
         <Button type="submit" disabled={pending || rows.length === 0 || !hasMismatch}>
-          {pending ? 'Posting…' : hasMismatch ? 'Post adjustments' : 'Nothing to adjust'}
+          {pending ? 'Posting adjustments…' : hasMismatch ? 'Post variance adjustments' : 'Stock is balanced (No adjustments)'}
         </Button>
         <Button type="button" variant="outline" asChild>
           <Link href={cancelHref}>Cancel</Link>

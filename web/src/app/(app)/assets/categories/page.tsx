@@ -1,85 +1,34 @@
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { DataTable } from '@/components/shared/data-table';
 import { backendFetch } from '@/lib/backend-client';
-import { CategoryForm } from './category-form';
+import { CategoryManager, type AssetCategoryRow } from './category-manager';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata = { title: 'Asset categories' };
-
-interface AssetCategoryRow {
-  id: string;
-  name: string;
-  depreciationMethod: string;
-  defaultLifeMonths: number;
-  defaultSalvageRate: string;
-  _count: { assets: number };
-}
+export const metadata = { title: 'Asset Categories | Annex Leather' };
 
 export default async function AssetCategoriesPage() {
-  const categories = await backendFetch<AssetCategoryRow[]>('/api/mobile/assets/categories');
+  const categories = await backendFetch<AssetCategoryRow[]>('/api/mobile/assets/categories').catch(
+    () => [] as AssetCategoryRow[],
+  );
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <PageHeader
-        title="Asset Categories"
-        description="Depreciation defaults per asset category"
-      >
-        <Button variant="outline" asChild>
-          <Link href="/assets">
-            <ArrowLeft className="h-4 w-4" /> Back to assets
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <PageHeader
+          title="Asset Categories"
+          description="Depreciation method defaults, standard asset lifespans, and salvage rates."
+        />
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/assets" className="gap-1.5 text-xs">
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to Assets
           </Link>
         </Button>
-      </PageHeader>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
-        <Card className="p-0">
-          <div className="px-4 py-3 border-b text-sm font-medium">
-            {categories.length} Categor{categories.length === 1 ? 'y' : 'ies'}
-          </div>
-          <DataTable
-            rows={categories}
-            rowKey={(r) => r.id}
-            empty="No categories yet."
-            columns={[
-              { key: 'name', header: 'Name', cell: (r) => r.name },
-              {
-                key: 'method',
-                header: 'Method',
-                cell: (r) => r.depreciationMethod.replace('_', ' ').toLowerCase(),
-              },
-              {
-                key: 'life',
-                header: 'Life (mo)',
-                align: 'right',
-                cell: (r) => <span className="tabular">{r.defaultLifeMonths}</span>,
-              },
-              {
-                key: 'salvage',
-                header: 'Salvage',
-                align: 'right',
-                cell: (r) => (
-                  <span className="tabular">
-                    {(Number(r.defaultSalvageRate) * 100).toFixed(1)}%
-                  </span>
-                ),
-              },
-              {
-                key: 'assets',
-                header: 'Assets',
-                align: 'right',
-                cell: (r) => <span className="tabular">{r._count.assets}</span>,
-              },
-            ]}
-          />
-        </Card>
-
-        <CategoryForm />
       </div>
+
+      <CategoryManager initialCategories={categories} />
     </div>
   );
 }

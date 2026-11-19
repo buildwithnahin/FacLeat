@@ -86,7 +86,13 @@ interface Props {
   prefill?: {
     requisitionId: string;
     branchId: string;
-    items: { productName: string; unit: string; quantity: string }[];
+    items: {
+      productId?: string;
+      productName: string;
+      unit: string;
+      quantity: string;
+      estimatedPrice?: string;
+    }[];
   };
 }
 
@@ -99,11 +105,29 @@ export function POForm({ branches, suppliers, products, prefill, defaultBranchId
     prefill
       ? prefill.items.map((i) => {
           const r = newRow();
+          const matchedProd = i.productId
+            ? products.find((p) => p.id === i.productId)
+            : products.find((p) => p.name.toLowerCase() === i.productName.toLowerCase());
+
+          if (matchedProd) {
+            r.productId = matchedProd.id;
+            r.size = matchedProd.size ?? '';
+            r.unitPrice =
+              i.estimatedPrice && Number(i.estimatedPrice) > 0
+                ? i.estimatedPrice
+                : matchedProd.costPrice;
+            r.unit = (UNITS.includes(matchedProd.unit as (typeof UNITS)[number])
+              ? matchedProd.unit
+              : 'PCS') as Row['unit'];
+          } else if (i.estimatedPrice && Number(i.estimatedPrice) > 0) {
+            r.unitPrice = i.estimatedPrice;
+          }
+
           r.description = i.productName;
           r.orderedQty = i.quantity;
-          r.unit = (UNITS.includes(i.unit as (typeof UNITS)[number])
-            ? i.unit
-            : 'PCS') as Row['unit'];
+          if (i.unit && UNITS.includes(i.unit as (typeof UNITS)[number])) {
+            r.unit = i.unit as Row['unit'];
+          }
           return r;
         })
       : [newRow()],

@@ -12,6 +12,8 @@ import { PRODUCTION_ORDER_STATUS } from '@/server/validators/factory';
 import { ProductionControls } from './production-controls';
 import { DeleteCostEntryButton } from './delete-cost-entry-button';
 import { StageStatusControl } from './stage-status-control';
+import { AddMaterialDialog } from './add-material-dialog';
+import { AddStageDialog } from './add-stage-dialog';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,6 +77,49 @@ interface CostEntry {
   note: string | null;
 }
 
+interface IssueVoucherItem {
+  id: string;
+  issuedQty: string;
+  uom: string;
+  product: { id: string; name: string; sku: string };
+}
+
+interface IssueVoucher {
+  id: string;
+  voucherNo: string;
+  status: string;
+  date: string;
+  warehouse: { id: string; name: string; code: string };
+  items: IssueVoucherItem[];
+}
+
+interface ProcessTrackingRow {
+  id: string;
+  trackingNo: string;
+  status: string;
+  inputQty: string;
+  outputQty: string;
+  scrapQty: string;
+  stage: { id: string; name: string; sequence: number };
+  operator: { id: string; firstName: string; lastName: string; code: string } | null;
+}
+
+interface FGReceiveItem {
+  id: string;
+  quantity: string;
+  uom: string;
+  qualityStatus: string;
+  product: { id: string; name: string; sku: string };
+}
+
+interface FGReceiveVoucher {
+  id: string;
+  receiveNo: string;
+  date: string;
+  warehouse: { id: string; name: string; code: string };
+  items: FGReceiveItem[];
+}
+
 interface Order {
   id: string;
   number: string;
@@ -95,6 +140,9 @@ interface Order {
   materials: Material[];
   outputs: Output[];
   costEntries: CostEntry[];
+  productionIssueVouchers?: IssueVoucher[];
+  finishedGoodsReceiveVouchers?: FGReceiveVoucher[];
+  processTrackings?: ProcessTrackingRow[];
 }
 
 interface CostSummary {
@@ -115,6 +163,15 @@ interface Warehouse {
   name: string;
 }
 
+interface ProductOption {
+  id: string;
+  name: string;
+  sku: string;
+  unit: string;
+  costPrice: string;
+  type: string;
+}
+
 function CostRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between text-sm">
@@ -133,13 +190,18 @@ export default async function ProductionOrderPage({
 
   let order: Order;
   let warehouses: Warehouse[];
+  let products: ProductOption[];
   let costSummary: CostSummary;
   try {
-    const data = await backendFetch<{ order: Order; warehouses: Warehouse[]; costSummary: CostSummary }>(
-      `/api/mobile/factory/${id}`,
-    );
+    const data = await backendFetch<{
+      order: Order;
+      warehouses: Warehouse[];
+      products: ProductOption[];
+      costSummary: CostSummary;
+    }>(`/api/mobile/factory/${id}`);
     order = data.order;
     warehouses = data.warehouses;
+    products = data.products ?? [];
     costSummary = data.costSummary;
   } catch (e) {
     if (e instanceof BackendApiError && e.status === 404) notFound();
@@ -272,7 +334,14 @@ export default async function ProductionOrderPage({
 
           {/* Stages */}
           <Card className="p-0">
-            <div className="px-4 py-3 border-b text-sm font-medium">Stages</div>
+            <div className="px-4 py-3 border-b text-sm font-medium flex items-center justify-between">
+              <span>Stages ({order.stages.length})</span>
+              <AddStageDialog
+                orderId={order.id}
+                nextSequence={order.stages.length + 1}
+                disabled={order.status === 'COMPLETED' || order.status === 'CANCELLED'}
+              />
+            </div>
             <DataTable
               rows={order.stages}
               rowKey={(r) => r.id}
@@ -318,7 +387,15 @@ export default async function ProductionOrderPage({
 
           {/* Materials (BOM) */}
           <Card className="p-0">
-            <div className="px-4 py-3 border-b text-sm font-medium">Materials (BOM)</div>
+            <div className="px-4 py-3 border-b text-sm font-medium flex items-center justify-between">
+              <span>Materials (BOM) ({order.materials.length})</span>
+              <AddMaterialDialog
+                orderId={order.id}
+                products={products}
+                warehouses={warehouses}
+                disabled={order.status === 'COMPLETED' || order.status === 'CANCELLED'}
+              />
+            </div>
             <DataTable
               rows={order.materials}
               rowKey={(r) => r.id}
@@ -390,6 +467,153 @@ export default async function ProductionOrderPage({
             />
           </Card>
 
+          {/* Issue Vouchers (WIP Material Issues) */}
+          <Card className="p-0">
+            <div className="px-4 py-3 border-b text-sm font-medium flex items-center justify-between">
+              <span>Material Issue Vouchers ({order.productionIssueVouchers?.length ?? 0})</span>
+              <Button size="sm" variant="ghost" asChild>
+                <Link href="/factory/production-issue" className="text-xs text-blue-600 hover:underline">
+                  Open Issue Manager →
+                </Link>
+              </Button>
+            </div>
+            <DataTable
+              rows={order.productionIssueVouchers ?? []}
+              rowKey={(r) => r.id}
+              empty="No material issue vouchers on this order."
+              columns={[
+                {
+                  key: 'voucherNo',
+                  header: 'Voucher No',
+                  cell: (r) => <span className="font-medium tabular-nums">{r.voucherNo}</span>,
+                },
+                {
+                  key: 'date',
+                  header: 'Date',
+                  cell: (r) => new Date(r.date).toISOString().slice(0, 10),
+                },
+                { key: 'wh', header: 'Warehouse', cell: (r) => r.warehouse.name },
+                {
+                  key: 'items',
+                  header: 'Issued Items',
+                  cell: (r) => (
+                    <div className="space-y-0.5 text-xs">
+                      {r.items.map((it) => (
+                        <div key={it.id}>
+                          {it.product.name} • {it.issuedQty.toString()} {it.uom}
+                        </div>
+                      ))}
+                    </div>
+                  ),
+                },
+                {
+                  key: 'status',
+                  header: 'Status',
+                  cell: (r) => (
+                    <Pill tone={r.status === 'ISSUED' ? 'green' : r.status === 'APPROVED' ? 'blue' : 'grey'}>
+                      {r.status.toLowerCase()}
+                    </Pill>
+                  ),
+                },
+              ]}
+            />
+          </Card>
+
+          {/* Finished Goods Receive Vouchers */}
+          <Card className="p-0">
+            <div className="px-4 py-3 border-b text-sm font-medium flex items-center justify-between">
+              <span>FG Receive Vouchers ({order.finishedGoodsReceiveVouchers?.length ?? 0})</span>
+              <Button size="sm" variant="ghost" asChild>
+                <Link href="/factory/finished-goods-receive" className="text-xs text-blue-600 hover:underline">
+                  Open FG Manager →
+                </Link>
+              </Button>
+            </div>
+            <DataTable
+              rows={order.finishedGoodsReceiveVouchers ?? []}
+              rowKey={(r) => r.id}
+              empty="No FG receive vouchers on this order."
+              columns={[
+                {
+                  key: 'receiveNo',
+                  header: 'Receive No',
+                  cell: (r) => <span className="font-medium tabular-nums">{r.receiveNo}</span>,
+                },
+                {
+                  key: 'date',
+                  header: 'Date',
+                  cell: (r) => new Date(r.date).toISOString().slice(0, 10),
+                },
+                { key: 'wh', header: 'FG Warehouse', cell: (r) => r.warehouse.name },
+                {
+                  key: 'items',
+                  header: 'Received Items',
+                  cell: (r) => (
+                    <div className="space-y-0.5 text-xs">
+                      {r.items.map((it) => (
+                        <div key={it.id}>
+                          {it.product.name} • {it.quantity.toString()} {it.uom} • {it.qualityStatus}
+                        </div>
+                      ))}
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </Card>
+
+          {/* Shop-floor Process Tracking */}
+          <Card className="p-0">
+            <div className="px-4 py-3 border-b text-sm font-medium flex items-center justify-between">
+              <span>WIP Process Trackings ({order.processTrackings?.length ?? 0})</span>
+              <Button size="sm" variant="ghost" asChild>
+                <Link href="/factory/process-tracking" className="text-xs text-blue-600 hover:underline">
+                  Open Tracking Manager →
+                </Link>
+              </Button>
+            </div>
+            <DataTable
+              rows={order.processTrackings ?? []}
+              rowKey={(r) => r.id}
+              empty="No shop-floor process tracking records yet."
+              columns={[
+                {
+                  key: 'trackingNo',
+                  header: 'Tracking No',
+                  cell: (r) => <span className="font-medium tabular-nums">{r.trackingNo}</span>,
+                },
+                {
+                  key: 'stage',
+                  header: 'Process Stage',
+                  cell: (r) => `${r.stage.sequence}. ${r.stage.name}`,
+                },
+                {
+                  key: 'operator',
+                  header: 'Operator',
+                  cell: (r) => (r.operator ? `${r.operator.firstName} ${r.operator.lastName}` : '—'),
+                },
+                {
+                  key: 'io',
+                  header: 'In / Out / Scrap',
+                  cell: (r) => (
+                    <span className="tabular-nums text-xs">
+                      In: {r.inputQty.toString()} | Out: {r.outputQty.toString()} | Scrap: {r.scrapQty.toString()}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'status',
+                  header: 'Status',
+                  cell: (r) => (
+                    <Pill tone={r.status === 'COMPLETED' ? 'green' : r.status === 'RUNNING' ? 'amber' : 'grey'}>
+                      {r.status.toLowerCase()}
+                    </Pill>
+                  ),
+                },
+              ]}
+            />
+          </Card>
+
           {/* Fixed Overhead Entries */}
           <Card className="p-0">
             <div className="px-4 py-3 border-b text-sm font-medium">Fixed Overhead Entries</div>
@@ -452,22 +676,10 @@ export default async function ProductionOrderPage({
               columns={[
                 { key: 'desc', header: 'Task / Worker', cell: (r) => r.description },
                 {
-                  key: 'hours',
-                  header: 'Hours',
-                  align: 'right',
-                  cell: (r) => <span className="tabular-nums">{r.hours?.toString() ?? '—'}</span>,
-                },
-                {
-                  key: 'rate',
-                  header: 'Rate / hr',
-                  align: 'right',
-                  cell: (r) => <span className="tabular-nums">{r.rate ? d(r.rate).toFixed(2) : '—'}</span>,
-                },
-                {
                   key: 'amount',
                   header: 'Amount',
                   align: 'right',
-                  cell: (r) => <span className="tabular-nums">{d(r.amount).toFixed(2)}</span>,
+                  cell: (r) => <span className="tabular-nums font-medium">{d(r.amount).toFixed(2)}</span>,
                 },
                 { key: 'note', header: 'Note', cell: (r) => r.note ?? '—' },
                 {
@@ -486,6 +698,9 @@ export default async function ProductionOrderPage({
             id: order.id,
             status: order.status,
             overheadRate: order.overheadRate ?? '',
+            plannedQty: order.plannedQty.toString(),
+            producedQty: order.producedQty.toString(),
+            unit: order.unit,
             materials: order.materials.map((m) => ({
               id: m.id,
               productName: m.product.name,

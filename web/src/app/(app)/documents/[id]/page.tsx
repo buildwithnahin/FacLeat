@@ -1,17 +1,46 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, Download } from 'lucide-react';
+import { ArrowLeft, Download, ExternalLink } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/shared/data-table';
 import { Pill } from '@/components/shared/pill';
 import { backendFetch, BackendApiError } from '@/lib/backend-client';
-import { LinkForm, UnlinkButton } from './link-controls';
+import { LinkForm, UnlinkButton, DeleteDocumentButton } from './link-controls';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = { title: 'Document' };
+
+function getEntityLinkUrl(entityType: string, entityId: string): string | null {
+  switch (entityType) {
+    case 'PurchaseOrder':
+      return `/purchase/orders/${entityId}`;
+    case 'PurchaseInvoice':
+      return `/purchase/invoices/${entityId}`;
+    case 'PurchaseRequisition':
+      return `/purchase/requisitions/${entityId}`;
+    case 'GoodsReceiving':
+      return `/purchase/grn/${entityId}`;
+    case 'DamageReport':
+      return `/warehouse/faulty/${entityId}`;
+    case 'Supplier':
+      return `/suppliers/${entityId}`;
+    case 'Customer':
+      return `/crm/${entityId}`;
+    case 'Employee':
+      return `/hr/employees/${entityId}`;
+    case 'Candidate':
+      return `/hr/candidates/${entityId}`;
+    case 'Asset':
+      return `/assets/${entityId}`;
+    case 'ProductionOrder':
+      return `/factory/${entityId}`;
+    default:
+      return null;
+  }
+}
 
 interface DocumentLink {
   id: string;
@@ -61,6 +90,7 @@ export default async function DocumentDetailPage({
             <Download className="h-4 w-4" /> Download
           </a>
         </Button>
+        {doc.links.length === 0 && <DeleteDocumentButton documentId={doc.id} />}
       </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
@@ -68,15 +98,15 @@ export default async function DocumentDetailPage({
           <Card className="p-6 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
             <div>
               <div className="text-muted-foreground text-xs">Size</div>
-              <div className="tabular">{(doc.size / 1024).toFixed(1)} KB</div>
+              <div className="tabular font-medium">{(doc.size / 1024).toFixed(1)} KB</div>
             </div>
             <div>
               <div className="text-muted-foreground text-xs">Category</div>
-              <div>{doc.category ?? '—'}</div>
+              <div className="font-medium">{doc.category ?? '—'}</div>
             </div>
             <div>
               <div className="text-muted-foreground text-xs">Expires</div>
-              <div className="tabular">
+              <div className="tabular font-medium">
                 {doc.expiresAt ? new Date(doc.expiresAt).toISOString().slice(0, 10) : '—'}
               </div>
             </div>
@@ -105,11 +135,23 @@ export default async function DocumentDetailPage({
 
           {doc.mimeType.startsWith('image/') && (
             <Card className="p-4">
-              {/* eslint-disable-next-line @next/next/no-img-element -- proxied binary route, not a static asset next/image can optimize */}
+              <div className="text-xs font-medium text-muted-foreground mb-2">Image preview</div>
+              {/* eslint-disable-next-line @next/next/no-img-element -- proxied binary route */}
               <img
                 src={`/api/documents/${doc.id}`}
                 alt={doc.originalName}
-                className="max-h-96 mx-auto rounded"
+                className="max-h-96 mx-auto rounded shadow-sm border"
+              />
+            </Card>
+          )}
+
+          {doc.mimeType === 'application/pdf' && (
+            <Card className="p-4">
+              <div className="text-xs font-medium text-muted-foreground mb-2">PDF preview</div>
+              <iframe
+                src={`/api/documents/${doc.id}`}
+                title={doc.originalName}
+                className="w-full h-[600px] rounded border"
               />
             </Card>
           )}
@@ -121,13 +163,27 @@ export default async function DocumentDetailPage({
             <DataTable
               rows={doc.links}
               rowKey={(r) => r.id}
-              empty="Not linked to anything yet."
+              empty="Not linked to anything yet. Use the form on the right to link this document to an order, invoice, or employee."
               columns={[
                 { key: 'type', header: 'Entity type', cell: (r) => r.entityType },
                 {
                   key: 'id',
                   header: 'Entity ID',
-                  cell: (r) => <span className="tabular text-xs">{r.entityId}</span>,
+                  cell: (r) => {
+                    const targetUrl = getEntityLinkUrl(r.entityType, r.entityId);
+                    return targetUrl ? (
+                      <Link
+                        href={targetUrl}
+                        target="_blank"
+                        className="tabular text-xs text-blue-600 hover:underline inline-flex items-center gap-1"
+                      >
+                        {r.entityId}
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    ) : (
+                      <span className="tabular text-xs">{r.entityId}</span>
+                    );
+                  },
                 },
                 { key: 'note', header: 'Note', cell: (r) => r.note ?? '—' },
                 {

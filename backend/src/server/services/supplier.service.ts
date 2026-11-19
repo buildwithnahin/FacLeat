@@ -105,7 +105,20 @@ export const supplierService = {
     });
     if (!supplier) throw new NotFoundError('Supplier not found');
     await assertBranchInScope(session, supplier.branchId);
-    return supplier;
+
+    const ledgerAgg = await prisma.supplierLedger.aggregate({
+      where: { supplierId: id },
+      _sum: { debit: true, credit: true },
+    });
+    const totalPurchase = ledgerAgg._sum.debit ?? new Prisma.Decimal(0);
+    const totalCredit = ledgerAgg._sum.credit ?? new Prisma.Decimal(0);
+    const dueAmount = totalPurchase.minus(totalCredit);
+
+    return {
+      ...supplier,
+      totalPurchase,
+      dueAmount,
+    };
   },
 
   async create(session: AppSession | null, input: SupplierCreateInput) {

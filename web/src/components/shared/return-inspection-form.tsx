@@ -5,12 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import type { WorkflowFormState } from '@/server/actions/warehouse-workflows';
 
 type Item = {
   id: string;
   quantity: string;
   note: string | null;
+  disposition?: string | null;
   product: {
     sku: string;
     name: string;
@@ -22,6 +24,13 @@ type Decision = {
   itemId: string;
   disposition: 'RESTOCK' | 'REWORK' | 'DAMAGED' | 'REJECT';
   note: string;
+};
+
+const DISPOSITION_LABEL: Record<string, { label: string; variant: 'success' | 'warning' | 'destructive' | 'secondary' }> = {
+  RESTOCK: { label: 'Good: Restocked', variant: 'success' },
+  REWORK: { label: 'Minor defect: Rework (WIP)', variant: 'warning' },
+  DAMAGED: { label: 'Major defect: Damaged', variant: 'destructive' },
+  REJECT: { label: 'Wrong return: Rejected', variant: 'secondary' },
 };
 
 export function ReturnInspectionForm({
@@ -45,7 +54,7 @@ export function ReturnInspectionForm({
   const [decisions, setDecisions] = useState<Decision[]>(
     items.map((item) => ({
       itemId: item.id,
-      disposition: 'RESTOCK',
+      disposition: (item.disposition as Decision['disposition']) || 'RESTOCK',
       note: item.note ?? '',
     })),
   );
@@ -107,29 +116,34 @@ export function ReturnInspectionForm({
                     {item.quantity} {item.product.unit}
                   </td>
                   <td className="px-4 py-3">
-                    <select
-                      value={decisions[index]?.disposition ?? 'RESTOCK'}
-                      disabled={disabled}
-                      onChange={(event) =>
-                        setDecisions((prev) => {
-                          const next = [...prev];
-                          const current = next[index];
-                          if (current) {
-                            next[index] = {
-                              ...current,
-                              disposition: event.target.value as Decision['disposition'],
-                            };
-                          }
-                          return next;
-                        })
-                      }
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-                    >
-                      <option value="RESTOCK">Good: restock</option>
-                      <option value="REWORK">Minor defect: rework</option>
-                      <option value="DAMAGED">Major defect: damaged stock</option>
-                      <option value="REJECT">Wrong return: reject</option>
-                    </select>
+                    {disabled ? (
+                      <Badge variant={DISPOSITION_LABEL[decisions[index]?.disposition ?? 'RESTOCK']?.variant ?? 'secondary'}>
+                        {DISPOSITION_LABEL[decisions[index]?.disposition ?? 'RESTOCK']?.label ?? decisions[index]?.disposition}
+                      </Badge>
+                    ) : (
+                      <select
+                        value={decisions[index]?.disposition ?? 'RESTOCK'}
+                        onChange={(event) =>
+                          setDecisions((prev) => {
+                            const next = [...prev];
+                            const current = next[index];
+                            if (current) {
+                              next[index] = {
+                                ...current,
+                                disposition: event.target.value as Decision['disposition'],
+                              };
+                            }
+                            return next;
+                          })
+                        }
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                      >
+                        <option value="RESTOCK">Good: restock</option>
+                        <option value="REWORK">Minor defect: rework</option>
+                        <option value="DAMAGED">Major defect: damaged stock</option>
+                        <option value="REJECT">Wrong return: reject</option>
+                      </select>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <Textarea

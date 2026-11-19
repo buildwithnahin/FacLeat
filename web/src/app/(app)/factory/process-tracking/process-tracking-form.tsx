@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useMemo, useState } from 'react';
+import { useActionState, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ type OrderOption = {
   id: string;
   label: string;
   productId: string;
+  isCompleted?: boolean;
   stages: Array<{ id: string; label: string }>;
 };
 
@@ -28,11 +29,26 @@ export function ProcessTrackingForm({
     saveProcessTrackingAction,
     undefined,
   );
-  const [orderId, setOrderId] = useState(orders[0]?.id ?? '');
+
+  const [filterMode, setFilterMode] = useState<'pending' | 'all'>('pending');
+
+  const pendingOrders = useMemo(() => orders.filter((o) => !o.isCompleted), [orders]);
+  const displayOrders = useMemo(
+    () => (filterMode === 'all' ? orders : pendingOrders),
+    [orders, pendingOrders, filterMode],
+  );
+
+  const [orderId, setOrderId] = useState(displayOrders[0]?.id ?? '');
+
+  useEffect(() => {
+    if (!displayOrders.some((o) => o.id === orderId)) {
+      setOrderId(displayOrders[0]?.id ?? '');
+    }
+  }, [displayOrders, orderId]);
 
   const selectedOrder = useMemo(
-    () => orders.find((order) => order.id === orderId) ?? null,
-    [orders, orderId],
+    () => displayOrders.find((order) => order.id === orderId) ?? null,
+    [displayOrders, orderId],
   );
 
   const hasStages = Boolean(selectedOrder?.stages && selectedOrder.stages.length > 0);
@@ -42,20 +58,64 @@ export function ProcessTrackingForm({
       <Card className="p-6 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <Label htmlFor="orderId">Production Order *</Label>
-            <select
-              id="orderId"
-              name="orderId"
-              value={orderId}
-              onChange={(e) => setOrderId(e.target.value)}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-            >
-              {orders.map((order) => (
-                <option key={order.id} value={order.id}>
-                  {order.label}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center justify-between mb-1.5">
+              <Label htmlFor="orderId">Production Order *</Label>
+              <div className="flex items-center gap-1 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setFilterMode('pending')}
+                  className={`px-2 py-0.5 rounded transition-colors ${
+                    filterMode === 'pending'
+                      ? 'bg-primary text-primary-foreground font-medium'
+                      : 'bg-muted text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Hide orders that already completed process tracking"
+                >
+                  Pending ({pendingOrders.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterMode('all')}
+                  className={`px-2 py-0.5 rounded transition-colors ${
+                    filterMode === 'all'
+                      ? 'bg-primary text-primary-foreground font-medium'
+                      : 'bg-muted text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Show all production orders"
+                >
+                  All ({orders.length})
+                </button>
+              </div>
+            </div>
+            {displayOrders.length === 0 ? (
+              <div className="rounded-md border border-dashed p-2.5 text-xs text-muted-foreground bg-muted/20">
+                ✓ All production orders have completed process tracking.
+                {orders.length > 0 && filterMode === 'pending' && (
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode('all')}
+                    className="ml-1 text-primary underline hover:opacity-80"
+                  >
+                    Show all ({orders.length})
+                  </button>
+                )}
+              </div>
+            ) : (
+              <select
+                id="orderId"
+                name="orderId"
+                value={orderId}
+                onChange={(e) => setOrderId(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+              >
+                {displayOrders.map((order) => (
+                  <option key={order.id} value={order.id}>
+                    {order.label}
+                    {order.isCompleted ? ' (✓ Process Completed)' : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <div>
             <Label htmlFor="stageId">Process Name *</Label>

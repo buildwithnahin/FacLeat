@@ -9,6 +9,8 @@ import {
   assetTransferSchema,
   assetDisposeSchema,
   assetDepreciateSchema,
+  assetDepreciateBulkSchema,
+  assetMaintainSchema,
   assetCategorySchema,
 } from '@/server/validators/assets';
 
@@ -178,4 +180,60 @@ export async function upsertAssetCategoryAction(
   }
   revalidatePath('/assets/categories');
   return { success: true };
+}
+
+export async function maintainAssetAction(
+  _prev: AssetFormState,
+  formData: FormData,
+): Promise<AssetFormState> {
+  const parsed = assetMaintainSchema.safeParse({
+    assetId: formData.get('assetId'),
+    cost: formData.get('cost') ?? 0,
+    status: formData.get('status') ?? 'UNDER_MAINTENANCE',
+    condition: formData.get('condition') || undefined,
+    note: formData.get('note'),
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  try {
+    await backendFetch(`/api/mobile/assets/${parsed.data.assetId}/maintain`, {
+      method: 'POST',
+      body: JSON.stringify(parsed.data),
+    });
+  } catch (e) {
+    if (e instanceof BackendApiError) return { error: e.message };
+    throw e;
+  }
+  revalidatePath(`/assets/${parsed.data.assetId}`);
+  revalidatePath('/assets');
+  return { success: true };
+}
+
+export async function depreciateBulkAssetsAction(input: unknown) {
+  const parsed = assetDepreciateBulkSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  try {
+    const res = await backendFetch<{
+      postedCount: number;
+      totalExpense: string;
+      assetsConsidered: number;
+    }>('/api/mobile/assets/depreciate-bulk', {
+      method: 'POST',
+      body: JSON.stringify(parsed.data),
+    });
+    revalidatePath('/assets');
+    return {
+      success: true,
+      postedCount: res.postedCount,
+      totalExpense: res.totalExpense,
+      assetsConsidered: res.assetsConsidered,
+    };
+  } catch (e) {
+    if (e instanceof BackendApiError) return { error: e.message };
+    throw e;
+  }
 }

@@ -15,14 +15,16 @@ export async function GET(req: NextRequest) {
   try {
     await authorize(session, 'factory:read');
     const branchId = session.activeBranchId ?? undefined;
+    const includeCompleted = req.nextUrl.searchParams.get('includeCompleted') === 'true';
 
     const [orders, warehouses, issues] = await Promise.all([
       prisma.productionOrder.findMany({
         where: { branchId: branchId || undefined, status: { in: ['PLANNED', 'IN_PROGRESS'] } },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { number: 'desc' }, { id: 'desc' }],
         include: {
           product: { select: { id: true, name: true, sku: true } },
           materials: { include: { product: { select: { id: true, name: true, sku: true } } } },
+          productionIssueVouchers: { select: { id: true, status: true, voucherNo: true } },
         },
       }),
       prisma.warehouse.findMany({
@@ -33,7 +35,35 @@ export async function GET(req: NextRequest) {
       factoryWorkflowService.listProductionIssues(session, branchId),
     ]);
 
-    return Response.json(apiOk({ orders, warehouses, issues }));
+    const mappedOrders = orders.map((order) => {
+      const hasIssuedVoucher = order.productionIssueVouchers.some((v) => v.status === 'ISSUED');
+      const allMaterialsConsumed =
+        order.materials.length > 0 &&
+        order.materials.every((m) => Number(m.consumedQty) >= Number(m.plannedQty));
+
+      const isIssueCompleted =
+        hasIssuedVoucher || allMaterialsConsumed || order.status === 'COMPLETED';
+
+      return {
+        ...order,
+        isIssueCompleted,
+        hasIssuedVoucher,
+        allMaterialsConsumed,
+      };
+    });
+
+    const returnedOrders = includeCompleted
+      ? mappedOrders
+      : mappedOrders.filter((o) => !o.isIssueCompleted);
+
+    return Response.json(
+      apiOk({
+        orders: returnedOrders,
+        allOrders: mappedOrders,
+        warehouses,
+        issues,
+      }),
+    );
   } catch (err) {
     if (err instanceof ApiError) return Response.json(apiError(err), { status: err.status });
     console.error('GET /api/mobile/factory/production-issue failed', err);

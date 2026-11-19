@@ -187,6 +187,7 @@ export const stockService = {
     filters: {
       branchId?: string;
       warehouseId?: string;
+      warehouseType?: import('@prisma/client').WarehouseType | 'ALL';
       section?: InventorySectionSlug | null;
     },
   ): Promise<DetailedBalanceRow[]> {
@@ -202,8 +203,9 @@ export const stockService = {
       getBalances(prisma, effectiveBranchFilter, filters.warehouseId),
       prisma.warehouse.findMany({
         where: {
-          ...(branchIds && branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
+          ...(effectiveBranchFilter ? (Array.isArray(effectiveBranchFilter) ? { branchId: { in: effectiveBranchFilter } } : { branchId: effectiveBranchFilter }) : {}),
           ...(filters.warehouseId ? { id: filters.warehouseId } : {}),
+          ...(filters.warehouseType && filters.warehouseType !== 'ALL' ? { type: filters.warehouseType } : {}),
         },
         select: { id: true, name: true, code: true, type: true },
       }),
@@ -460,22 +462,25 @@ export const stockService = {
       prisma.warehouse.findUnique({ where: { id: input.toWarehouseId } }),
     ]);
     if (!from || !to) throw new NotFoundError('Warehouse not found');
-    if (from.type !== 'SHOWROOM' || to.type !== 'SHOWROOM') {
-      throw new ValidationError('Transfers are only allowed between showroom warehouses');
-    }
     await assertBranchInScope(actor, from.branchId);
     await assertBranchInScope(actor, to.branchId);
-    if (from.branchId === to.branchId) {
-      throw new ValidationError('Transfers must be between different showroom branches');
-    }
 
     const result = await prisma.$transaction(async (tx) => {
       await assertOpenPeriod(tx, from.branchId);
-      await assertOpenPeriod(tx, to.branchId);
+      if (from.branchId !== to.branchId) {
+        await assertOpenPeriod(tx, to.branchId);
+      }
 
       const productIds = input.items.map((it) => it.productId);
-      const balances = await getBalances(tx, from.branchId, input.fromWarehouseId, productIds);
+      const [balances, products] = await Promise.all([
+        getBalances(tx, from.branchId, input.fromWarehouseId, productIds),
+        tx.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, costPrice: true },
+        }),
+      ]);
       const balanceByProduct = new Map(balances.map((b) => [b.productId, b.balance]));
+      const costMap = new Map(products.map((p) => [p.id, p.costPrice]));
 
       if (!from.branch.allowNegativeStock) {
         for (const it of input.items) {
@@ -491,36 +496,43 @@ export const stockService = {
 
       const refId = `TRN-${Date.now()}`;
       await Promise.all(
-        input.items.flatMap((it) => [
-          tx.inventoryLedger.create({
-            data: {
-              branchId: from.branchId,
-              warehouseId: input.fromWarehouseId,
-              productId: it.productId,
-              direction: 'OUT',
-              quantity: new Prisma.Decimal(it.quantity),
-              costPerUnit: new Prisma.Decimal(it.costPerUnit ?? '0'),
-              refType: 'TRANSFER',
-              refId,
-              note: input.note ?? null,
-              createdById: actor.userId,
-            },
-          }),
-          tx.inventoryLedger.create({
-            data: {
-              branchId: to.branchId,
-              warehouseId: input.toWarehouseId,
-              productId: it.productId,
-              direction: 'IN',
-              quantity: new Prisma.Decimal(it.quantity),
-              costPerUnit: new Prisma.Decimal(it.costPerUnit ?? '0'),
-              refType: 'TRANSFER',
-              refId,
-              note: input.note ?? null,
-              createdById: actor.userId,
-            },
-          }),
-        ]),
+        input.items.flatMap((it) => {
+          const unitCost =
+            it.costPerUnit && Number(it.costPerUnit) > 0
+              ? new Prisma.Decimal(it.costPerUnit)
+              : (costMap.get(it.productId) ?? new Prisma.Decimal(0));
+
+          return [
+            tx.inventoryLedger.create({
+              data: {
+                branchId: from.branchId,
+                warehouseId: input.fromWarehouseId,
+                productId: it.productId,
+                direction: 'OUT',
+                quantity: new Prisma.Decimal(it.quantity),
+                costPerUnit: unitCost,
+                refType: 'TRANSFER',
+                refId,
+                note: input.note ?? null,
+                createdById: actor.userId,
+              },
+            }),
+            tx.inventoryLedger.create({
+              data: {
+                branchId: to.branchId,
+                warehouseId: input.toWarehouseId,
+                productId: it.productId,
+                direction: 'IN',
+                quantity: new Prisma.Decimal(it.quantity),
+                costPerUnit: unitCost,
+                refType: 'TRANSFER',
+                refId,
+                note: input.note ?? null,
+                createdById: actor.userId,
+              },
+            }),
+          ];
+        }),
       );
 
       await recordAudit(
@@ -564,8 +576,15 @@ export const stockService = {
       await assertOpenPeriod(tx, input.branchId);
 
       const productIds = input.items.map((i) => i.productId);
-      const balances = await getBalances(tx, input.branchId, input.warehouseId, productIds);
+      const [balances, products] = await Promise.all([
+        getBalances(tx, input.branchId, input.warehouseId, productIds),
+        tx.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, costPrice: true },
+        }),
+      ]);
       const balanceByProduct = new Map(balances.map((b) => [b.productId, b.balance]));
+      const costMap = new Map(products.map((p) => [p.id, p.costPrice]));
 
       const refId = `PC-${Date.now()}`;
       let adjustmentsPosted = 0;
@@ -577,6 +596,11 @@ export const stockService = {
         const delta = counted.minus(current);
         if (delta.eq(0)) continue;
 
+        const unitCost =
+          it.costPerUnit && Number(it.costPerUnit) > 0
+            ? new Prisma.Decimal(it.costPerUnit)
+            : (costMap.get(it.productId) ?? new Prisma.Decimal(0));
+
         await tx.inventoryLedger.create({
           data: {
             branchId: input.branchId,
@@ -584,7 +608,7 @@ export const stockService = {
             productId: it.productId,
             direction: delta.gt(0) ? 'IN' : 'OUT',
             quantity: delta.abs(),
-            costPerUnit: new Prisma.Decimal(it.costPerUnit ?? '0'),
+            costPerUnit: unitCost,
             refType: 'PHYSICAL_COUNT',
             refId,
             note: input.note ?? null,

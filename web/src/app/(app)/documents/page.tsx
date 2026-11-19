@@ -1,11 +1,12 @@
 import Link from 'next/link';
-import { FileText, Settings, Upload, RotateCcw } from 'lucide-react';
+import { FileText, Settings, Upload, RotateCcw, FolderOpen, Clock, HardDrive, Link2 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DataTable } from '@/components/shared/data-table';
 import { Pill } from '@/components/shared/pill';
+import { KpiCard } from '@/components/shared/kpi-card';
 import { backendFetch } from '@/lib/backend-client';
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,19 @@ interface ExpiringDoc {
   expiresAt: string | null;
 }
 
+const COMMON_CATEGORIES = [
+  'contract',
+  'invoice',
+  'receipt',
+  'license',
+  'policy',
+  'report',
+  'certificate',
+  'tax',
+  'compliance',
+  'identity',
+];
+
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -56,6 +70,9 @@ export default async function DocumentsPage({
     backendFetch<ExpiringDoc[]>('/api/mobile/documents/expiring?days=30'),
   ]);
 
+  const totalBytes = docs.reduce((acc, d) => acc + d.size, 0);
+  const totalLinks = docs.reduce((acc, d) => acc + d._count.links, 0);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -73,6 +90,34 @@ export default async function DocumentsPage({
           </Link>
         </Button>
       </PageHeader>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard
+          label="Total Documents"
+          value={docs.length}
+          icon={FolderOpen}
+          description="Stored in repository"
+        />
+        <KpiCard
+          label="Expiring Soon"
+          value={expiring.length}
+          icon={Clock}
+          tone={expiring.length > 0 ? 'warning' : 'default'}
+          description="Next 30 days"
+        />
+        <KpiCard
+          label="Storage Used"
+          value={formatSize(totalBytes)}
+          icon={HardDrive}
+          description="Repository volume"
+        />
+        <KpiCard
+          label="Linked Entities"
+          value={totalLinks}
+          icon={Link2}
+          description="Cross-module relations"
+        />
+      </div>
 
       {expiring.length > 0 && (
         <Card className="p-4 border-amber-300 bg-amber-50">
@@ -93,16 +138,28 @@ export default async function DocumentsPage({
 
       <Card className="p-4">
         <form className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 items-end">
-          <Input
-            name="search"
-            placeholder="Search by filename or tag…"
-            defaultValue={sp.search ?? ''}
-          />
-          <Input
-            name="category"
-            placeholder="Category"
-            defaultValue={sp.category ?? ''}
-          />
+          <div>
+            <span className="text-xs text-muted-foreground block mb-1">Search</span>
+            <Input
+              name="search"
+              placeholder="Search by filename or tag…"
+              defaultValue={sp.search ?? ''}
+            />
+          </div>
+          <div>
+            <span className="text-xs text-muted-foreground block mb-1">Category</span>
+            <Input
+              name="category"
+              list="doc-categories"
+              placeholder="All categories"
+              defaultValue={sp.category ?? ''}
+            />
+            <datalist id="doc-categories">
+              {COMMON_CATEGORIES.map((cat) => (
+                <option key={cat} value={cat} />
+              ))}
+            </datalist>
+          </div>
           <div className="flex items-center gap-2">
             <Button type="submit" variant="outline">
               Filter

@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useMemo, useState, useTransition } from 'react';
+import { useActionState, useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import {
   ChevronDown,
@@ -12,6 +12,10 @@ import {
   Minus,
   Plus,
   RotateCcw,
+  Printer,
+  Scale,
+  FoldVertical,
+  UnfoldVertical,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -35,6 +39,7 @@ import {
   type CoaFormState,
 } from '@/server/actions/coa';
 import { cn } from '@/lib/utils';
+import { CoaExportButton } from './coa-export-button';
 
 type AccountType = (typeof ACCOUNT_TYPES)[number];
 type NormalSide = (typeof NORMAL_SIDES)[number];
@@ -290,10 +295,28 @@ function CreateAccountModal({
 }) {
   const [selectedLabel, setSelectedLabel] = useState<string>(COA_DETAIL_TYPES[0]!.label);
   const [makeSubaccount, setMakeSubaccount] = useState(false);
+  const [code, setCode] = useState<string>('');
   const [state, formAction, pending] = useActionState<CoaFormState, FormData>(createChartAccountAction, undefined);
   const selected = DETAIL_BY_LABEL.get(selectedLabel) ?? COA_DETAIL_TYPES[0]!;
   const parentOptions = accounts.filter((account) => account.type === selected.type && account.isPosting);
   const today = new Date().toISOString().slice(0, 10);
+
+  useEffect(() => {
+    const sel = DETAIL_BY_LABEL.get(selectedLabel) ?? COA_DETAIL_TYPES[0]!;
+    const codesInRange = accounts
+      .map((a) => numberCode(a.code))
+      .filter((c) => c >= sel.codeMin && c <= sel.codeMax);
+    if (codesInRange.length === 0) {
+      setCode(String(sel.codeMin));
+    } else {
+      const maxCode = Math.max(...codesInRange);
+      if (maxCode < sel.codeMax) {
+        setCode(String(maxCode + 1));
+      } else {
+        setCode(String(sel.codeMin));
+      }
+    }
+  }, [selectedLabel, accounts, open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -378,9 +401,16 @@ function CreateAccountModal({
 
             <div className="space-y-2 md:col-start-2">
               <Label className="text-xs font-medium text-[#003044]">
-                Code (min: {selected.codeMin.toLocaleString('en-US')} - max: {selected.codeMax.toLocaleString('en-US')}) <span className="text-red-500">*</span>
+                Code (range: {selected.codeMin.toLocaleString('en-US')} - {selected.codeMax.toLocaleString('en-US')}) <span className="text-red-500">*</span>
               </Label>
-              <Input name="code" required placeholder="code" className="h-9 text-xs" />
+              <Input
+                name="code"
+                required
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="Account Code"
+                className="h-9 text-xs"
+              />
               {state?.fieldErrors?.code?.[0] && <p className="text-xs text-red-600">{state.fieldErrors.code[0]}</p>}
             </div>
           </div>
@@ -431,6 +461,15 @@ export function CoaClient({
     return result;
   }, [enriched]);
 
+  const totalAssets = totals.get('ASSET') ?? 0;
+  const totalLiabilities = totals.get('LIABILITY') ?? 0;
+  const totalEquity = totals.get('EQUITY') ?? 0;
+  const totalIncome = totals.get('INCOME') ?? 0;
+  const totalExpense = totals.get('EXPENSE') ?? 0;
+  const netProfit = totalIncome - totalExpense;
+  const liabilitiesAndEquity = totalLiabilities + totalEquity + netProfit;
+  const isEquationBalanced = Math.abs(totalAssets - liabilitiesAndEquity) < 1.0;
+
   const filteredAccounts = enriched.filter((account) => {
     const typeOk = typeFilter.size === 0 || typeFilter.has(account.detailLabel);
     const nameOk = !nameFilter || account.name.toLowerCase().includes(nameFilter.toLowerCase());
@@ -452,6 +491,21 @@ export function CoaClient({
     setTypeFilter(new Set());
     setNameFilter('');
     setStatusFilter('ALL');
+  }
+
+  function expandAll() {
+    setCollapsed(new Set());
+  }
+
+  function collapseAll() {
+    const allKeys = new Set<string>();
+    for (const type of TYPE_ORDER) {
+      allKeys.add(`type:${type}`);
+      for (const detail of COA_DETAIL_TYPES) {
+        allKeys.add(`detail:${detail.label}`);
+      }
+    }
+    setCollapsed(allKeys);
   }
 
   function toggleCollapse(key: string) {
@@ -541,16 +595,61 @@ export function CoaClient({
             <Filter className="h-3.5 w-3.5" />
             Filter
           </Button>
-          <div className="ml-auto flex gap-2">
-            <Button variant="outline" size="sm" className="h-8 border-[#00758a] text-xs text-[#00758a]">
-              <CircleHelp className="h-3.5 w-3.5" />
-              Help
+          <div className="ml-auto flex items-center gap-2 flex-wrap">
+            <CoaExportButton accounts={filteredAccounts} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              className="h-8 border-[#00758a] text-xs text-[#00758a] flex items-center gap-1 hover:bg-[#e7f1f4]"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Print
             </Button>
             {canWrite && (
               <Button size="sm" className="h-8 bg-[#00758a] text-xs text-white hover:bg-[#006377]" onClick={() => setModalOpen(true)}>
                 Add new
               </Button>
             )}
+          </div>
+        </div>
+
+        {/* Accounting Equation Health Check */}
+        <div className="mt-4 bg-gradient-to-r from-slate-50 via-teal-50/50 to-slate-50 p-3.5 rounded-lg border border-teal-200/90 flex flex-wrap items-center justify-between gap-4 text-xs">
+          <div className="flex items-center gap-6 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Scale className="h-4 w-4 text-[#00758a]" />
+              <span className="font-semibold text-slate-700">Accounting Equation:</span>
+            </div>
+            <div>
+              <span className="text-slate-500 uppercase tracking-wide text-[10px] block font-semibold">Total Assets</span>
+              <span className="font-bold text-sm text-slate-900">{money(totalAssets)}</span>
+            </div>
+            <span className="text-lg font-bold text-slate-400">=</span>
+            <div>
+              <span className="text-slate-500 uppercase tracking-wide text-[10px] block font-semibold">Liabilities</span>
+              <span className="font-bold text-sm text-slate-900">{money(totalLiabilities)}</span>
+            </div>
+            <span className="text-lg font-bold text-slate-400">+</span>
+            <div>
+              <span className="text-slate-500 uppercase tracking-wide text-[10px] block font-semibold">Equity &amp; Profit</span>
+              <span className="font-bold text-sm text-slate-900">{money(totalEquity + netProfit)}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <span className="text-slate-500 uppercase tracking-wide text-[10px] block font-semibold">Net Operating Income</span>
+              <span className={`font-bold text-sm ${netProfit >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                {money(netProfit)}
+              </span>
+            </div>
+            <div className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 ${
+              isEquationBalanced ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${isEquationBalanced ? 'bg-emerald-600' : 'bg-amber-600'}`} />
+              <span>{isEquationBalanced ? 'Ledger Balanced' : 'Out of Balance'}</span>
+            </div>
           </div>
         </div>
 
@@ -573,6 +672,20 @@ export function CoaClient({
       </div>
 
       <div className="border-t-4 border-[#00758a] bg-white">
+        <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b text-xs border-slate-200">
+          <span className="text-slate-600">
+            Showing <strong className="text-slate-900">{filteredAccounts.length}</strong> of <strong className="text-slate-900">{accounts.length}</strong> accounts
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={expandAll} className="h-7 text-xs flex items-center gap-1 text-[#00758a] hover:bg-slate-200">
+              <UnfoldVertical className="h-3.5 w-3.5" /> Expand All
+            </Button>
+            <Button variant="ghost" size="sm" onClick={collapseAll} className="h-7 text-xs flex items-center gap-1 text-[#00758a] hover:bg-slate-200">
+              <FoldVertical className="h-3.5 w-3.5" /> Collapse All
+            </Button>
+          </div>
+        </div>
+
         <table className="w-full table-fixed text-xs">
           <colgroup>
             <col className="w-[24%]" />

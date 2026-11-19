@@ -107,7 +107,11 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
                 const deduction = addAmounts(p.providentFund, p.taxDeduction, p.otherDeduction);
                 return (
                   <tr key={p.id} className="hover:bg-muted/30">
-                    <td className="px-4 py-2 font-mono text-xs">{p.employee.code}</td>
+                    <td className="px-4 py-2 font-mono text-xs">
+                      <Link href={`/hr/payslip/${p.id}`} className="text-primary hover:underline font-semibold">
+                        {p.employee.code}
+                      </Link>
+                    </td>
                     <td className="px-4 py-2 font-medium">
                       {p.employee.firstName} {p.employee.lastName}
                     </td>

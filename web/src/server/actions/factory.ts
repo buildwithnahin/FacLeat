@@ -20,6 +20,8 @@ import {
   finishedGoodsReceiveCreateSchema,
   productionPlanCreateSchema,
   productionPlanDecisionSchema,
+  productionMaterialCreateSchema,
+  productionStageCreateSchema,
 } from '@/server/validators/factory';
 
 export type FactoryFormState =
@@ -33,6 +35,68 @@ function parseJson<T>(raw: FormDataEntryValue | null, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+export async function addProductionMaterialAction(
+  _prev: FactoryFormState,
+  formData: FormData,
+): Promise<FactoryFormState> {
+  const parsed = productionMaterialCreateSchema.safeParse({
+    orderId: formData.get('orderId'),
+    productId: formData.get('productId'),
+    unit: formData.get('unit') || 'PCS',
+    plannedQty: formData.get('plannedQty'),
+    unitCost: formData.get('unitCost') ? Number(formData.get('unitCost')) : undefined,
+    materialType: formData.get('materialType') || 'OTHER',
+    fromWarehouseId: formData.get('fromWarehouseId') || '',
+    note: formData.get('note') || '',
+  });
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  try {
+    await backendFetch(`/api/mobile/factory/${parsed.data.orderId}/materials`, {
+      method: 'POST',
+      body: JSON.stringify(parsed.data),
+    });
+  } catch (e) {
+    if (e instanceof BackendApiError) return { error: e.message };
+    throw e;
+  }
+  revalidatePath(`/factory/${parsed.data.orderId}`);
+  return { success: true };
+}
+
+export async function addProductionStageAction(
+  _prev: FactoryFormState,
+  formData: FormData,
+): Promise<FactoryFormState> {
+  const parsed = productionStageCreateSchema.safeParse({
+    orderId: formData.get('orderId'),
+    sequence: formData.get('sequence') ? Number(formData.get('sequence')) : 1,
+    name: formData.get('name'),
+    notes: formData.get('notes') || '',
+  });
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Validation failed',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  try {
+    await backendFetch(`/api/mobile/factory/${parsed.data.orderId}/stages`, {
+      method: 'POST',
+      body: JSON.stringify(parsed.data),
+    });
+  } catch (e) {
+    if (e instanceof BackendApiError) return { error: e.message };
+    throw e;
+  }
+  revalidatePath(`/factory/${parsed.data.orderId}`);
+  return { success: true };
 }
 
 export async function createProductionOrderAction(

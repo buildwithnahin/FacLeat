@@ -80,7 +80,7 @@ export default async function HrOverviewPage() {
             <div className="space-y-3">
               <TaskRow label="Leave Approval" value={`${data.pendingLeave} pending`} href="/hr/leave-approval" />
               <TaskRow label="Attendance Correction" value={`${data.absentToday} absent records`} href="/hr/attendance-adjustment" />
-              <TaskRow label="Payroll Processing" value={`${data.pendingPayroll} run(s) open`} href="/hr/payroll" />
+              <TaskRow label="Payroll Processing" value={`${data.pendingPayroll} run(s) open`} href="/hr/payroll-run" />
               <TaskRow label="Recruitment Pipeline" value="Start hiring workflow" href="/hr/recruitment" />
               <TaskRow label="Exit Clearance" value="Manage final separation" href="/hr/exit-clearance" />
             </div>
@@ -101,7 +101,7 @@ export default async function HrOverviewPage() {
               <NavCard icon={<CalendarCheck className="h-5 w-5 text-primary" />} title="Attendance" subtitle="Daily, adjustment, late and overtime" href="/hr/attendance" />
               <NavCard icon={<CalendarClock className="h-5 w-5 text-primary" />} title="Performance" subtitle="KPI, review, and appraisal" href="/hr/performance-review" />
               <NavCard icon={<CalendarOff className="h-5 w-5 text-primary" />} title="Leave" subtitle="Application, approval, and balance" href="/hr/leaves" />
-              <NavCard icon={<HandCoins className="h-5 w-5 text-primary" />} title="Payroll" subtitle="Salary structure to payslip" href="/hr/payroll" />
+              <NavCard icon={<HandCoins className="h-5 w-5 text-primary" />} title="Payroll" subtitle="Salary structure to payslip" href="/hr/payroll-run" />
             </div>
           </CardContent>
         </Card>

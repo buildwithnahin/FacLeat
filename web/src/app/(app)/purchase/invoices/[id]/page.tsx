@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, Check, CreditCard } from 'lucide-react';
+import { ArrowLeft, Check, CreditCard, RotateCcw } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -115,6 +115,12 @@ export default async function InvoiceDetailPage({
             </Link>
           </Button>
         )}
+        <Button variant="outline" asChild>
+          <Link href={`/purchase/returns/new?supplierId=${invoice.supplierId}&invoiceId=${invoice.id}`}>
+            <RotateCcw className="h-4 w-4" />
+            Issue Return
+          </Link>
+        </Button>
       </PageHeader>
 
       <DecisionNoticeBanner notice={notice} />

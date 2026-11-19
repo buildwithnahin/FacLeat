@@ -55,3 +55,18 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     return Response.json(apiError('Internal server error'), { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest, { params }: RouteParams) {
+  const session = await getMobileSession(req);
+  if (!session) return Response.json(apiError('Unauthorized'), { status: 401 });
+
+  const { id } = await params;
+  try {
+    await customerService.remove(session, id);
+    return Response.json(apiOk({ success: true }));
+  } catch (err) {
+    if (err instanceof ApiError) return Response.json(apiError(err), { status: err.status });
+    console.error(`DELETE /api/mobile/crm/${id} failed`, err);
+    return Response.json(apiError('Internal server error'), { status: 500 });
+  }
+}

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { WorkflowFormState } from '@/server/actions/warehouse-workflows';
+import { formatCurrency } from '@/lib/money';
 
 type ProductOption = {
   id: string;
@@ -105,6 +106,12 @@ export function DamageReportForm({
     })),
   );
 
+  const totalDamagedQty = rows.reduce((acc, r) => acc + Number(r.quantity || 0), 0);
+  const totalEstimatedLoss = rows.reduce(
+    (acc, r) => acc + Number(r.quantity || 0) * Number(r.costPerUnit || 0),
+    0,
+  );
+
   return (
     <form action={formAction} className="space-y-6">
       <input type="hidden" name="branchId" value={branchId} />
@@ -139,6 +146,27 @@ export function DamageReportForm({
         </CardContent>
       </Card>
 
+      {rows.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card className="p-4 border">
+            <div className="text-xs text-muted-foreground uppercase font-semibold">Total Faulty Units</div>
+            <div className="text-2xl font-bold mt-1 tabular">{totalDamagedQty}</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Items will be moved to Quarantine pending final action
+            </div>
+          </Card>
+          <Card className="p-4 border">
+            <div className="text-xs text-muted-foreground uppercase font-semibold">Estimated Loss Value</div>
+            <div className="text-2xl font-bold mt-1 tabular text-destructive">
+              {formatCurrency(totalEstimatedLoss)}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Estimated inventory cost write-down / claim
+            </div>
+          </Card>
+        </div>
+      )}
+
       <Card>
         <CardContent className="p-6 space-y-4">
           <div className="relative">
@@ -155,7 +183,7 @@ export function DamageReportForm({
             >
               {products.map((product) => (
                 <option key={product.id} value={product.id}>
-                  {product.name} ({product.sku})
+                  {product.name} ({product.sku}) - {formatCurrency(product.costPrice)}
                 </option>
               ))}
             </select>
@@ -180,56 +208,63 @@ export function DamageReportForm({
                   <th className="px-3 py-2 text-left font-semibold">Product</th>
                   <th className="px-3 py-2 text-right font-semibold">Qty</th>
                   <th className="px-3 py-2 text-right font-semibold">Cost / unit</th>
+                  <th className="px-3 py-2 text-right font-semibold">Est. Subtotal</th>
                   <th className="px-3 py-2 text-right font-semibold"></th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-10 text-center text-muted-foreground">
+                    <td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">
                       Add damaged items to create the report.
                     </td>
                   </tr>
                 )}
-                {rows.map((row, index) => (
-                  <tr key={row.productId}>
-                    <td className="px-3 py-2 font-mono text-xs">{row.sku}</td>
-                    <td className="px-3 py-2">{row.name}</td>
-                    <td className="px-3 py-2 text-right">
-                      <Input
-                        value={row.quantity}
-                        onChange={(event) =>
-                          setRows((prev) => {
-                            const next = [...prev];
-                            const current = next[index];
-                            if (current) next[index] = { ...current, quantity: event.target.value };
-                            return next;
-                          })
-                        }
-                        className="ml-auto h-8 w-24 text-right"
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <Input
-                        value={row.costPerUnit}
-                        onChange={(event) =>
-                          setRows((prev) => {
-                            const next = [...prev];
-                            const current = next[index];
-                            if (current) next[index] = { ...current, costPerUnit: event.target.value };
-                            return next;
-                          })
-                        }
-                        className="ml-auto h-8 w-28 text-right"
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <Button type="button" size="icon-sm" variant="ghost" onClick={() => setRows((prev) => prev.filter((_, i) => i !== index))}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((row, index) => {
+                  const lineTotal = Number(row.quantity || 0) * Number(row.costPerUnit || 0);
+                  return (
+                    <tr key={row.productId}>
+                      <td className="px-3 py-2 font-mono text-xs">{row.sku}</td>
+                      <td className="px-3 py-2">{row.name}</td>
+                      <td className="px-3 py-2 text-right">
+                        <Input
+                          value={row.quantity}
+                          onChange={(event) =>
+                            setRows((prev) => {
+                              const next = [...prev];
+                              const current = next[index];
+                              if (current) next[index] = { ...current, quantity: event.target.value };
+                              return next;
+                            })
+                          }
+                          className="ml-auto h-8 w-24 text-right"
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <Input
+                          value={row.costPerUnit}
+                          onChange={(event) =>
+                            setRows((prev) => {
+                              const next = [...prev];
+                              const current = next[index];
+                              if (current) next[index] = { ...current, costPerUnit: event.target.value };
+                              return next;
+                            })
+                          }
+                          className="ml-auto h-8 w-28 text-right"
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right tabular font-medium text-destructive">
+                        {formatCurrency(lineTotal)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <Button type="button" size="icon-sm" variant="ghost" onClick={() => setRows((prev) => prev.filter((_, i) => i !== index))}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

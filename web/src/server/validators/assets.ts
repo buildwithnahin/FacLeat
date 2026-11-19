@@ -77,3 +77,12 @@ export const assetDepreciateBulkSchema = z.object({
   periodEnd: z.coerce.date(),
 });
 export type AssetDepreciateBulkInput = z.infer<typeof assetDepreciateBulkSchema>;
+
+export const assetMaintainSchema = z.object({
+  assetId: z.string().cuid(),
+  cost: z.coerce.number().min(0).default(0),
+  status: z.enum(ASSET_STATUS).default('UNDER_MAINTENANCE'),
+  condition: z.enum(ASSET_CONDITION).optional(),
+  note: z.string().trim().min(1, 'Maintenance description is required').max(500),
+});
+export type AssetMaintainInput = z.infer<typeof assetMaintainSchema>;

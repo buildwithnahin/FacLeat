@@ -104,8 +104,26 @@ export default async function WarehousesPage({
                     <span className="text-xs text-muted-foreground">({w.branch.code})</span>
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">{w.code}</td>
-                  <td className="px-4 py-3 font-medium">{w.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground capitalize">{w.type.toLowerCase()}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <Link href={`/warehouse/${w.id}`} className="text-blue-600 hover:underline font-semibold">
+                      {w.name}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded font-semibold border ${
+                        w.type === 'SHOWROOM'
+                          ? 'bg-purple-100 text-purple-800 border-purple-200'
+                          : w.type === 'MAIN'
+                          ? 'bg-blue-100 text-blue-800 border-blue-200'
+                          : w.type === 'STORE'
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                          : 'bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      {w.type === 'SHOWROOM' ? '🏪 SHOWROOM' : w.type}
+                    </span>
+                  </td>
                   <td className="px-4 py-3">
                     <Badge variant={w.isActive ? 'success' : 'outline'}>
                       {w.isActive ? 'Active' : 'Inactive'}

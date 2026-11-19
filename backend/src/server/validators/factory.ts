@@ -95,6 +95,7 @@ export const productionConsumeSchema = z.object({
         materialId: z.string().cuid(),
         quantity: z.coerce.number().positive('Quantity must be > 0'),
         costPerUnit: z.coerce.number().min(0).default(0),
+        warehouseId: z.string().cuid().optional(),
       }),
     )
     .min(1),
@@ -117,6 +118,26 @@ export const productionStageUpdateSchema = z.object({
 });
 export type ProductionStageUpdateInput = z.infer<typeof productionStageUpdateSchema>;
 
+export const productionMaterialCreateSchema = z.object({
+  orderId: z.string().cuid(),
+  productId: z.string().cuid(),
+  unit: z.enum(UNITS).default('PCS'),
+  plannedQty: z.coerce.number().positive('Planned qty must be > 0'),
+  unitCost: z.coerce.number().min(0).optional(),
+  materialType: z.enum(PRODUCTION_MATERIAL_TYPES).default('OTHER'),
+  fromWarehouseId: z.string().cuid().optional().or(z.literal('')),
+  note: z.string().trim().max(300).optional().or(z.literal('')),
+});
+export type ProductionMaterialCreateInput = z.infer<typeof productionMaterialCreateSchema>;
+
+export const productionStageCreateSchema = z.object({
+  orderId: z.string().cuid(),
+  sequence: z.coerce.number().int().min(1).default(1),
+  name: z.string().trim().min(1, 'Stage name is required').max(120),
+  notes: z.string().trim().max(300).optional().or(z.literal('')),
+});
+export type ProductionStageCreateInput = z.infer<typeof productionStageCreateSchema>;
+
 export const productionOrderStatusSchema = z.object({
   orderId: z.string().cuid(),
   status: z.enum(PRODUCTION_ORDER_STATUS),
@@ -136,23 +157,17 @@ export const productionCostEntryCreateSchema = z
     note: z.string().trim().max(500).optional().or(z.literal('')),
   })
   .superRefine((val, ctx) => {
-    if (val.type === 'LABOUR') {
-      if (!val.hours || !val.rate) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Hours and rate are required for labour entries',
-          path: ['hours'],
-        });
-      }
-    } else {
-      if (val.amount === undefined) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Amount is required',
-          path: ['amount'],
-        });
-      }
+    if (val.amount !== undefined) {
+      return;
     }
+    if (val.type === 'LABOUR' && val.hours && val.rate) {
+      return;
+    }
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Amount is required',
+      path: ['amount'],
+    });
   });
 export type ProductionCostEntryCreateInput = z.infer<typeof productionCostEntryCreateSchema>;
 

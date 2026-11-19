@@ -39,6 +39,7 @@ interface OrderRow {
   producedQty: string;
   plannedStartDate: string;
   plannedEndDate: string;
+  createdAt?: string;
   product: { id: string; sku: string; name: string };
   branch: { id: string; name: string; code: string };
 }
@@ -67,6 +68,13 @@ export default async function FactoryPage({
   const { orders, summary } = await backendFetch<{ orders: OrderRow[]; summary: Summary }>(
     `/api/mobile/factory?${listParams.toString()}`,
   );
+
+  const sortedOrders = [...orders].sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (timeA !== timeB) return timeB - timeA;
+    return b.number.localeCompare(a.number, undefined, { numeric: true });
+  });
 
   const hasFilter = Boolean(sp.search || (sp.status && sp.status !== 'ALL'));
 
@@ -127,10 +135,10 @@ export default async function FactoryPage({
 
       <Card className="p-0">
         <div className="px-4 py-3 border-b text-sm font-medium">
-          {orders.length} Order{orders.length === 1 ? '' : 's'}
+          {sortedOrders.length} Order{sortedOrders.length === 1 ? '' : 's'}
         </div>
         <DataTable
-          rows={orders}
+          rows={sortedOrders}
           rowKey={(r) => r.id}
           empty="No production orders yet. Create your first one to begin."
           columns={[
@@ -138,9 +146,18 @@ export default async function FactoryPage({
               key: 'number',
               header: 'Number',
               cell: (r) => (
-                <Link href={`/factory/${r.id}`} className="text-blue-600 hover:underline tabular">
+                <Link href={`/factory/${r.id}`} className="text-blue-600 hover:underline tabular font-medium">
                   {r.number}
                 </Link>
+              ),
+            },
+            {
+              key: 'createdAt',
+              header: 'Created',
+              cell: (r) => (
+                <span className="text-xs text-muted-foreground whitespace-nowrap tabular">
+                  {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : '—'}
+                </span>
               ),
             },
             { key: 'product', header: 'Product', cell: (r) => r.product.name },

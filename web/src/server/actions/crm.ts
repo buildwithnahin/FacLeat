@@ -120,3 +120,16 @@ export async function addCustomerInteractionAction(
   revalidatePath(`/crm/${parsed.data.customerId}`);
   return { success: true };
 }
+
+export async function deleteCustomerAction(id: string): Promise<{ success?: boolean; error?: string }> {
+  try {
+    await backendFetch(`/api/mobile/crm/${id}`, {
+      method: 'DELETE',
+    });
+    revalidatePath('/crm');
+    return { success: true };
+  } catch (e) {
+    if (e instanceof BackendApiError) return { error: e.message };
+    return { error: e instanceof Error ? e.message : 'Failed to delete customer' };
+  }
+}

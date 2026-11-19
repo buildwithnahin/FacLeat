@@ -15,11 +15,12 @@ export async function GET(req: NextRequest) {
   try {
     await authorize(session, 'factory:read');
     const branchId = session.activeBranchId ?? undefined;
+    const includeCompleted = req.nextUrl.searchParams.get('includeCompleted') === 'true';
 
     const [orders, employees, receives] = await Promise.all([
       prisma.productionOrder.findMany({
         where: { branchId: branchId || undefined, status: { in: ['PLANNED', 'IN_PROGRESS'] } },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { number: 'desc' }, { id: 'desc' }],
         include: {
           product: { select: { id: true, name: true, sku: true } },
           stages: { orderBy: { sequence: 'asc' } },
@@ -33,7 +34,32 @@ export async function GET(req: NextRequest) {
       factoryWorkflowService.listProductionReceives(session, branchId),
     ]);
 
-    return Response.json(apiOk({ orders, employees, receives }));
+    const mappedOrders = orders.map((order) => {
+      const allStagesDone =
+        order.stages.length > 0 &&
+        order.stages.every((s) => s.status === 'COMPLETED' || s.status === 'SKIPPED');
+      const isProduced = Number(order.producedQty) >= Number(order.plannedQty);
+      const isCompleted = order.status === 'COMPLETED' || isProduced || allStagesDone;
+
+      return {
+        ...order,
+        isCompleted,
+        allStagesDone,
+      };
+    });
+
+    const returnedOrders = includeCompleted
+      ? mappedOrders
+      : mappedOrders.filter((o) => !o.isCompleted);
+
+    return Response.json(
+      apiOk({
+        orders: returnedOrders,
+        allOrders: mappedOrders,
+        employees,
+        receives,
+      }),
+    );
   } catch (err) {
     if (err instanceof ApiError) return Response.json(apiError(err), { status: err.status });
     console.error('GET /api/mobile/factory/production-receive failed', err);

@@ -36,6 +36,9 @@ interface Branch {
 interface Category {
   id: string;
   name: string;
+  depreciationMethod?: string;
+  defaultLifeMonths?: number;
+  defaultSalvageRate?: string | number;
 }
 
 export default async function EditAssetPage({

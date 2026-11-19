@@ -19,6 +19,7 @@ interface Order {
   productId: string;
   product: { id: string; name: string; sku: string };
   stages: Stage[];
+  isCompleted?: boolean;
 }
 
 interface Employee {
@@ -33,6 +34,8 @@ interface ReceiveRow {
   voucher: string | null;
   inQty: string;
   outQty: string;
+  createdAt?: string;
+  date?: string;
   order: { id: string; number: string };
   stage: { id: string; name: string } | null;
   product: { id: string; name: string };
@@ -41,9 +44,17 @@ interface ReceiveRow {
 export default async function ProductionReceivePage() {
   const { orders, employees, receives } = await backendFetch<{
     orders: Order[];
+    allOrders?: Order[];
     employees: Employee[];
     receives: ReceiveRow[];
-  }>('/api/mobile/factory/production-receive');
+  }>('/api/mobile/factory/production-receive?includeCompleted=true');
+
+  const sortedReceives = [...receives].sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (timeA !== timeB) return timeB - timeA;
+    return (b.voucher ?? '').localeCompare(a.voucher ?? '', undefined, { numeric: true });
+  });
 
   return (
     <div className="space-y-6">
@@ -57,6 +68,7 @@ export default async function ProductionReceivePage() {
           id: order.id,
           label: `${order.number} — ${order.product.name} (${order.product.sku})`,
           productId: order.productId,
+          isCompleted: Boolean(order.isCompleted),
           stages: order.stages.map((stage) => ({
             id: stage.id,
             label: `${stage.sequence}. ${stage.name}`,
@@ -83,7 +95,7 @@ export default async function ProductionReceivePage() {
               </tr>
             </thead>
             <tbody>
-              {receives.map((row) => (
+              {sortedReceives.map((row) => (
                 <tr key={row.id} className="border-t">
                   <td className="px-4 py-3 font-medium">{row.voucher ?? '-'}</td>
                   <td className="px-4 py-3">{row.order.number}</td>
@@ -93,7 +105,7 @@ export default async function ProductionReceivePage() {
                   <td className="px-4 py-3 text-right">{row.outQty.toString()}</td>
                 </tr>
               ))}
-              {receives.length === 0 ? (
+              {sortedReceives.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                     No production receive records yet.

@@ -46,6 +46,7 @@ interface ApprovalRow {
   currency: string | null;
   createdAt: string;
   steps: ApprovalStep[];
+  requestedBy?: { id: string; name: string; email: string } | null;
 }
 
 interface QueueStats {
@@ -151,11 +152,18 @@ export default async function ApprovalsPage({
           columns={[
             {
               key: 'title',
-              header: 'Title',
+              header: 'Title & Requester',
               cell: (r) => (
-                <Link href={`/approvals/${r.id}`} className="text-blue-600 hover:underline">
-                  {r.title}
-                </Link>
+                <div>
+                  <Link href={`/approvals/${r.id}`} className="text-blue-600 hover:underline font-medium">
+                    {r.title}
+                  </Link>
+                  {r.requestedBy?.name && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      by {r.requestedBy.name}
+                    </p>
+                  )}
+                </div>
               ),
             },
             {

@@ -32,7 +32,13 @@ interface RequisitionDetail {
   number: string;
   status: string;
   branchId: string;
-  items: { productName: string; unit: string; quantity: string }[];
+  items: {
+    productId?: string | null;
+    productName: string;
+    unit: string;
+    quantity: string;
+    estimatedPrice?: string;
+  }[];
 }
 
 export default async function NewPurchaseOrderPage({
@@ -65,9 +71,11 @@ export default async function NewPurchaseOrderPage({
           requisitionId: requisition.id,
           branchId: requisition.branchId,
           items: requisition.items.map((i) => ({
+            productId: i.productId ?? undefined,
             productName: i.productName,
             unit: i.unit,
             quantity: i.quantity,
+            estimatedPrice: i.estimatedPrice,
           })),
         }
       : undefined;

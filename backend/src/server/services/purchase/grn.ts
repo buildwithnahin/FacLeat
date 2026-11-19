@@ -106,8 +106,9 @@ export const grnMethods = {
       for (const item of input.items) {
         const poItem = poItemById.get(item.purchaseOrderItemId);
         if (!poItem) throw new ValidationError('Invalid PO item');
-        const receivedQty = new Prisma.Decimal(item.receivedQty);
-        if (receivedQty.lte(0)) continue;
+        const receivedQty = new Prisma.Decimal(item.receivedQty || 0);
+        const rejectedQty = new Prisma.Decimal(item.rejectedQty || 0);
+        if (receivedQty.lte(0) && rejectedQty.lte(0)) continue;
 
         const remaining = poItem.orderedQty.minus(poItem.receivedQty);
         if (receivedQty.gt(remaining)) {
@@ -123,32 +124,34 @@ export const grnMethods = {
             productId: poItem.productId,
             size: normalizeSize(item.size) ?? poItem.size,
             receivedQty,
-            rejectedQty: new Prisma.Decimal(item.rejectedQty),
+            rejectedQty,
             unitCost: new Prisma.Decimal(item.unitCost),
             note: item.note || null,
           },
         });
 
-        await tx.purchaseOrderItem.update({
-          where: { id: poItem.id },
-          data: { receivedQty: poItem.receivedQty.plus(receivedQty) },
-        });
+        if (receivedQty.gt(0)) {
+          await tx.purchaseOrderItem.update({
+            where: { id: poItem.id },
+            data: { receivedQty: poItem.receivedQty.plus(receivedQty) },
+          });
 
-        // Inventory ledger IN (golden rule: no inventory without GRN)
-        await tx.inventoryLedger.create({
-          data: {
-            branchId: po.branchId,
-            warehouseId: input.warehouseId,
-            productId: poItem.productId,
-            direction: 'IN',
-            quantity: receivedQty,
-            costPerUnit: new Prisma.Decimal(item.unitCost),
-            refType: 'GRN',
-            refId: grn.id,
-            note: `${number} (${po.number})`,
-            createdById: actor.userId,
-          },
-        });
+          // Inventory ledger IN (golden rule: no inventory without GRN)
+          await tx.inventoryLedger.create({
+            data: {
+              branchId: po.branchId,
+              warehouseId: input.warehouseId,
+              productId: poItem.productId,
+              direction: 'IN',
+              quantity: receivedQty,
+              costPerUnit: new Prisma.Decimal(item.unitCost),
+              refType: 'GRN',
+              refId: grn.id,
+              note: `${number} (${po.number})`,
+              createdById: actor.userId,
+            },
+          });
+        }
 
         totalReceived += 1;
       }

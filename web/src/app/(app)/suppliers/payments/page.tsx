@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CreditCard } from 'lucide-react';
+import { CreditCard, ArrowLeft, CheckCircle2, AlertTriangle, Wallet } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,10 +10,11 @@ import { AlertBanner } from '@/components/shared/alert-banner';
 import { backendFetch } from '@/lib/backend-client';
 import { getSession } from '@/server/auth/session';
 import { d, formatCurrency } from '@/lib/money';
+import { PaymentsExportButton } from './payments-export-button';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata = { title: 'Due & Payment Management' };
+export const metadata = { title: 'Supplier Payment Register & Dues' };
 
 const HIGH_DUE_THRESHOLD = d(30000);
 
@@ -51,100 +52,174 @@ export default async function SupplierPaymentsPage() {
 
   const [suppliers, payments] = await Promise.all([
     backendFetch<SupplierDueRow[]>(`/api/mobile/suppliers${bParam ? `?${bParam}` : ''}`),
-    backendFetch<SupplierPaymentRow[]>(`/api/mobile/suppliers/payments?limit=30${bParam ? `&${bParam}` : ''}`),
+    backendFetch<SupplierPaymentRow[]>(`/api/mobile/suppliers/payments?limit=50${bParam ? `&${bParam}` : ''}`),
   ]);
 
   const totalOutstanding = suppliers.reduce(
     (acc, s) => acc.plus(d(s.dueAmount).gt(0) ? s.dueAmount : 0),
     d(0),
   );
+  const totalPaidRecent = payments.reduce((acc, p) => acc.plus(d(p.amount || 0)), d(0));
   const suppliersWithDue = suppliers.filter((s) => d(s.dueAmount).gt(0));
   const highPriority = suppliers.filter((s) => d(s.dueAmount).gt(HIGH_DUE_THRESHOLD));
   const cleared = suppliers.filter((s) => d(s.dueAmount).lte(0) && s.status === 'ACTIVE');
 
+  // Breakdown by method
+  const bankPayments = payments.filter((p) => p.method === 'BANK_TRANSFER' || p.method === 'WIRE_TRANSFER');
+  const cashPayments = payments.filter((p) => p.method === 'CASH');
+  const chequePayments = payments.filter((p) => p.method === 'CHEQUE');
+  const mobilePayments = payments.filter((p) => p.method === 'MOBILE_BANKING');
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Due & Payment Management"
-        description="Track and manage supplier payments"
-      >
-        <Button variant="dark" asChild>
+      <div className="flex items-center gap-3">
+        <Button variant="outline" size="sm" asChild>
           <Link href="/suppliers">
-            <CreditCard className="h-4 w-4" />
-            Browse Suppliers
+            <ArrowLeft className="h-4 w-4 mr-1.5" />
+            Back to Suppliers
           </Link>
         </Button>
+      </div>
+
+      <PageHeader
+        title="Supplier Payments & Dues"
+        description="Monitor outstanding vendor balances, prioritize upcoming liabilities, and review disbursement vouchers"
+      >
+        <div className="flex items-center gap-2">
+          <PaymentsExportButton payments={payments} />
+          <Button variant="dark" asChild>
+            <Link href="/suppliers">
+              <CreditCard className="h-4 w-4 mr-1.5" />
+              Make a Payment
+            </Link>
+          </Button>
+        </div>
       </PageHeader>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
-          label="Total Outstanding"
+          label="Total Outstanding AP"
           value={formatCurrency(totalOutstanding, 'BDT')}
           tone="danger"
-          description={`${suppliersWithDue.length} suppliers with due`}
+          description={`${suppliersWithDue.length} suppliers requiring settlement`}
         />
         <KpiCard
-          label="High Priority"
+          label="High Priority Dues"
           value={highPriority.length}
-          tone="warning"
-          description={`Dues above ${formatCurrency(HIGH_DUE_THRESHOLD, 'BDT')}`}
+          tone={highPriority.length > 0 ? 'warning' : 'neutral'}
+          description={`Over ${formatCurrency(HIGH_DUE_THRESHOLD, 'BDT')} threshold`}
         />
         <KpiCard
-          label="Cleared Suppliers"
+          label="Cleared Vendors"
           value={cleared.length}
           tone="success"
-          description="No outstanding dues"
+          description="Zero outstanding liabilities"
         />
+        <KpiCard
+          label="Disbursed (Recent)"
+          value={formatCurrency(totalPaidRecent, 'BDT')}
+          description={`${payments.length} payment vouchers`}
+        />
+      </div>
+
+      {/* Tender Method Distribution */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="rounded-lg border bg-card p-3">
+          <p className="text-xs text-muted-foreground">Bank Transfers</p>
+          <p className="text-lg font-bold">
+            {formatCurrency(bankPayments.reduce((acc, p) => acc.plus(d(p.amount || 0)), d(0)), 'BDT')}
+          </p>
+          <p className="text-xs text-muted-foreground">{bankPayments.length} transactions</p>
+        </div>
+        <div className="rounded-lg border bg-card p-3">
+          <p className="text-xs text-muted-foreground">Cash Disbursements</p>
+          <p className="text-lg font-bold">
+            {formatCurrency(cashPayments.reduce((acc, p) => acc.plus(d(p.amount || 0)), d(0)), 'BDT')}
+          </p>
+          <p className="text-xs text-muted-foreground">{cashPayments.length} transactions</p>
+        </div>
+        <div className="rounded-lg border bg-card p-3">
+          <p className="text-xs text-muted-foreground">Cheque Payments</p>
+          <p className="text-lg font-bold">
+            {formatCurrency(chequePayments.reduce((acc, p) => acc.plus(d(p.amount || 0)), d(0)), 'BDT')}
+          </p>
+          <p className="text-xs text-muted-foreground">{chequePayments.length} transactions</p>
+        </div>
+        <div className="rounded-lg border bg-card p-3">
+          <p className="text-xs text-muted-foreground">Mobile Banking (bKash/Nagad)</p>
+          <p className="text-lg font-bold">
+            {formatCurrency(mobilePayments.reduce((acc, p) => acc.plus(d(p.amount || 0)), d(0)), 'BDT')}
+          </p>
+          <p className="text-xs text-muted-foreground">{mobilePayments.length} transactions</p>
+        </div>
       </div>
 
       {highPriority.length > 0 && (
         <AlertBanner
           tone="danger"
-          title={`${highPriority.length} supplier${highPriority.length === 1 ? '' : 's'} have high pending dues`}
+          title={`${highPriority.length} vendor${highPriority.length === 1 ? '' : 's'} have dues exceeding ${formatCurrency(HIGH_DUE_THRESHOLD, 'BDT')}`}
         >
           <span>
-            Dues exceed {formatCurrency(HIGH_DUE_THRESHOLD, 'BDT')}. Prioritize settlement.
+            Immediate payment allocation recommended to avoid supplier hold or procurement disruptions.
           </span>
         </AlertBanner>
       )}
 
+      {/* Supplier Due Summary Table */}
       <Card className="p-0">
-        <div className="px-4 py-3 border-b text-sm font-medium">Supplier Due Summary</div>
+        <div className="px-4 py-3 border-b text-sm font-medium flex items-center justify-between">
+          <span>Supplier Aging & Outstanding Balances</span>
+          <span className="text-xs text-muted-foreground">{suppliers.length} Vendors</span>
+        </div>
         <DataTable
           rows={suppliers}
           rowKey={(r) => r.id}
-          empty="No suppliers configured"
+          empty="No suppliers configured."
           columns={[
-            { key: 'code', header: 'Supplier ID', cell: (r) => <span className="tabular">{r.code}</span> },
+            {
+              key: 'code',
+              header: 'Supplier Code',
+              cell: (r) => (
+                <Link href={`/suppliers/${r.id}`} className="font-mono text-xs font-semibold hover:underline">
+                  {r.code}
+                </Link>
+              ),
+            },
             {
               key: 'name',
               header: 'Supplier Name',
               cell: (r) => (
-                <Link href={`/suppliers/${r.id}`} className="text-blue-600 hover:underline">
+                <Link href={`/suppliers/${r.id}`} className="font-medium hover:underline">
                   {r.name}
                 </Link>
               ),
             },
             {
               key: 'totalPurchase',
-              header: 'Total Purchase',
+              header: 'Total Procured',
               align: 'right',
-              cell: (r) => <span className="tabular">{formatCurrency(r.totalPurchase, r.currency)}</span>,
+              cell: (r) => (
+                <span className="tabular">{formatCurrency(r.totalPurchase, r.currency)}</span>
+              ),
             },
             {
               key: 'due',
-              header: 'Due Amount',
+              header: 'Outstanding Due',
               align: 'right',
               cell: (r) => {
                 const isDue = d(r.dueAmount).gt(0);
                 return (
-                  <span className={`tabular font-medium ${isDue ? 'text-red-600' : 'text-emerald-600'}`}>
+                  <span className={`tabular font-bold ${isDue ? 'text-destructive' : 'text-emerald-600'}`}>
                     {formatCurrency(r.dueAmount, r.currency)}
                   </span>
                 );
               },
             },
-            { key: 'terms', header: 'Terms', cell: (r) => r.paymentTerms.replace('_', ' ') },
+            {
+              key: 'terms',
+              header: 'Payment Terms',
+              cell: (r) => <span className="text-xs font-medium">{r.paymentTerms.replace(/_/g, ' ')}</span>,
+            },
             {
               key: 'priority',
               header: 'Priority',
@@ -158,46 +233,99 @@ export default async function SupplierPaymentsPage() {
               key: 'action',
               header: 'Actions',
               align: 'right',
-              cell: (r) => (
-                <Button size="sm" variant="outline" asChild>
-                  <Link href={`/suppliers/${r.id}/pay`}>Pay Now</Link>
-                </Button>
-              ),
+              cell: (r) => {
+                const isDue = d(r.dueAmount).gt(0);
+                return (
+                  <div className="flex items-center justify-end gap-2">
+                    <Button size="sm" variant="ghost" asChild className="h-8 px-2 text-xs">
+                      <Link href={`/suppliers/${r.id}/ledger`}>Ledger</Link>
+                    </Button>
+                    {isDue && (
+                      <Button size="sm" variant="outline" asChild className="h-8 px-2.5 text-xs font-semibold">
+                        <Link href={`/suppliers/${r.id}/pay`}>Pay Now</Link>
+                      </Button>
+                    )}
+                  </div>
+                );
+              },
             },
           ]}
         />
       </Card>
 
+      {/* Recent Payments Journal */}
       <Card className="p-0">
-        <div className="px-4 py-3 border-b text-sm font-medium">Recent Payments</div>
+        <div className="px-4 py-3 border-b text-sm font-medium flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-primary" />
+            <span>Recent Disbursement Journal</span>
+          </div>
+          <span className="text-xs text-muted-foreground">Double-entry GL posted vouchers</span>
+        </div>
         <DataTable
           rows={payments}
           rowKey={(r) => r.id}
-          empty="No payments recorded yet"
+          empty="No supplier payments recorded yet."
           columns={[
-            { key: 'number', header: 'Payment ID', cell: (r) => <span className="tabular">{r.number}</span> },
-            { key: 'date', header: 'Date', cell: (r) => new Date(r.paymentDate).toLocaleDateString() },
+            {
+              key: 'number',
+              header: 'Payment Voucher',
+              cell: (r) => <span className="font-mono text-xs font-semibold">{r.number}</span>,
+            },
+            {
+              key: 'date',
+              header: 'Date',
+              cell: (r) => (
+                <span className="tabular text-xs">
+                  {new Date(r.paymentDate).toLocaleDateString()}
+                </span>
+              ),
+            },
             {
               key: 'supplier',
               header: 'Supplier',
               cell: (r) => (
-                <Link href={`/suppliers/${r.supplier.id}`} className="text-blue-600 hover:underline">
+                <Link href={`/suppliers/${r.supplier.id}`} className="font-medium hover:underline">
                   {r.supplier.name}
                 </Link>
               ),
             },
             {
               key: 'amount',
-              header: 'Amount',
+              header: 'Amount Paid',
               align: 'right',
-              cell: (r) => <span className="tabular text-emerald-600">{formatCurrency(r.amount, r.currency)}</span>,
+              cell: (r) => (
+                <span className="tabular font-bold text-emerald-600">
+                  {formatCurrency(r.amount, r.currency)}
+                </span>
+              ),
             },
-            { key: 'method', header: 'Method', cell: (r) => r.method.replace('_', ' ').toLowerCase() },
-            { key: 'ref', header: 'Reference', cell: (r) => <span className="tabular">{r.reference ?? '—'}</span> },
+            {
+              key: 'method',
+              header: 'Tender Method',
+              cell: (r) => (
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  {r.method.replace(/_/g, ' ')}
+                </span>
+              ),
+            },
+            {
+              key: 'ref',
+              header: 'Reference',
+              cell: (r) => (
+                <span className="font-mono text-xs text-muted-foreground">{r.reference ?? '—'}</span>
+              ),
+            },
             {
               key: 'invoice',
-              header: 'Invoice',
-              cell: (r) => (r.invoice ? <span className="tabular">{r.invoice.number}</span> : '—'),
+              header: 'Applied Invoice',
+              cell: (r) => (
+                r.invoice ? (
+                  <span className="font-mono text-xs text-primary font-medium">{r.invoice.number}</span>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic">On-account / General</span>
+                )
+              ),
             },
           ]}
         />

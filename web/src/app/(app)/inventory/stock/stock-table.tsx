@@ -1,7 +1,16 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, Boxes, AlertTriangle, Layers, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
+import Link from 'next/link';
+import {
+  Search,
+  Boxes,
+  AlertTriangle,
+  Layers,
+  Store,
+  Building2,
+  Warehouse as WarehouseIcon,
+} from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -32,26 +41,74 @@ export type StockRow = {
   qty: string;
 };
 
+export type WarehouseOption = {
+  id: string;
+  name: string;
+  code: string;
+  type: string;
+  branch?: { id?: string; name: string; code: string };
+};
+
+export type BranchOption = {
+  id: string;
+  name: string;
+  code: string;
+};
+
 export function StockTable({
   rows,
   title,
   description,
   emptyLabel,
+  availableWarehouses = [],
+  availableBranches = [],
+  initialBranchId = 'ALL',
 }: {
   rows: StockRow[];
   title: string;
   description: string;
   emptyLabel: string;
+  availableWarehouses?: WarehouseOption[];
+  availableBranches?: BranchOption[];
+  initialBranchId?: string;
 }) {
   const [search, setSearch] = useState('');
+  const [branchFilter, setBranchFilter] = useState(initialBranchId);
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'SHOWROOM' | 'MAIN' | 'STORE' | 'WIP' | 'DAMAGED'>('ALL');
   const [warehouseFilter, setWarehouseFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'LOW' | 'OUT'>('ALL');
 
-  const warehouses = useMemo(() => {
+  // Map each warehouseId to its branchId/code
+  const warehouseBranchMap = useMemo(() => {
     const map = new Map<string, string>();
-    rows.forEach((r) => map.set(r.warehouse.id, `${r.warehouse.name} (${r.warehouse.code})`));
-    return Array.from(map.entries());
-  }, [rows]);
+    availableWarehouses.forEach((w) => {
+      if (w.branch?.id) map.set(w.id, w.branch.id);
+    });
+    return map;
+  }, [availableWarehouses]);
+
+  // Master list of warehouses filtered by current branch and type selection
+  const selectableWarehouses = useMemo(() => {
+    let list = availableWarehouses;
+    if (list.length === 0) {
+      const map = new Map<string, WarehouseOption>();
+      rows.forEach((r) =>
+        map.set(r.warehouse.id, {
+          id: r.warehouse.id,
+          name: r.warehouse.name,
+          code: r.warehouse.code,
+          type: r.warehouse.type,
+        }),
+      );
+      list = Array.from(map.values());
+    }
+
+    return list.filter((w) => {
+      if (branchFilter !== 'ALL' && w.branch?.id && w.branch.id !== branchFilter) return false;
+      if (typeFilter !== 'ALL' && w.type?.toUpperCase() !== typeFilter) return false;
+      return true;
+    });
+  }, [availableWarehouses, rows, branchFilter, typeFilter]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -64,7 +121,14 @@ export function StockTable({
         r.warehouse.name.toLowerCase().includes(q) ||
         r.warehouse.code.toLowerCase().includes(q);
 
-      // Warehouse
+      // Branch
+      const whBranchId = warehouseBranchMap.get(r.warehouse.id);
+      const matchesBranch = branchFilter === 'ALL' || !whBranchId || whBranchId === branchFilter;
+
+      // Warehouse Type
+      const matchesType = typeFilter === 'ALL' || r.warehouse.type?.toUpperCase() === typeFilter;
+
+      // Specific Warehouse
       const matchesWarehouse = warehouseFilter === 'ALL' || r.warehouse.id === warehouseFilter;
 
       // Status
@@ -78,11 +142,11 @@ export function StockTable({
         (statusFilter === 'OUT' && isOut) ||
         (statusFilter === 'LOW' && isLow);
 
-      return matchesSearch && matchesWarehouse && matchesStatus;
+      return matchesSearch && matchesBranch && matchesType && matchesWarehouse && matchesStatus;
     });
-  }, [rows, search, warehouseFilter, statusFilter]);
+  }, [rows, search, branchFilter, typeFilter, warehouseFilter, statusFilter, warehouseBranchMap]);
 
-  // Aggregate stats
+  // Aggregate stats based on current filtered items
   const totals = useMemo(() => {
     let totalQty = d(0);
     let totalCostVal = d(0);
@@ -90,7 +154,7 @@ export function StockTable({
     let lowCount = 0;
     let outCount = 0;
 
-    rows.forEach((r) => {
+    filtered.forEach((r) => {
       const q = d(r.qty);
       const reorder = d(r.product.reorderLevel);
       if (q.lte(0)) outCount++;
@@ -108,7 +172,15 @@ export function StockTable({
       lowCount,
       outCount,
     };
-  }, [rows]);
+  }, [filtered]);
+
+  const typePillClass: Record<string, string> = {
+    SHOWROOM: 'bg-purple-100 text-purple-800 border-purple-200',
+    MAIN: 'bg-blue-100 text-blue-800 border-blue-200',
+    STORE: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    WIP: 'bg-amber-100 text-amber-800 border-amber-200',
+    DAMAGED: 'bg-red-100 text-red-800 border-red-200',
+  };
 
   return (
     <div className="space-y-4">
@@ -116,18 +188,18 @@ export function StockTable({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-4">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs uppercase tracking-wider">Total Units in Stock</span>
+            <span className="text-xs uppercase tracking-wider font-medium">Units in Stock</span>
             <Boxes className="h-4 w-4 text-primary" />
           </div>
           <p className="text-2xl font-bold mt-1 tabular-nums">
             {parseFloat(totals.qty).toLocaleString()}
           </p>
-          <span className="text-xs text-muted-foreground">{rows.length} SKU locations</span>
+          <span className="text-xs text-muted-foreground">{filtered.length} matching locations</span>
         </Card>
 
         <Card className="p-4">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs uppercase tracking-wider">Total Valuation (Cost)</span>
+            <span className="text-xs uppercase tracking-wider font-medium">Total Cost Value</span>
             <Layers className="h-4 w-4 text-emerald-600" />
           </div>
           <p className="text-2xl font-bold mt-1 text-emerald-600 tabular-nums">
@@ -138,18 +210,18 @@ export function StockTable({
 
         <Card className="p-4">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs uppercase tracking-wider">Retail Value (Sell)</span>
+            <span className="text-xs uppercase tracking-wider font-medium">Retail Value (MRP)</span>
             <span className="text-xs font-semibold text-blue-600">MRP</span>
           </div>
           <p className="text-2xl font-bold mt-1 text-slate-800 tabular-nums">
             {formatCurrency(totals.sell)}
           </p>
-          <span className="text-xs text-muted-foreground">Estimated sales revenue</span>
+          <span className="text-xs text-muted-foreground">Potential sales revenue</span>
         </Card>
 
         <Card className="p-4">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs uppercase tracking-wider">Stock Alerts</span>
+            <span className="text-xs uppercase tracking-wider font-medium">Stock Alerts</span>
             <AlertTriangle className="h-4 w-4 text-amber-500" />
           </div>
           <div className="flex items-center gap-2 mt-1">
@@ -162,6 +234,69 @@ export function StockTable({
           </div>
           <span className="text-xs text-muted-foreground mt-1 block">Requires restocking</span>
         </Card>
+      </div>
+
+      {/* Warehouse Type Quick Filters */}
+      <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+        <span className="text-xs font-semibold text-slate-600 mr-1 flex items-center gap-1">
+          <WarehouseIcon className="h-3.5 w-3.5" /> Location Type:
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            setTypeFilter('ALL');
+            setWarehouseFilter('ALL');
+          }}
+          className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+            typeFilter === 'ALL'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-white text-slate-600 border hover:bg-slate-100'
+          }`}
+        >
+          All Types
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setTypeFilter('SHOWROOM');
+            setWarehouseFilter('ALL');
+          }}
+          className={`px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors ${
+            typeFilter === 'SHOWROOM'
+              ? 'bg-purple-700 text-white shadow-xs'
+              : 'bg-white text-purple-800 border border-purple-200 hover:bg-purple-50'
+          }`}
+        >
+          <Store className="h-3.5 w-3.5" /> Showrooms Only
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setTypeFilter('MAIN');
+            setWarehouseFilter('ALL');
+          }}
+          className={`px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors ${
+            typeFilter === 'MAIN'
+              ? 'bg-blue-700 text-white shadow-xs'
+              : 'bg-white text-blue-800 border border-blue-200 hover:bg-blue-50'
+          }`}
+        >
+          <Building2 className="h-3.5 w-3.5" /> Central / Main WH
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setTypeFilter('STORE');
+            setWarehouseFilter('ALL');
+          }}
+          className={`px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors ${
+            typeFilter === 'STORE'
+              ? 'bg-emerald-700 text-white shadow-xs'
+              : 'bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-50'
+          }`}
+        >
+          <Boxes className="h-3.5 w-3.5" /> Sub-Stores
+        </button>
       </div>
 
       {/* Filter and Search Toolbar */}
@@ -178,21 +313,40 @@ export function StockTable({
             />
           </div>
 
-          {/* Warehouse Dropdown Filter */}
-          {warehouses.length > 1 && (
+          {/* Branch Filter Selector */}
+          {availableBranches.length > 1 && (
             <select
-              value={warehouseFilter}
-              onChange={(e) => setWarehouseFilter(e.target.value)}
+              value={branchFilter}
+              onChange={(e) => {
+                setBranchFilter(e.target.value);
+                setWarehouseFilter('ALL');
+              }}
               className="h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus:outline-none"
             >
-              <option value="ALL">All Warehouses ({warehouses.length})</option>
-              {warehouses.map(([id, label]) => (
-                <option key={id} value={id}>
-                  {label}
+              <option value="ALL">All Branches ({availableBranches.length})</option>
+              {availableBranches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name} ({b.code})
                 </option>
               ))}
             </select>
           )}
+
+          {/* Warehouse Dropdown Filter */}
+          <select
+            value={warehouseFilter}
+            onChange={(e) => setWarehouseFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus:outline-none max-w-[240px]"
+          >
+            <option value="ALL">
+              All Locations {selectableWarehouses.length > 0 ? `(${selectableWarehouses.length})` : ''}
+            </option>
+            {selectableWarehouses.map((wh) => (
+              <option key={wh.id} value={wh.id}>
+                {wh.name} ({wh.code}) [{wh.type}]
+              </option>
+            ))}
+          </select>
 
           {/* Status Quick Filter Buttons */}
           <div className="flex items-center gap-1">
@@ -212,7 +366,7 @@ export function StockTable({
               onClick={() => setStatusFilter('LOW')}
               className="text-xs h-8 text-amber-700"
             >
-              Low Stock ({totals.lowCount})
+              Low ({totals.lowCount})
             </Button>
             <Button
               type="button"
@@ -221,7 +375,7 @@ export function StockTable({
               onClick={() => setStatusFilter('OUT')}
               className="text-xs h-8 text-red-600"
             >
-              Out of Stock ({totals.outCount})
+              Out ({totals.outCount})
             </Button>
           </div>
         </div>
@@ -239,7 +393,7 @@ export function StockTable({
               <tr>
                 <th className="text-left font-semibold px-4 py-3">SKU</th>
                 <th className="text-left font-semibold px-4 py-3">Product</th>
-                <th className="text-left font-semibold px-4 py-3">Warehouse</th>
+                <th className="text-left font-semibold px-4 py-3">Warehouse / Showroom</th>
                 <th className="text-right font-semibold px-4 py-3">Balance Qty</th>
                 <th className="text-left font-semibold px-4 py-3">Unit</th>
                 <th className="text-right font-semibold px-4 py-3">Cost / unit</th>
@@ -275,14 +429,30 @@ export function StockTable({
                       {r.product.sku}
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-900">
-                      <div>{r.product.name}</div>
-                      <span className="text-[10px] text-muted-foreground uppercase">
+                      <Link href={`/inventory/products/${r.product.id}`} className="hover:underline text-blue-600">
+                        {r.product.name}
+                      </Link>
+                      <span className="text-[10px] text-muted-foreground uppercase block">
                         {r.product.type.replace('_', ' ')}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground text-xs">
-                      <div className="font-medium text-slate-700">{r.warehouse.name}</div>
-                      <span className="text-[10px] text-slate-400">({r.warehouse.code})</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Link
+                          href={`/warehouse/${r.warehouse.id}`}
+                          className="font-semibold text-slate-800 hover:underline hover:text-blue-600"
+                        >
+                          {r.warehouse.name}
+                        </Link>
+                        <span
+                          className={`text-[9px] px-1.5 py-0.2 rounded font-semibold border ${
+                            typePillClass[r.warehouse.type] ?? 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {r.warehouse.type === 'SHOWROOM' ? '🏪 SHOWROOM' : r.warehouse.type}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono">({r.warehouse.code})</span>
                     </td>
                     <td className={`px-4 py-3 text-right tabular-nums text-sm ${low}`}>
                       {parseFloat(r.qty).toLocaleString()}
@@ -294,7 +464,7 @@ export function StockTable({
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground text-xs">
                       {formatCurrency(r.product.sellPrice)}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground text-xs">
+                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground text-xs font-medium text-emerald-700">
                       {formatCurrency(totalCost)}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums font-semibold text-xs text-slate-900">

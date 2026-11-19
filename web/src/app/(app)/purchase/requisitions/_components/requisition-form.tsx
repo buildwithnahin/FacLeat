@@ -45,6 +45,7 @@ interface ProductOption {
   sku: string;
   name: string;
   unit: string;
+  costPrice?: string;
 }
 
 export function RequisitionForm({
@@ -197,6 +198,10 @@ export function RequisitionForm({
                                 ...x,
                                 productId: e.target.value,
                                 productName: product?.name ?? '',
+                                estimatedPrice:
+                                  product?.costPrice && !x.estimatedPrice
+                                    ? product.costPrice
+                                    : x.estimatedPrice,
                                 unit: (UNITS.includes(product?.unit as (typeof UNITS)[number])
                                   ? product?.unit
                                   : 'PCS') as Row['unit'],

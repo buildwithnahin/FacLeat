@@ -69,6 +69,53 @@ export const auditService = {
     return rows.map((r) => r.module);
   },
 
+  async actions(session: AppSession | null) {
+    await authorize(session, 'audit:read');
+    const rows = await prisma.auditLog.findMany({
+      distinct: ['action'],
+      select: { action: true },
+      orderBy: { action: 'asc' },
+    });
+    return rows.map((r) => r.action);
+  },
+
+  async stats(session: AppSession | null, branchId?: string) {
+    await authorize(session, 'audit:read');
+    const branchIds = await getScopedBranchIds(session, branchId);
+    const branchWhere = branchIds
+      ? { branchId: { in: branchIds } }
+      : branchId
+        ? { branchId }
+        : {};
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const [total, todayCount, criticalCount] = await Promise.all([
+      prisma.auditLog.count({ where: branchWhere }),
+      prisma.auditLog.count({
+        where: {
+          ...branchWhere,
+          createdAt: { gte: startOfToday },
+        },
+      }),
+      prisma.auditLog.count({
+        where: {
+          ...branchWhere,
+          OR: [
+            { action: { contains: 'DELETE' } },
+            { action: { contains: 'CANCEL' } },
+            { action: { contains: 'REJECT' } },
+            { action: { contains: 'VOID' } },
+            { action: { contains: 'TERMINATE' } },
+          ],
+        },
+      }),
+    ]);
+
+    return { total, todayCount, criticalCount };
+  },
+
   async getById(session: AppSession | null, id: string) {
     await authorize(session, 'audit:read');
     return prisma.auditLog.findUnique({

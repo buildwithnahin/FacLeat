@@ -10,34 +10,43 @@ import {
   parseInventorySection,
   type InventorySectionSlug,
 } from '@/lib/inventory-sections';
-import { StockTable, type StockRow } from './stock-table';
+import {
+  StockTable,
+  type StockRow,
+  type WarehouseOption,
+  type BranchOption,
+} from './stock-table';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = { title: 'Stock balance' };
 
 type StockBalancePageProps = {
-  searchParams: Promise<{ section?: string }>;
+  searchParams: Promise<{ section?: string; branchId?: string }>;
 };
 
 export default async function StockBalancePage({ searchParams }: StockBalancePageProps) {
   const session = await getSession();
   const sp = await searchParams;
   const section = parseInventorySection(sp.section);
-  const branchId = session?.activeBranchId || session?.defaultBranchId || undefined;
+  const activeBranchId = session?.activeBranchId || session?.defaultBranchId || 'ALL';
 
-  const qs = new URLSearchParams();
+  const qs = new URLSearchParams({ allBranches: 'true' });
   if (section) qs.set('section', section);
-  if (branchId) qs.set('branchId', branchId);
   const qsStr = qs.toString();
-  const allRows = await backendFetch<StockRow[]>(`/api/mobile/inventory/stock${qsStr ? `?${qsStr}` : ''}`);
+
+  const [allRows, allWarehouses, allBranches] = await Promise.all([
+    backendFetch<StockRow[]>(`/api/mobile/inventory/stock?${qsStr}`),
+    backendFetch<WarehouseOption[]>('/api/mobile/warehouse/warehouses'),
+    backendFetch<BranchOption[]>('/api/mobile/branches?activeOnly=true'),
+  ]);
 
   const pageTitle = section
     ? `${INVENTORY_SECTION_META[section].label} Stock Balance`
-    : 'All Stock Balance';
+    : 'Live Inventory & Showroom Stock';
   const pageDescription = section
     ? INVENTORY_SECTION_META[section].description
-    : 'Live inventory balance across all warehouses and production stages.';
+    : 'Real-time multi-location inventory across central warehouses, showrooms, and retail stores.';
 
   return (
     <div>
@@ -68,6 +77,9 @@ export default async function StockBalancePage({ searchParams }: StockBalancePag
           title={pageTitle}
           description={pageDescription}
           rows={allRows}
+          availableWarehouses={allWarehouses}
+          availableBranches={allBranches}
+          initialBranchId={activeBranchId}
           emptyLabel={`No ${section ? INVENTORY_SECTION_META[section].label.toLowerCase() : 'inventory'} stock balance recorded yet.`}
         />
       </div>

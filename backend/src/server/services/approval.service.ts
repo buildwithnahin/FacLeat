@@ -11,6 +11,7 @@ import type {
   ApprovalDecisionInput,
 } from '@/server/validators/approvals';
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/errors';
+import { autoCreateProductionOrderForPlan } from '@/server/services/factory-order-sync';
 
 const REQUEST_INCLUDE = {
   rule: {
@@ -199,10 +200,15 @@ async function syncProductionPlanApprovalState(
   tx: Prisma.TransactionClient | typeof prisma = prisma,
 ) {
   if (args.approvalStatus === 'CHANGES_REQUESTED') return;
+  const isApproved = args.approvalStatus === 'APPROVED';
   await tx.productionPlan.update({
     where: { id: args.planId },
-    data: { status: args.approvalStatus === 'APPROVED' ? 'APPROVED' : 'CANCELLED' },
+    data: { status: isApproved ? 'APPROVED' : 'CANCELLED' },
   });
+
+  if (isApproved) {
+    await autoCreateProductionOrderForPlan(args.planId, tx);
+  }
 }
 
 export const approvalService = {

@@ -19,9 +19,13 @@ import type {
   ProductionOverheadRateInput,
   ProductionPlanCreateInput,
   ProductionPlanDecisionInput,
+  ProductionMaterialCreateInput,
+  ProductionStageCreateInput,
 } from '@/server/validators/factory';
 import { NotFoundError, ValidationError } from '@/lib/errors';
 import { nextProductionNumber, nextDocumentNumber } from '@/lib/document-number';
+import { autoCreateProductionOrderForPlan } from '@/server/services/factory-order-sync';
+import { nextVoucherNumber } from '@/server/services/factory-workflow.service';
 
 const ORDER_INCLUDE = {
   branch: { select: { id: true, name: true, code: true, currency: true, allowNegativeStock: true } },
@@ -40,6 +44,27 @@ const ORDER_INCLUDE = {
     orderBy: { createdAt: 'desc' as const },
   },
   costEntries: { orderBy: { createdAt: 'asc' as const } },
+  productionIssueVouchers: {
+    include: {
+      warehouse: { select: { id: true, name: true, code: true } },
+      items: { include: { product: { select: { id: true, name: true, sku: true } } } },
+    },
+    orderBy: [{ createdAt: 'desc' as const }, { voucherNo: 'desc' as const }],
+  },
+  finishedGoodsReceiveVouchers: {
+    include: {
+      warehouse: { select: { id: true, name: true, code: true } },
+      items: { include: { product: { select: { id: true, name: true, sku: true } } } },
+    },
+    orderBy: [{ createdAt: 'desc' as const }, { receiveNo: 'desc' as const }],
+  },
+  processTrackings: {
+    include: {
+      stage: { select: { id: true, name: true, sequence: true } },
+      operator: { select: { id: true, firstName: true, lastName: true, code: true } },
+    },
+    orderBy: [{ createdAt: 'desc' as const }, { trackingNo: 'desc' as const }],
+  },
 } satisfies Prisma.ProductionOrderInclude;
 
 async function balanceFor(
@@ -191,6 +216,24 @@ export const factoryService = {
   ) {
     await authorize(session, 'factory:read');
     const branchIds = await getScopedBranchIds(session, filters.branchId);
+
+    // Auto-sync any approved production plans that don't have a production order yet
+    try {
+      const approvedPlansWithoutOrders = await prisma.productionPlan.findMany({
+        where: {
+          status: 'APPROVED',
+          ...(branchIds ? { branchId: { in: branchIds } } : {}),
+          orders: { none: {} },
+        },
+        select: { id: true },
+      });
+      for (const p of approvedPlansWithoutOrders) {
+        await autoCreateProductionOrderForPlan(p.id);
+      }
+    } catch (e) {
+      console.error('Failed to auto-sync approved plans to orders', e);
+    }
+
     return prisma.productionOrder.findMany({
       where: {
         ...(branchIds ? { branchId: { in: branchIds } } : {}),
@@ -203,7 +246,7 @@ export const factoryService = {
             ]
           : undefined,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { number: 'desc' }, { id: 'desc' }],
       include: {
         branch: { select: { id: true, name: true, code: true } },
         product: { select: { id: true, sku: true, name: true } },
@@ -251,6 +294,27 @@ export const factoryService = {
       });
       const number = nextProductionNumber(year, count);
 
+      let resolvedMaterials = input.materials;
+      if (resolvedMaterials.length === 0) {
+        const templateOrder = await tx.productionOrder.findFirst({
+          where: { productId: input.productId, materials: { some: {} } },
+          include: { materials: true },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (templateOrder && templateOrder.materials.length > 0 && templateOrder.plannedQty.gt(0)) {
+          const scale = new Prisma.Decimal(input.plannedQty).dividedBy(templateOrder.plannedQty);
+          resolvedMaterials = templateOrder.materials.map((m) => ({
+            productId: m.productId,
+            unit: m.unit,
+            plannedQty: m.plannedQty.times(scale).toDecimalPlaces(4).toNumber(),
+            unitCost: m.unitCost ? m.unitCost.toNumber() : undefined,
+            materialType: m.materialType,
+            fromWarehouseId: m.fromWarehouseId || undefined,
+            note: `Auto-BOM from ${templateOrder.number}`,
+          }));
+        }
+      }
+
       const order = await tx.productionOrder.create({
         data: {
           branchId: input.branchId,
@@ -275,7 +339,7 @@ export const factoryService = {
             })),
           },
           materials: {
-            create: input.materials.map((m) => ({
+            create: resolvedMaterials.map((m) => ({
               productId: m.productId,
               unit: m.unit,
               plannedQty: new Prisma.Decimal(m.plannedQty),
@@ -338,7 +402,7 @@ export const factoryService = {
             ]
           : undefined,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { planNo: 'desc' }, { id: 'desc' }],
       include: {
         branch: { select: { id: true, name: true, code: true } },
         product: { select: { id: true, sku: true, name: true } },
@@ -444,6 +508,10 @@ export const factoryService = {
         data: { status: input.decision === 'APPROVE' ? 'APPROVED' : 'CANCELLED' },
       });
 
+      if (input.decision === 'APPROVE') {
+        await autoCreateProductionOrderForPlan(input.id, tx, actor.userId);
+      }
+
       await recordAudit(
         {
           actorId: actor.userId,
@@ -467,8 +535,13 @@ export const factoryService = {
     const order = await prisma.productionOrder.findUnique({
       where: { id: input.orderId },
       include: {
-        materials: true,
-        branch: { select: { allowNegativeStock: true, currency: true } },
+        materials: {
+          include: {
+            product: { select: { id: true, name: true, sku: true, unit: true } },
+            fromWarehouse: { select: { id: true, name: true, code: true } },
+          },
+        },
+        branch: { select: { id: true, name: true, allowNegativeStock: true, currency: true } },
       },
     });
     if (!order) throw new NotFoundError('Production order not found');
@@ -480,49 +553,155 @@ export const factoryService = {
       await assertOpenPeriod(tx, order.branchId);
       let consumptionValue = new Prisma.Decimal(0);
 
+      const branchWarehouses = await tx.warehouse.findMany({
+        where: { branchId: order.branchId, isActive: true },
+        select: { id: true, name: true, code: true },
+      });
+
+      const voucherNo = await nextVoucherNumber('PI', 'productionIssueVoucher');
+      const primaryWarehouseId =
+        input.items[0]?.warehouseId ||
+        order.materials[0]?.fromWarehouseId ||
+        branchWarehouses[0]?.id;
+
+      if (!primaryWarehouseId) {
+        throw new ValidationError('No active warehouse found in branch to issue materials from');
+      }
+
+      const issueVoucher = await tx.productionIssueVoucher.create({
+        data: {
+          voucherNo,
+          date: new Date(),
+          branchId: order.branchId,
+          orderId: order.id,
+          warehouseId: primaryWarehouseId,
+          status: 'ISSUED',
+          requestedById: actor.userId,
+          approvedById: actor.userId,
+          issuedById: actor.userId,
+          remarks: `Direct consumption from Production Order ${order.number}`,
+          items: {
+            create: input.items.map((it) => {
+              const mat = order.materials.find((m) => m.id === it.materialId);
+              return {
+                productId: mat ? mat.productId : it.materialId,
+                requiredQty: new Prisma.Decimal(it.quantity),
+                issuedQty: new Prisma.Decimal(it.quantity),
+                uom: mat?.unit ?? 'PCS',
+              };
+            }),
+          },
+        },
+      });
+
       for (const item of input.items) {
         const material = order.materials.find((m) => m.id === item.materialId);
         if (!material) throw new ValidationError('Unknown material line');
-        if (!material.fromWarehouseId) {
-          throw new ValidationError(
-            'Material has no source warehouse — edit the order before issuing',
-          );
+
+        let targetWarehouseId = item.warehouseId || material.fromWarehouseId;
+        const qty = new Prisma.Decimal(item.quantity);
+
+        if (!order.branch.allowNegativeStock) {
+          let current = targetWarehouseId
+            ? await balanceFor(tx, order.branchId, targetWarehouseId, material.productId)
+            : new Prisma.Decimal(0);
+
+          // If target warehouse doesn't have sufficient stock, auto-search other branch warehouses with available stock
+          if (current.lt(qty)) {
+            let foundAlternate = false;
+            for (const wh of branchWarehouses) {
+              if (wh.id === targetWarehouseId) continue;
+              const whBal = await balanceFor(tx, order.branchId, wh.id, material.productId);
+              if (whBal.gte(qty)) {
+                targetWarehouseId = wh.id;
+                current = whBal;
+                foundAlternate = true;
+                break;
+              }
+            }
+
+            if (!foundAlternate && current.lt(qty)) {
+              // Gather available stock details in this branch
+              let totalInBranch = new Prisma.Decimal(0);
+              const whStocks: string[] = [];
+              for (const wh of branchWarehouses) {
+                const bal = await balanceFor(tx, order.branchId, wh.id, material.productId);
+                if (bal.gt(0)) {
+                  totalInBranch = totalInBranch.plus(bal);
+                  whStocks.push(`${wh.name}: ${bal}`);
+                }
+              }
+
+              // Also check company-wide stock across all branches
+              const companyLedgerAgg = await tx.inventoryLedger.groupBy({
+                by: ['direction'],
+                where: { productId: material.productId },
+                _sum: { quantity: true },
+              });
+              let companyTotal = new Prisma.Decimal(0);
+              for (const r of companyLedgerAgg) {
+                if (r.direction === 'IN') companyTotal = companyTotal.plus(r._sum.quantity ?? 0);
+                else if (r.direction === 'OUT') companyTotal = companyTotal.minus(r._sum.quantity ?? 0);
+              }
+
+              const prodName = material.product.name;
+              const unit = material.unit || 'units';
+
+              if (totalInBranch.lt(qty) && companyTotal.gte(qty)) {
+                throw new ValidationError(
+                  `Insufficient stock for "${prodName}" in branch ${order.branch.name} (have ${totalInBranch} ${unit}, need ${qty} ${unit}). Total company-wide stock is ${companyTotal} ${unit} — please transfer stock to branch warehouse before consumption.`,
+                );
+              }
+
+              throw new ValidationError(
+                `Insufficient stock for "${prodName}": available in this branch: ${totalInBranch} ${unit} (need ${qty} ${unit}). ${whStocks.length > 0 ? `In warehouses: [${whStocks.join(', ')}]` : 'No stock found in this branch'}.`,
+              );
+            }
+          }
         }
 
-        const qty = new Prisma.Decimal(item.quantity);
-        if (!order.branch.allowNegativeStock) {
-          const current = await balanceFor(
-            tx,
-            order.branchId,
-            material.fromWarehouseId,
-            material.productId,
+        if (!targetWarehouseId) {
+          throw new ValidationError(
+            `Material "${material.product.name}" has no source warehouse. Please select a warehouse.`,
           );
-          if (current.lt(qty)) {
-            throw new ValidationError(
-              `Insufficient stock for material ${material.productId}: have ${current}, need ${qty}`,
-            );
-          }
         }
 
         const costPerUnit = new Prisma.Decimal(item.costPerUnit ?? 0);
         await tx.inventoryLedger.create({
           data: {
             branchId: order.branchId,
-            warehouseId: material.fromWarehouseId,
+            warehouseId: targetWarehouseId,
             productId: material.productId,
             direction: 'OUT',
             quantity: qty,
             costPerUnit,
-            refType: 'PRODUCTION_CONSUMPTION',
-            refId: order.id,
-            note: `Consumption for ${order.number}`,
+            refType: 'PRODUCTION_ISSUE',
+            refId: issueVoucher.id,
+            note: `Consumption for ${order.number} (${voucherNo})`,
             createdById: actor.userId,
+          },
+        });
+
+        await tx.wipLedger.create({
+          data: {
+            date: new Date(),
+            branchId: order.branchId,
+            orderId: order.id,
+            productId: material.productId,
+            voucher: voucherNo,
+            inQty: qty,
+            balance: qty,
+            cost: qty.times(costPerUnit),
+            operatorId: null,
           },
         });
 
         await tx.productionMaterial.update({
           where: { id: material.id },
-          data: { consumedQty: { increment: qty } },
+          data: {
+            consumedQty: { increment: qty },
+            fromWarehouseId: targetWarehouseId,
+          },
         });
 
         consumptionValue = consumptionValue.plus(qty.times(costPerUnit));
@@ -532,6 +711,17 @@ export const factoryService = {
         await tx.productionOrder.update({
           where: { id: order.id },
           data: { status: 'IN_PROGRESS', actualStartDate: new Date() },
+        });
+      }
+
+      // Advance stage 1 to IN_PROGRESS if currently PENDING
+      const firstStage = await tx.productionStage.findFirst({
+        where: { orderId: order.id, sequence: 1 },
+      });
+      if (firstStage && firstStage.status === 'PENDING') {
+        await tx.productionStage.update({
+          where: { id: firstStage.id },
+          data: { status: 'IN_PROGRESS', startedAt: new Date() },
         });
       }
 
@@ -606,13 +796,39 @@ export const factoryService = {
         throw new ValidationError('Target warehouse does not belong to this branch');
       }
 
+      const receiveNo = await nextVoucherNumber('FGR', 'finishedGoodsReceiveVoucher');
+      const unitCost = new Prisma.Decimal(input.costPerUnit ?? 0);
+
+      const fgVoucher = await tx.finishedGoodsReceiveVoucher.create({
+        data: {
+          receiveNo,
+          date: new Date(),
+          branchId: order.branchId,
+          orderId: order.id,
+          warehouseId: input.toWarehouseId,
+          receivedById: actor.userId,
+          approvedById: actor.userId,
+          remarks: input.note || `Output recorded from Order ${order.number}`,
+          items: {
+            create: [
+              {
+                productId: order.productId,
+                quantity: qty,
+                uom: order.unit,
+                qualityStatus: 'PASSED',
+              },
+            ],
+          },
+        },
+      });
+
       const output = await tx.productionOutput.create({
         data: {
           orderId: order.id,
           productId: order.productId,
           unit: order.unit,
           quantity: qty,
-          costPerUnit: new Prisma.Decimal(input.costPerUnit ?? 0),
+          costPerUnit: unitCost,
           toWarehouseId: input.toWarehouseId,
           note: input.note || null,
           createdById: actor.userId,
@@ -626,11 +842,24 @@ export const factoryService = {
           productId: order.productId,
           direction: 'IN',
           quantity: qty,
-          costPerUnit: new Prisma.Decimal(input.costPerUnit ?? 0),
-          refType: 'PRODUCTION_OUTPUT',
-          refId: order.id,
-          note: `Output for ${order.number}`,
+          costPerUnit: unitCost,
+          refType: 'FINISHED_GOODS_RECEIVE',
+          refId: fgVoucher.id,
+          note: `Output for ${order.number} (${receiveNo})`,
           createdById: actor.userId,
+        },
+      });
+
+      await tx.wipLedger.create({
+        data: {
+          date: new Date(),
+          branchId: order.branchId,
+          orderId: order.id,
+          productId: order.productId,
+          voucher: receiveNo,
+          outQty: qty,
+          balance: new Prisma.Decimal(0),
+          cost: qty.times(unitCost),
         },
       });
 
@@ -650,6 +879,48 @@ export const factoryService = {
             status: desiredStatus,
             actualEndDate: completed ? new Date() : null,
           },
+        });
+      }
+
+      if (completed) {
+        await tx.productionStage.updateMany({
+          where: { orderId: order.id, status: { in: ['PENDING', 'IN_PROGRESS'] } },
+          data: { status: 'COMPLETED', completedAt: new Date() },
+        });
+      }
+
+      const outputValue = qty.times(unitCost);
+      if (outputValue.gt(0)) {
+        const inventoryAccountId = await accountsService.resolveSystemAccount(
+          tx,
+          'INVENTORY_FINISHED_GOODS',
+          order.branchId,
+        );
+        const wipAccountId = await accountsService.resolveSystemAccount(tx, 'WIP', order.branchId);
+        await accountsService.postSystemJournal(tx, {
+          branchId: order.branchId,
+          date: new Date(),
+          memo: `Finished goods receive ${receiveNo} for ${order.number}`,
+          sourceModule: 'factory',
+          sourceRefType: 'FinishedGoodsReceiveVoucher',
+          sourceRefId: fgVoucher.id,
+          actorUserId: actor.userId,
+          lines: [
+            {
+              accountId: inventoryAccountId,
+              debit: outputValue.toNumber(),
+              credit: 0,
+              currency: order.branch.currency,
+              fxRate: 1,
+            },
+            {
+              accountId: wipAccountId,
+              debit: 0,
+              credit: outputValue.toNumber(),
+              currency: order.branch.currency,
+              fxRate: 1,
+            },
+          ],
         });
       }
 
@@ -712,6 +983,118 @@ export const factoryService = {
       );
 
       return updated;
+    });
+  },
+
+  async addMaterial(session: AppSession | null, input: ProductionMaterialCreateInput) {
+    const actor = await authorize(session, 'factory:plan');
+    const order = await prisma.productionOrder.findUnique({
+      where: { id: input.orderId },
+      select: { id: true, branchId: true, status: true, number: true },
+    });
+    if (!order) throw new NotFoundError('Production order not found');
+    await assertBranchInScope(session, order.branchId);
+
+    if (order.status === 'COMPLETED' || order.status === 'CANCELLED') {
+      throw new ValidationError(`Cannot add materials to a ${order.status.toLowerCase()} order`);
+    }
+
+    const product = await prisma.product.findUnique({
+      where: { id: input.productId },
+      select: { id: true, costPrice: true },
+    });
+    if (!product) throw new NotFoundError('Product not found');
+
+    const unitCost = input.unitCost != null ? new Prisma.Decimal(input.unitCost) : product.costPrice;
+
+    return prisma.$transaction(async (tx) => {
+      const material = await tx.productionMaterial.create({
+        data: {
+          orderId: input.orderId,
+          productId: input.productId,
+          unit: input.unit,
+          plannedQty: new Prisma.Decimal(input.plannedQty),
+          consumedQty: new Prisma.Decimal(0),
+          unitCost,
+          fromWarehouseId: input.fromWarehouseId || null,
+          materialType: input.materialType,
+          note: input.note || null,
+        },
+        include: {
+          product: { select: { id: true, sku: true, name: true, unit: true, costPrice: true } },
+          fromWarehouse: { select: { id: true, code: true, name: true } },
+        },
+      });
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: order.branchId,
+          module: 'factory',
+          action: 'material-add',
+          entityType: 'ProductionMaterial',
+          entityId: material.id,
+          after: {
+            orderNumber: order.number,
+            productId: material.productId,
+            plannedQty: material.plannedQty.toString(),
+          },
+        },
+        tx,
+      );
+
+      return material;
+    });
+  },
+
+  async addStage(session: AppSession | null, input: ProductionStageCreateInput) {
+    const actor = await authorize(session, 'factory:plan');
+    const order = await prisma.productionOrder.findUnique({
+      where: { id: input.orderId },
+      include: { stages: { select: { sequence: true } } },
+    });
+    if (!order) throw new NotFoundError('Production order not found');
+    await assertBranchInScope(session, order.branchId);
+
+    if (order.status === 'COMPLETED' || order.status === 'CANCELLED') {
+      throw new ValidationError(`Cannot add stages to a ${order.status.toLowerCase()} order`);
+    }
+
+    let sequence = input.sequence;
+    const existingSeqs = new Set(order.stages.map((s) => s.sequence));
+    if (existingSeqs.has(sequence)) {
+      sequence = Math.max(...order.stages.map((s) => s.sequence), 0) + 1;
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const stage = await tx.productionStage.create({
+        data: {
+          orderId: input.orderId,
+          sequence,
+          name: input.name,
+          notes: input.notes || null,
+          status: 'PENDING',
+        },
+      });
+
+      await recordAudit(
+        {
+          actorId: actor.userId,
+          branchId: order.branchId,
+          module: 'factory',
+          action: 'stage-add',
+          entityType: 'ProductionStage',
+          entityId: stage.id,
+          after: {
+            orderNumber: order.number,
+            sequence: stage.sequence,
+            name: stage.name,
+          },
+        },
+        tx,
+      );
+
+      return stage;
     });
   },
 
@@ -784,12 +1167,15 @@ export const factoryService = {
       let hours: Prisma.Decimal | null = null;
       let rate: Prisma.Decimal | null = null;
 
-      if (input.type === 'LABOUR') {
-        hours = new Prisma.Decimal(input.hours!);
-        rate = new Prisma.Decimal(input.rate!);
+      if (input.type === 'LABOUR' && input.hours != null && input.rate != null) {
+        hours = new Prisma.Decimal(input.hours);
+        rate = new Prisma.Decimal(input.rate);
         amount = hours.times(rate);
       } else {
-        amount = new Prisma.Decimal(input.amount!);
+        if (input.amount == null) {
+          throw new ValidationError('Amount is required');
+        }
+        amount = new Prisma.Decimal(input.amount);
       }
 
       const entry = await tx.productionCostEntry.create({

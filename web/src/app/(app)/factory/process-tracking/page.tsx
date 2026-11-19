@@ -19,6 +19,7 @@ interface Order {
   productId: string;
   product: { id: string; name: string; sku: string };
   stages: Stage[];
+  isCompleted?: boolean;
 }
 
 interface Employee {
@@ -35,6 +36,7 @@ interface Tracking {
   inputQty: string;
   outputQty: string;
   scrapQty: string;
+  createdAt?: string;
   order: { id: string; number: string };
   product: { id: string; name: string };
   stage: { id: string; name: string };
@@ -44,9 +46,17 @@ interface Tracking {
 export default async function ProcessTrackingPage() {
   const { orders, employees, trackings } = await backendFetch<{
     orders: Order[];
+    allOrders?: Order[];
     employees: Employee[];
     trackings: Tracking[];
-  }>('/api/mobile/factory/process-tracking');
+  }>('/api/mobile/factory/process-tracking?includeCompleted=true');
+
+  const sortedTrackings = [...trackings].sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (timeA !== timeB) return timeB - timeA;
+    return b.trackingNo.localeCompare(a.trackingNo, undefined, { numeric: true });
+  });
 
   return (
     <div className="space-y-6">
@@ -60,6 +70,7 @@ export default async function ProcessTrackingPage() {
           id: order.id,
           label: `${order.number} — ${order.product.name} (${order.product.sku})`,
           productId: order.productId,
+          isCompleted: Boolean(order.isCompleted),
           stages: order.stages.map((stage) => ({
             id: stage.id,
             label: `${stage.sequence}. ${stage.name}`,
@@ -88,7 +99,7 @@ export default async function ProcessTrackingPage() {
               </tr>
             </thead>
             <tbody>
-              {trackings.map((tracking) => (
+              {sortedTrackings.map((tracking) => (
                 <tr key={tracking.id} className="border-t">
                   <td className="px-4 py-3 font-medium">{tracking.trackingNo}</td>
                   <td className="px-4 py-3">
@@ -105,7 +116,7 @@ export default async function ProcessTrackingPage() {
                   <td className="px-4 py-3">{tracking.status}</td>
                 </tr>
               ))}
-              {trackings.length === 0 ? (
+              {sortedTrackings.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
                     No process tracking records yet.

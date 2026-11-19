@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { DataTable } from '@/components/shared/data-table';
 import { Pill } from '@/components/shared/pill';
 import { defaultRange, RangeFilter } from '../_components/range-filter';
+import { ProductionExportButton } from './production-export-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,15 +81,20 @@ export default async function ProductionReportPage({
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Production output reconciliation" description={`${from} → ${to}`}>
-        <RangeFilter
-          from={from}
-          to={to}
-          branchId={sp.branchId}
-          branches={branches.map((b) => ({ id: b.id, code: b.code, name: b.name }))}
-          baseHref="/reports/production"
-        />
-      </PageHeader>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <PageHeader title="Production Output & Yield Reconciliation" description={`${from} → ${to}`} />
+        <div className="flex items-center gap-2">
+          <ProductionExportButton orders={data.rows} from={from} to={to} />
+        </div>
+      </div>
+
+      <RangeFilter
+        from={from}
+        to={to}
+        branchId={sp.branchId}
+        branches={branches.map((b) => ({ id: b.id, code: b.code, name: b.name }))}
+        baseHref="/reports/production"
+      />
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <Kpi label="Orders" value={`${data.totals.orderCount}`} />

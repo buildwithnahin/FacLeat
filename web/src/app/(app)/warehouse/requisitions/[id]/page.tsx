@@ -258,10 +258,10 @@ export default async function StockRequisitionDetailPage({
             <div className="text-sm font-semibold">Transfers</div>
             {requisition.transfers.map((transfer) => {
               const actions = transferActions(transfer.status);
+              const isAdmin = session?.roles.some((r) => r.toLowerCase().includes('admin'));
               const allowReceive =
                 ['DISPATCHED', 'IN_TRANSIT'].includes(transfer.status) &&
-                activeBranchId &&
-                activeBranchId === transfer.toBranchId;
+                (!activeBranchId || isAdmin || activeBranchId === transfer.toBranchId);
               return (
                 <div key={transfer.id} className="rounded-xl border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">

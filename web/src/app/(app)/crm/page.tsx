@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DataTable } from '@/components/shared/data-table';
 import { Pill } from '@/components/shared/pill';
+import { DeleteCustomerButton } from './delete-customer-button';
 import { backendFetch } from '@/lib/backend-client';
 import { getSession } from '@/server/auth/session';
 import { formatCurrency, d } from '@/lib/money';
@@ -217,13 +218,20 @@ export default async function CRMPage({
               key: 'actions',
               header: 'Actions',
               cell: (r) => (
-                <Link
-                  href={`/crm/${r.id}`}
-                  className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-                >
-                  <Eye className="h-4 w-4" />
-                  View
-                </Link>
+                <div className="flex items-center gap-3">
+                  <Link
+                    href={`/crm/${r.id}`}
+                    className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    <Eye className="h-4 w-4" />
+                    View
+                  </Link>
+                  <DeleteCustomerButton
+                    customerId={r.id}
+                    customerName={r.name}
+                    customerCode={r.code}
+                  />
+                </div>
               ),
             },
           ]}

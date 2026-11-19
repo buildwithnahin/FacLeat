@@ -64,7 +64,11 @@ export function GrnForm({ purchaseOrder, warehouses, lines }: GrnFormProps) {
   });
 
   const items = lines
-    .filter((l) => parseFloat(rowState[l.id]?.receivedQty ?? '0') > 0)
+    .filter((l) => {
+      const rec = parseFloat(rowState[l.id]?.receivedQty ?? '0');
+      const rej = parseFloat(rowState[l.id]?.rejectedQty ?? '0');
+      return (Number.isFinite(rec) && rec > 0) || (Number.isFinite(rej) && rej > 0);
+    })
     .map((l) => ({
       purchaseOrderItemId: l.id,
       productId: l.productId,

@@ -627,17 +627,167 @@ export const corporateService = {
         });
       }
 
+      // Auto-generate invoice for delivered items so dispatch immediately creates an invoice
+      let invSubtotal = ZERO;
+      let invDiscountTotal = ZERO;
+      let invTaxTotal = ZERO;
+      let invGrandTotal = ZERO;
+      const invoiceLineRows: {
+        orderItemId: string;
+        productId: string;
+        description: string | null;
+        quantity: Prisma.Decimal;
+        unitPrice: Prisma.Decimal;
+        discountRate: Prisma.Decimal;
+        taxRate: Prisma.Decimal;
+        lineTotal: Prisma.Decimal;
+      }[] = [];
+
+      for (const d of input.items) {
+        const orig = itemMap.get(d.orderItemId)!;
+        const qty = D(d.quantity);
+        const gross = qty.mul(orig.unitPrice);
+        const discount = gross.mul(orig.discountRate).div(100);
+        const net = gross.minus(discount);
+        const tax = net.mul(orig.taxRate).div(100);
+        const lineTotal = net.plus(tax);
+
+        invSubtotal = invSubtotal.plus(gross);
+        invDiscountTotal = invDiscountTotal.plus(discount);
+        invTaxTotal = invTaxTotal.plus(tax);
+        invGrandTotal = invGrandTotal.plus(lineTotal);
+
+        invoiceLineRows.push({
+          orderItemId: orig.id,
+          productId: orig.productId,
+          description: orig.description,
+          quantity: qty,
+          unitPrice: orig.unitPrice,
+          discountRate: orig.discountRate,
+          taxRate: orig.taxRate,
+          lineTotal,
+        });
+
+        await tx.corporateOrderItem.update({
+          where: { id: orig.id },
+          data: { invoicedQty: orig.invoicedQty.plus(qty) },
+        });
+      }
+
+      if (invGrandTotal.gt(ZERO)) {
+        const invYear = new Date().getFullYear();
+        const invCount = await tx.corporateInvoice.count({ where: { branchId: order.branchId } });
+        const invNumber = nextDocumentNumber('CSI', invYear, invCount, 6);
+
+        let dueDate: Date | null = null;
+        if (order.paymentTerms === 'NET_15') {
+          dueDate = new Date(Date.now() + 15 * 86400000);
+        } else if (order.paymentTerms === 'NET_30') {
+          dueDate = new Date(Date.now() + 30 * 86400000);
+        } else if (order.paymentTerms === 'NET_45') {
+          dueDate = new Date(Date.now() + 45 * 86400000);
+        } else if (order.paymentTerms === 'NET_60') {
+          dueDate = new Date(Date.now() + 60 * 86400000);
+        } else if (order.paymentTerms === 'NET_90') {
+          dueDate = new Date(Date.now() + 90 * 86400000);
+        } else if (order.expectedDate) {
+          dueDate = new Date(order.expectedDate);
+        }
+
+        const invoice = await tx.corporateInvoice.create({
+          data: {
+            number: invNumber,
+            branchId: order.branchId,
+            customerId: order.customerId,
+            orderId: order.id,
+            dueDate,
+            currency: order.currency,
+            subtotal: invSubtotal,
+            discountTotal: invDiscountTotal,
+            taxTotal: invTaxTotal,
+            grandTotal: invGrandTotal,
+            paidTotal: ZERO,
+            balanceDue: invGrandTotal,
+            status: deriveInvoiceStatus(invGrandTotal, ZERO, dueDate),
+            notes: `Auto-generated on dispatch (${delivery.number})`,
+            createdById: actor.userId,
+            items: { create: invoiceLineRows },
+          },
+        });
+
+        // Customer ledger debit
+        await tx.customerLedger.create({
+          data: {
+            branchId: order.branchId,
+            customerId: order.customerId,
+            entryType: 'INVOICE',
+            refType: 'CorporateInvoice',
+            refId: invoice.id,
+            description: `Corporate invoice ${invoice.number} (Dispatch ${delivery.number})`,
+            debit: invGrandTotal,
+            credit: ZERO,
+            createdById: actor.userId,
+          },
+        });
+
+        // GL posting — full grandTotal to AR, revenue less discount, plus tax
+        const keys: SystemAccountKey[] = ['AR_CONTROL', 'SALES_REVENUE_CORPORATE'];
+        if (invTaxTotal.gt(ZERO)) keys.push('TAX_PAYABLE');
+        if (invDiscountTotal.gt(ZERO)) keys.push('DISCOUNT_GIVEN');
+        const acc = await accountsService.resolveSystemAccounts(tx, keys, order.branchId);
+
+        const lines: JournalLineInput[] = [
+          { accountId: acc.AR_CONTROL, debit: invGrandTotal.toNumber(), credit: 0, currency: order.currency, fxRate: 1 },
+          { accountId: acc.SALES_REVENUE_CORPORATE, debit: 0, credit: invSubtotal.toNumber(), currency: order.currency, fxRate: 1 },
+        ];
+        if (invDiscountTotal.gt(ZERO)) {
+          lines.push({ accountId: acc.DISCOUNT_GIVEN, debit: invDiscountTotal.toNumber(), credit: 0, currency: order.currency, fxRate: 1 });
+        }
+        if (invTaxTotal.gt(ZERO)) {
+          lines.push({ accountId: acc.TAX_PAYABLE, debit: 0, credit: invTaxTotal.toNumber(), currency: order.currency, fxRate: 1 });
+        }
+
+        await accountsService.postSystemJournal(tx, {
+          branchId: order.branchId,
+          date: new Date(),
+          memo: `Corporate invoice ${invoice.number} (Dispatch ${delivery.number})`,
+          sourceModule: 'corporate-sales',
+          sourceRefType: 'CorporateInvoice',
+          sourceRefId: invoice.id,
+          actorUserId: actor.userId,
+          lines,
+        });
+
+        await recordAudit(
+          {
+            actorId: actor.userId,
+            branchId: order.branchId,
+            module: 'corporate-sales',
+            action: 'create-invoice',
+            entityType: 'CorporateInvoice',
+            entityId: invoice.id,
+            after: {
+              number: invoice.number,
+              orderNumber: order.number,
+              grandTotal: invGrandTotal.toString(),
+            },
+          },
+          tx,
+        );
+      }
+
       // Recompute order status
       const updated = await tx.corporateOrderItem.findMany({ where: { orderId: order.id } });
       const allDelivered = updated.every((i) => i.deliveredQty.gte(i.quantity));
+      const allInvoiced = updated.every((i) => i.invoicedQty.gte(i.quantity));
       const anyDelivered = updated.some((i) => i.deliveredQty.gt(ZERO));
-      const newStatus = allDelivered
-        ? order.status === 'INVOICED' || order.status === 'CLOSED'
-          ? order.status
-          : 'DELIVERED'
-        : anyDelivered
-          ? 'PARTIALLY_DELIVERED'
-          : order.status;
+      const newStatus = allDelivered && allInvoiced
+        ? 'INVOICED'
+        : allDelivered
+          ? 'DELIVERED'
+          : anyDelivered
+            ? 'PARTIALLY_DELIVERED'
+            : order.status;
       if (newStatus !== order.status) {
         await tx.corporateOrder.update({
           where: { id: order.id },

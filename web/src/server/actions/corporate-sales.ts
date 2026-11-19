@@ -131,6 +131,7 @@ export async function recordCorporateDeliveryAction(input: unknown) {
       { method: 'POST', body: JSON.stringify(parsed.data) },
     );
     revalidatePath(`/corporate-sales/orders/${parsed.data.orderId}`);
+    revalidatePath('/corporate-sales/invoices');
     revalidatePath('/warehouse/dispatch');
     return { success: true, deliveryId: delivery.id, deliveryNumber: delivery.number };
   } catch (e) {
